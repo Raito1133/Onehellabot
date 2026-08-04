@@ -16,7 +16,11 @@ const {
   REST,
   Routes,
   SlashCommandBuilder,
-  ChannelType
+  ChannelType,
+  ContainerBuilder,
+  SectionBuilder,
+  TextDisplayBuilder,
+  MessageFlags
 } = require('discord.js');
 const http = require('http');
 
@@ -41,6 +45,14 @@ const helperPoints = new Map();
 const userRequestCounts = new Map();
 const guildSettings = new Map();
 const roleRewards = new Map();
+
+// Global Stats Store (Photo 2)
+const globalStats = {
+  totalTicketsCompleted: 0,
+  totalPointsGiven: 0,
+  totalBossesSlain: 0,
+  startDate: 'Feb. \'26'
+};
 
 // --- ⚙️ CUSTOM TICKET PRESETS ⚙️ ---
 const TICKET_PRESETS = {
@@ -96,7 +108,7 @@ const TICKET_PRESETS = {
 };
 
 // --- HELPER LOGGING FUNCTION ---
-async function sendTicketLog(guild, title, description, color = '#2b2d31', fields = []) {
+async function sendTicketLog(guild, title, description, color = '#3498db', fields = []) {
   try {
     const cfg = guildSettings.get(guild.id) || {};
     const logChannelId = cfg.logChannelId;
@@ -161,74 +173,198 @@ async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
   }
 }
 
-// --- REAL-TIME EMBED & BUTTON PAYLOAD BUILDER ---
+// --- MAIN HUB PANEL BUILDER (PHOTO 1) ---
+function buildTicketHubPayload(bannerUrl = 'https://i.imgur.com/8Q9Z5Yw.png') {
+  const container = new ContainerBuilder()
+    .setAccentColor(0x3498db);
+
+  const bannerSection = new SectionBuilder().addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(bannerUrl)
+  );
+
+  const statsSection = new SectionBuilder().addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(
+      `🔖 **Ticket Stats** (Since ${globalStats.startDate})\n\n` +
+      `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed\n` +
+      `🏅 **\`${globalStats.totalPointsGiven}\`** points awarded\n` +
+      `⚔️ **\`${globalStats.totalBossesSlain}\`** bosses slain`
+    )
+  );
+
+  const guideSection = new SectionBuilder()
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(
+        `🔖 **Tickets, rules and how to**\n\n` +
+        `🔖 Before creating a ticket, read the guide for how they work.\nCheck it out by clicking on '**Ticket Guide**'`
+      )
+    )
+    .setButtonAccessory(
+      new ButtonBuilder()
+        .setLabel('Ticket Guide')
+        .setStyle(ButtonStyle.Link)
+        .setURL('https://discord.com')
+        .setEmoji('🎫')
+    );
+
+  const createSection = new SectionBuilder()
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(
+        `🔖 **Need help with one or more bosses?**\n\n` +
+        `• Create a ticket by clicking the '**Create Ticket**' button!\nHelpers will be with you shortly to help you ❤️`
+      )
+    )
+    .setButtonAccessory(
+      new ButtonBuilder()
+        .setCustomId('btn_open_ticket_menu')
+        .setLabel('Create Ticket')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('🤝')
+    );
+
+  container.addComponents(bannerSection, statsSection, guideSection, createSection);
+
+  return {
+    components: [container],
+    flags: MessageFlags.IsComponentsV2
+  };
+}
+
+// --- BLUE THEME TICKET CONTROL PANEL BUILDER ---
 function buildTicketControlPayload(ticketData) {
   const maxLimit = ticketData.maxHelpers || 6;
   const helpersList = ticketData.helpers.length > 0
     ? ticketData.helpers.map(id => `• <@${id}>`).join('\n')
     : 'None';
 
-  const embed = new EmbedBuilder()
-    .setTitle(`🎫 ${ticketData.type.replace(/_/g, ' ').toUpperCase()}`)
-    .setColor('#a82b2b')
-    .setTimestamp();
+  const container = new ContainerBuilder()
+    .setAccentColor(0x3498db);
 
   if (ticketData.type === 'server_ticket') {
-    embed.setDescription(
-      `🎖️ **Points:**\n\`${ticketData.customPoints}\`\n\n` +
-      `👤 **Requester:** <@${ticketData.requesterId}>\n\n` +
-      `📌 **Subject:**\n${ticketData.subject}\n\n` +
-      `📝 **Description:**\n${ticketData.description}\n\n` +
-      `🤝 **Helpers (${ticketData.helpers.length}/${maxLimit}):**\n${helpersList}`
+    const infoSection = new SectionBuilder().addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(
+        `🔷 **SERVER SUPPORT TICKET**\n\n` +
+        `🎖️ **Points:** \`${ticketData.customPoints}\`\n` +
+        `👤 **Requester:** <@${ticketData.requesterId}>\n\n` +
+        `📌 **Subject:**\n${ticketData.subject}\n\n` +
+        `📝 **Description:**\n${ticketData.description}\n\n` +
+        `--------------------------------------\n` +
+        `👥 **Helpers (${ticketData.helpers.length}/${maxLimit}):**\n${helpersList}`
+      )
     );
 
-    const rowAction = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('btn_claim').setLabel('Claim Ticket').setStyle(ButtonStyle.Success).setEmoji('🤝'),
-      new ButtonBuilder().setCustomId('btn_complete').setLabel('Complete Ticket').setStyle(ButtonStyle.Success).setEmoji('🎫'),
+    const claimSection = new SectionBuilder()
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent("Accept or assist with this ticket:"))
+      .setButtonAccessory(
+        new ButtonBuilder().setCustomId('btn_claim').setLabel('Claim Ticket').setStyle(ButtonStyle.Primary).setEmoji('🤝')
+      );
+
+    const finishSection = new SectionBuilder()
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent("Finished or closing support?"))
+      .setButtonAccessory(
+        new ButtonBuilder().setCustomId('btn_complete').setLabel('Complete Ticket').setStyle(ButtonStyle.Success).setEmoji('🎫')
+      );
+
+    container.addComponents(infoSection, claimSection, finishSection);
+
+    return {
+      components: [container],
+      flags: MessageFlags.IsComponentsV2
+    };
+  }
+
+  const pointsSection = new SectionBuilder().addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(
+      `💎 **TICKET DETAILS**\n` +
+      `🎖️ **Points:** \`${ticketData.customPoints}\`\n` +
+      `👤 **Requester:** <@${ticketData.requesterId}>`
+    )
+  );
+
+  const serverSection = new SectionBuilder()
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`🌐 **Selected Server:**\n\`${ticketData.server}\``)
+    )
+    .setButtonAccessory(
+      new ButtonBuilder().setCustomId('btn_change_server').setLabel('Change Server').setStyle(ButtonStyle.Secondary).setEmoji('🗄️')
+    );
+
+  const bossSection = new SectionBuilder()
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`⚔️ **Bosses / Details:**\n${ticketData.description}`)
+    )
+    .setButtonAccessory(
+      new ButtonBuilder().setCustomId('btn_change_bosses').setLabel('Change Bosses').setStyle(ButtonStyle.Secondary).setEmoji('💀')
+    );
+
+  const pingSection = new SectionBuilder()
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`📢 **Need more squad members?**`)
+    )
+    .setButtonAccessory(
+      new ButtonBuilder().setCustomId('btn_pinghelpers').setLabel('Ping Helpers').setStyle(ButtonStyle.Secondary).setEmoji('🔔')
+    );
+
+  const completeSection = new SectionBuilder()
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`✅ **Finished with the ticket?**`)
+    )
+    .setButtonAccessory(
+      new ButtonBuilder().setCustomId('btn_complete').setLabel('Complete Ticket').setStyle(ButtonStyle.Success).setEmoji('🎫')
+    );
+
+  const cancelSection = new SectionBuilder()
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`🚫 **Need to cancel?**`)
+    )
+    .setButtonAccessory(
       new ButtonBuilder().setCustomId('btn_cancel').setLabel('Cancel Ticket').setStyle(ButtonStyle.Danger).setEmoji('🎟️')
     );
 
-    return { embeds: [embed], components: [rowAction] };
-  }
-
-  // Exact Match Layout
-  embed.setDescription(
-    `🎖️ **Points:**\n\`${ticketData.customPoints}\`\n\n` +
-    `👤 **Requester:** <@${ticketData.requesterId}>\n\n` +
-    `**Selected server:**\n\`${ticketData.server}\`\n\n` +
-    `**Bosses / Details:**\n${ticketData.description}\n\n` +
-    `**Still in need of help?** **Ping helpers!**\n\n` +
-    `**Finished with the ticket?**\n\n` +
-    `--------------------------------------\n` +
-    `🖐️ **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersList}\n\n` +
-    `**Forgot room codes? Click Room codes!**\n\n` +
-    `**Claim the ticket, and get room codes!**`
+  const helpersSection = new SectionBuilder().addTextDisplayComponents(
+    new TextDisplayBuilder().setContent(`--------------------------------------\n🤝 **Active Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersList}`)
   );
 
-  const rowServer = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('btn_change_server').setLabel('Change server').setStyle(ButtonStyle.Secondary).setEmoji('🗄️')
+  const roomCodeSection = new SectionBuilder()
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`📌 **View room commands & IGN:**`)
+    )
+    .setButtonAccessory(
+      new ButtonBuilder().setCustomId('btn_location').setLabel('Room Codes').setStyle(ButtonStyle.Primary).setEmoji('📋')
+    );
+
+  const claimSection = new SectionBuilder()
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`🔹 **Claim ticket to view room codes!**`)
+    )
+    .setButtonAccessory(
+      new ButtonBuilder().setCustomId('btn_claim').setLabel('Claim Ticket').setStyle(ButtonStyle.Primary).setEmoji('🤝')
+    );
+
+  const leaveSection = new SectionBuilder()
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(`🚪 **Step down from squad:**`)
+    )
+    .setButtonAccessory(
+      new ButtonBuilder().setCustomId('btn_leave').setLabel('Leave Ticket').setStyle(ButtonStyle.Secondary).setEmoji('🚪')
+    );
+
+  container.addComponents(
+    pointsSection,
+    serverSection,
+    bossSection,
+    pingSection,
+    completeSection,
+    cancelSection,
+    helpersSection,
+    roomCodeSection,
+    claimSection,
+    leaveSection
   );
 
-  const rowBosses = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('btn_change_bosses').setLabel('Change bosses').setStyle(ButtonStyle.Secondary).setEmoji('💀')
-  );
-
-  const rowPing = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('btn_pinghelpers').setLabel('Ping helpers').setStyle(ButtonStyle.Secondary).setEmoji('🔔')
-  );
-
-  const rowFinish = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('btn_complete').setLabel('Complete ticket').setStyle(ButtonStyle.Success).setEmoji('🎫'),
-    new ButtonBuilder().setCustomId('btn_cancel').setLabel('Cancel ticket').setStyle(ButtonStyle.Danger).setEmoji('🎟️')
-  );
-
-  const rowClaim = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('btn_location').setLabel('Room codes').setStyle(ButtonStyle.Secondary).setEmoji('📋'),
-    new ButtonBuilder().setCustomId('btn_claim').setLabel('Claim ticket').setStyle(ButtonStyle.Success).setEmoji('🤝'),
-    new ButtonBuilder().setCustomId('btn_leave').setLabel('Leave ticket').setStyle(ButtonStyle.Secondary).setEmoji('🚪')
-  );
-
-  return { embeds: [embed], components: [rowServer, rowBosses, rowPing, rowFinish, rowClaim] };
+  return {
+    components: [container],
+    flags: MessageFlags.IsComponentsV2
+  };
 }
 
 async function updateTicketEmbed(channel, ticketData) {
@@ -259,12 +395,15 @@ function parseCustomPlaceholders(str, member, boostCount = 0, verifyChannelId = 
 const commands = [
   new SlashCommandBuilder()
     .setName('setup-ticket-hub')
-    .setDescription('Post the unified ticket panel embed')
+    .setDescription('Post the unified ticket panel hub')
     .addChannelOption(opt => opt.setName('channel').setDescription('Channel to post panel').setRequired(true))
-    .addStringOption(opt => opt.setName('title').setDescription('Embed Title').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Embed Description').setRequired(true))
+    .addStringOption(opt => opt.setName('banner_url').setDescription('Header banner image URL').setRequired(false))
     .addChannelOption(opt => opt.setName('category').setDescription('Ticket Channel Category').setRequired(false))
     .addChannelOption(opt => opt.setName('log_channel').setDescription('Channel for Ticket Logs').setRequired(false)),
+
+  new SlashCommandBuilder()
+    .setName('stats')
+    .setDescription('Display global ticket stats counter (Photo 2)'),
 
   new SlashCommandBuilder()
     .setName('embed')
@@ -286,31 +425,6 @@ const commands = [
     .addChannelOption(opt => opt.setName('log_channel').setDescription('Log channel').setRequired(false))
     .addChannelOption(opt => opt.setName('welcome_channel').setDescription('Welcome channel').setRequired(false))
     .addChannelOption(opt => opt.setName('boost_channel').setDescription('Boost channel').setRequired(false)),
-
-  new SlashCommandBuilder()
-    .setName('set-welcome-embed')
-    .setDescription('Customize the welcome message and embed')
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
-    .addStringOption(opt => opt.setName('title').setDescription('Title').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Description').setRequired(true))
-    .addStringOption(opt => opt.setName('message').setDescription('Outer ping message').setRequired(false))
-    .addStringOption(opt => opt.setName('footer').setDescription('Footer').setRequired(false))
-    .addChannelOption(opt => opt.setName('verify_channel').setDescription('Verification Channel').setRequired(false))
-    .addStringOption(opt => opt.setName('image_url').setDescription('Image URL').setRequired(false))
-    .addStringOption(opt => opt.setName('thumbnail_url').setDescription('Thumbnail URL').setRequired(false))
-    .addStringOption(opt => opt.setName('color').setDescription('Color').setRequired(false)),
-
-  new SlashCommandBuilder()
-    .setName('set-boost-embed')
-    .setDescription('Customize server boost embed')
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
-    .addStringOption(opt => opt.setName('title').setDescription('Title').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Description').setRequired(true))
-    .addStringOption(opt => opt.setName('message').setDescription('Outer message').setRequired(false))
-    .addStringOption(opt => opt.setName('footer').setDescription('Footer').setRequired(false))
-    .addStringOption(opt => opt.setName('image_url').setDescription('Image URL').setRequired(false))
-    .addStringOption(opt => opt.setName('thumbnail_url').setDescription('Thumbnail URL').setRequired(false))
-    .addStringOption(opt => opt.setName('color').setDescription('Color').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('leaderboard')
@@ -383,99 +497,35 @@ client.once(Events.ClientReady, async () => {
   await registerCommands();
 });
 
-// --- WELCOME EVENT ---
-client.on(Events.GuildMemberAdd, async (member) => {
-  if (member.guild.id !== GUILD_ID) return;
-
-  try {
-    const cfg = guildSettings.get(member.guild.id) || {};
-    const welcomeChannelId = cfg.welcomeChannelId;
-    if (!welcomeChannelId) return;
-
-    const welcomeChannel = member.guild.channels.cache.get(welcomeChannelId);
-    if (!welcomeChannel) return;
-
-    const customEmbed = cfg.welcomeEmbed || {};
-    const verifyChanId = customEmbed.verifyChannelId || DEFAULT_VERIFY_CHANNEL_ID;
-
-    const defaultDesc = `Hey {user}, welcome to **{server}**! 🎉\n\n📌 **First Step:** Please verify your account in {verifyChannel} first to gain access.\n\n🎫 **Need Help?** Check our ticket system after verifying!`;
-
-    const title = parseCustomPlaceholders(customEmbed.title || `Welcome to ${member.guild.name}!`, member, 0, verifyChanId);
-    const desc = parseCustomPlaceholders(customEmbed.description || defaultDesc, member, 0, verifyChanId);
-    const contentMessage = customEmbed.outerMessage 
-      ? parseCustomPlaceholders(customEmbed.outerMessage, member, 0, verifyChanId) 
-      : `Welcome ${member}!`;
-
-    const image = customEmbed.image || 'https://i.imgur.com/8Q9Z5Yw.png';
-    const thumbnail = customEmbed.thumbnail || member.user.displayAvatarURL({ dynamic: true });
-    const color = customEmbed.color || '#2b2d31';
-
-    const welcomeEmbed = new EmbedBuilder()
-      .setTitle(title)
-      .setDescription(desc)
-      .setThumbnail(thumbnail)
-      .setImage(image)
-      .setColor(color)
-      .setTimestamp();
-
-    if (customEmbed.footer) {
-      welcomeEmbed.setFooter({ text: parseCustomPlaceholders(customEmbed.footer, member, 0, verifyChanId) });
-    }
-
-    await welcomeChannel.send({ content: contentMessage, embeds: [welcomeEmbed] });
-  } catch (err) {
-    console.error('Error sending welcome message:', err);
-  }
-});
-
-// --- BOOST EVENT ---
-client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
-  if (newMember.guild.id !== GUILD_ID) return;
-
-  if (!oldMember.premiumSince && newMember.premiumSince) {
-    try {
-      const cfg = guildSettings.get(newMember.guild.id) || {};
-      const boostChannelId = cfg.boostChannelId;
-      if (!boostChannelId) return;
-
-      const boostChannel = newMember.guild.channels.cache.get(boostChannelId);
-      if (!boostChannel) return;
-
-      const boostCount = newMember.guild.premiumSubscriptionCount || 0;
-      const customEmbed = cfg.boostEmbed || {};
-
-      const title = parseCustomPlaceholders(customEmbed.title || '🚀 Server Boost Received!', newMember, boostCount);
-      const desc = parseCustomPlaceholders(customEmbed.description || `Thank you **{username}** for boosting!\n\nWe now have **{boostCount}** total boosts! 🎉`, newMember, boostCount);
-      const contentMessage = customEmbed.outerMessage 
-        ? parseCustomPlaceholders(customEmbed.outerMessage, newMember, boostCount) 
-        : `Thank you for boosting ${newMember}!`;
-
-      const thumbnail = customEmbed.thumbnail || newMember.user.displayAvatarURL({ dynamic: true });
-      const color = customEmbed.color || '#f47fff';
-
-      const boostEmbed = new EmbedBuilder()
-        .setTitle(title)
-        .setDescription(desc)
-        .setColor(color)
-        .setThumbnail(thumbnail)
-        .setTimestamp();
-
-      if (customEmbed.image) boostEmbed.setImage(customEmbed.image);
-      if (customEmbed.footer) boostEmbed.setFooter({ text: parseCustomPlaceholders(customEmbed.footer, newMember, boostCount) });
-
-      await boostChannel.send({ content: contentMessage, embeds: [boostEmbed] });
-    } catch (err) {
-      console.error('Error sending boost message:', err);
-    }
-  }
-});
-
 // --- INTERACTION LISTENER ---
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.guild || interaction.guild.id !== GUILD_ID) return;
 
   try {
-    // 1. SELECT MENU SELECTION -> OPEN MODAL
+    // 1. OPEN TICKET CATEGORY SELECT MENU (FROM MAIN HUB BUTTON)
+    if (interaction.isButton() && interaction.customId === 'btn_open_ticket_menu') {
+      const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('select_ticket_cat')
+        .setPlaceholder('Select a ticket type...')
+        .addOptions(
+          Object.entries(TICKET_PRESETS).map(([key, item]) => 
+            new StringSelectMenuOptionBuilder()
+              .setLabel(item.label)
+              .setValue(key)
+              .setEmoji(item.emoji)
+          )
+        );
+
+      const row = new ActionRowBuilder().addComponents(selectMenu);
+
+      return await interaction.reply({
+        content: '🎫 **Select the ticket category you need assistance with:**',
+        components: [row],
+        ephemeral: true
+      });
+    }
+
+    // 2. SELECT MENU SELECTION -> OPEN MODAL
     if (interaction.isStringSelectMenu() && interaction.customId === 'select_ticket_cat') {
       const selectedKey = interaction.values[0];
       const preset = TICKET_PRESETS[selectedKey] || { label: 'Ticket', max: 6, points: 1, roleIds: [HELPER_ROLE_ID] };
@@ -544,7 +594,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return await interaction.showModal(modal);
     }
 
-    // 2. MODALS -> CHANGE SERVER / CHANGE BOSSES
+    // 3. MODALS -> CHANGE SERVER / CHANGE BOSSES
     if (interaction.isModalSubmit() && interaction.customId === 'modal_edit_server') {
       const ticketData = activeTickets.get(interaction.channel.id);
       if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
@@ -569,7 +619,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return updateTicketEmbed(interaction.channel, ticketData);
     }
 
-    // 3. MODAL SUBMIT -> CREATE TICKET CHANNEL
+    // 4. MODAL SUBMIT -> CREATE TICKET CHANNEL
     if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket_form_')) {
       await interaction.deferReply({ ephemeral: true });
 
@@ -649,8 +699,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const payload = buildTicketControlPayload(newTicketData);
         const mainMsg = await ticketChannel.send({ 
           content: `Hey ${interaction.user}! ${helperRolePing}`, 
-          embeds: payload.embeds, 
-          components: payload.components 
+          components: payload.components,
+          flags: payload.flags
         });
 
         await mainMsg.pin().catch(() => {});
@@ -669,7 +719,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
 
-    // 4. BUTTON ACTIONS
+    // 5. BUTTON ACTIONS
     if (interaction.isButton()) {
       const ticketData = activeTickets.get(interaction.channel.id);
       const customId = interaction.customId;
@@ -729,7 +779,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         if (!isRequester && !isHelper && !isAdmin) {
           return interaction.reply({
-            content: '🔒 **Access Denied:** Click **Claim ticket** first to view the room code.',
+            content: '🔒 **Access Denied:** Click **Claim Ticket** first to view room codes.',
             ephemeral: true
           });
         }
@@ -780,7 +830,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           interaction.guild,
           '🤝 Ticket Claimed',
           `**Helper:** ${interaction.user} (\`${interaction.user.id}\`)\n**Ticket:** ${interaction.channel}\n**Requester:** <@${ticketData.requesterId}>`,
-          '#f1c40f'
+          '#3498db'
         );
 
         await interaction.reply({
@@ -856,6 +906,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
             await checkAndAssignHelperRoles(interaction.guild, hId, updated);
           }
 
+          // UPDATE GLOBAL STATS COUNTER
+          globalStats.totalTicketsCompleted += 1;
+          globalStats.totalPointsGiven += pointsToAward;
+          globalStats.totalBossesSlain += 1;
+
           const helperMentions = ticketData.helpers.map(id => `<@${id}>`).join(', ');
           awardedText = `\n🏆 **+${pointsToAward} pts** awarded to: ${helperMentions}`;
         } else {
@@ -890,15 +945,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
 
-    // 5. COMMANDS
+    // 6. COMMANDS
     if (interaction.isChatInputCommand()) {
       const { commandName, options } = interaction;
 
       if (commandName === 'setup-ticket-hub') {
         await interaction.deferReply({ ephemeral: true });
         const channel = options.getChannel('channel');
-        const title = options.getString('title');
-        const desc = options.getString('description').replace(/\\n/g, '\n');
+        const bannerUrl = options.getString('banner_url') || 'https://i.imgur.com/8Q9Z5Yw.png';
         const category = options.getChannel('category');
         const logChannel = options.getChannel('log_channel');
 
@@ -907,27 +961,28 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (logChannel) cfg.logChannelId = logChannel.id;
         guildSettings.set(interaction.guild.id, cfg);
 
-        const embed = new EmbedBuilder()
-          .setTitle(title)
-          .setDescription(desc)
-          .setColor('#2b2d31');
+        const payload = buildTicketHubPayload(bannerUrl);
 
-        const selectMenu = new StringSelectMenuBuilder()
-          .setCustomId('select_ticket_cat')
-          .setPlaceholder('Select a ticket type...')
-          .addOptions(
-            Object.entries(TICKET_PRESETS).map(([key, item]) => 
-              new StringSelectMenuOptionBuilder()
-                .setLabel(item.label)
-                .setValue(key)
-                .setEmoji(item.emoji)
-            )
-          );
+        await channel.send({
+          components: payload.components,
+          flags: payload.flags
+        });
 
-        const row = new ActionRowBuilder().addComponents(selectMenu);
+        return await interaction.editReply(`✅ Ticket Hub Panel posted to ${channel}!`);
+      }
 
-        await channel.send({ embeds: [embed], components: [row] });
-        return await interaction.editReply(`✅ Ticket Panel posted to ${channel}!`);
+      if (commandName === 'stats') {
+        const statsEmbed = new EmbedBuilder()
+          .setTitle(`Ticket stats since January 26th, 2026`)
+          .setDescription(
+            `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed.\n` +
+            `🏅 **\`${globalStats.totalPointsGiven}\`** points given out.\n\n` +
+            `A huge thank you to each and every one of you who made this possible! ❤️`
+          )
+          .setColor('#3498db')
+          .setTimestamp();
+
+        return await interaction.reply({ embeds: [statsEmbed] });
       }
 
       if (commandName === 'embed') {
@@ -937,7 +992,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const title = options.getString('title');
         const desc = options.getString('description').replace(/\\n/g, '\n');
         const rawOuterMessage = options.getString('outer_message');
-        const color = options.getString('color') || '#2b2d31';
+        const color = options.getString('color') || '#3498db';
         const image = options.getString('image_url');
         const thumbnail = options.getString('thumbnail_url');
         const footer = options.getString('footer');
@@ -994,54 +1049,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return await interaction.editReply(`✅ **Configured Channels:**\n${statusUpdates.join('\n')}`);
       }
 
-      if (commandName === 'set-welcome-embed') {
-        const title = options.getString('title');
-        const desc = options.getString('description');
-        const outerMessage = options.getString('message');
-        const footer = options.getString('footer');
-        const verifyChannel = options.getChannel('verify_channel');
-        const image = options.getString('image_url');
-        const thumbnail = options.getString('thumbnail_url');
-        const color = options.getString('color');
-
-        const cfg = guildSettings.get(interaction.guild.id) || {};
-        cfg.welcomeEmbed = {
-          title,
-          description: desc,
-          outerMessage,
-          footer,
-          verifyChannelId: verifyChannel ? verifyChannel.id : DEFAULT_VERIFY_CHANNEL_ID,
-          image,
-          thumbnail,
-          color
-        };
-        guildSettings.set(interaction.guild.id, cfg);
-
-        return await interaction.reply({
-          content: '✅ **Welcome embed settings updated!**',
-          ephemeral: true
-        });
-      }
-
-      if (commandName === 'set-boost-embed') {
-        const title = options.getString('title');
-        const desc = options.getString('description');
-        const outerMessage = options.getString('message');
-        const footer = options.getString('footer');
-        const image = options.getString('image_url');
-        const thumbnail = options.getString('thumbnail_url');
-        const color = options.getString('color');
-
-        const cfg = guildSettings.get(interaction.guild.id) || {};
-        cfg.boostEmbed = { title, description: desc, outerMessage, footer, image, thumbnail, color };
-        guildSettings.set(interaction.guild.id, cfg);
-
-        return await interaction.reply({
-          content: '✅ **Server boost embed settings updated!**',
-          ephemeral: true
-        });
-      }
-
       if (commandName === 'leaderboard') {
         const sortedHelpers = [...helperPoints.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20);
         const sortedRequesters = [...userRequestCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20);
@@ -1060,7 +1067,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             { name: '🏆 Top Helpers', value: helpersStr, inline: true },
             { name: '📩 Top Requesters', value: requestersStr, inline: true }
           )
-          .setColor('#2b2d31')
+          .setColor('#3498db')
           .setTimestamp();
 
         return await interaction.reply({ embeds: [lbEmbed] });
@@ -1124,7 +1131,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           const embed = new EmbedBuilder()
             .setTitle('🏅 Role Rewards')
             .setDescription(rewardList)
-            .setColor('#2b2d31');
+            .setColor('#3498db');
 
           return await interaction.reply({ embeds: [embed], ephemeral: true });
         }
