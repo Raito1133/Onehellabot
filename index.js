@@ -177,25 +177,18 @@ function buildTicketHubPayload(bannerUrl = 'https://i.imgur.com/8Q9Z5Yw.png') {
     accent_color: 0x3498db,
     components: [
       {
-        type: 9, // Section
-        components: [
-          { type: 10, content: bannerUrl } // TextDisplay
-        ]
+        type: 10, // Top Banner Display
+        content: bannerUrl
       },
       {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `🔖 **Ticket Stats** (Since ${globalStats.startDate})\n\n` +
-                     `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed\n` +
-                     `🏅 **\`${globalStats.totalPointsGiven}\`** points awarded\n` +
-                     `⚔️ **\`${globalStats.totalBossesSlain}\`** bosses slain`
-          }
-        ]
+        type: 10, // Global Ticket Stats Display
+        content: `🔖 **Ticket Stats** (Since ${globalStats.startDate})\n\n` +
+                 `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed\n` +
+                 `🏅 **\`${globalStats.totalPointsGiven}\`** points awarded\n` +
+                 `⚔️ **\`${globalStats.totalBossesSlain}\`** bosses slain`
       },
       {
-        type: 9,
+        type: 9, // Section with required accessory
         components: [
           {
             type: 10,
@@ -212,7 +205,7 @@ function buildTicketHubPayload(bannerUrl = 'https://i.imgur.com/8Q9Z5Yw.png') {
         }
       },
       {
-        type: 9,
+        type: 9, // Section with required accessory
         components: [
           {
             type: 10,
@@ -260,11 +253,7 @@ function buildTicketControlPayload(ticketData) {
                      `--------------------------------------\n` +
                      `👥 **Helpers (${ticketData.helpers.length}/${maxLimit}):**\n${helpersList}`
           }
-        ]
-      },
-      {
-        type: 9,
-        components: [{ type: 10, content: "Accept or assist with this ticket:" }],
+        ],
         accessory: { type: 2, style: 1, custom_id: 'btn_claim', label: 'Claim Ticket', emoji: { name: '🤝' } }
       },
       {
@@ -288,7 +277,8 @@ function buildTicketControlPayload(ticketData) {
                      `--------------------------------------\n` +
                      `🤝 **Active Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersList}`
           }
-        ]
+        ],
+        accessory: { type: 2, style: 1, custom_id: 'btn_claim', label: 'Claim Ticket', emoji: { name: '🤝' } }
       },
       {
         type: 9,
@@ -309,11 +299,6 @@ function buildTicketControlPayload(ticketData) {
         type: 9,
         components: [{ type: 10, content: `📋 View room commands & IGN:` }],
         accessory: { type: 2, style: 1, custom_id: 'btn_location', label: 'Room Codes', emoji: { name: '📋' } }
-      },
-      {
-        type: 9,
-        components: [{ type: 10, content: `🤝 Join or step down:` }],
-        accessory: { type: 2, style: 1, custom_id: 'btn_claim', label: 'Claim Ticket', emoji: { name: '🤝' } }
       },
       {
         type: 9,
