@@ -171,41 +171,42 @@ async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
 }
 
 // --- SAFE JSON COMPONENTS V2 BUILDERS ---
-function buildTicketHubPayload(bannerUrl = 'https://i.imgur.com/8Q9Z5Yw.png') {
+function buildTicketHubPayload(bannerUrl = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif') {
   const containerComponent = {
     type: 17, // Container
     accent_color: 0x3498db,
     components: [
       {
-        type: 10, // Top Banner Display
-        content: bannerUrl
+        type: 11, // Media Gallery Component (Renders actual GIF/Image)
+        items: [
+          {
+            media: {
+              url: bannerUrl
+            }
+          }
+        ]
       },
       {
-        type: 10, // Global Ticket Stats Display
-        content: `🔖 **Ticket Stats** (Since ${globalStats.startDate})\n\n` +
-                 `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed\n` +
-                 `🏅 **\`${globalStats.totalPointsGiven}\`** points awarded\n` +
-                 `⚔️ **\`${globalStats.totalBossesSlain}\`** bosses slain`
-      },
-      {
-        type: 9, // Section with required accessory
+        type: 9, // Section: Ticket Stats
         components: [
           {
             type: 10,
-            content: `🔖 **Tickets, rules and how to**\n\n` +
-                     `🔖 Before creating a ticket, read the guide for how they work.\nCheck it out by clicking on '**Ticket Guide**'`
+            content: `🔖 **Ticket Stats** (Since ${globalStats.startDate})\n\n` +
+                     `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed\n` +
+                     `🏅 **\`${globalStats.totalPointsGiven}\`** points awarded\n` +
+                     `⚔️ **\`${globalStats.totalBossesSlain}\`** bosses slain`
           }
         ],
         accessory: {
-          type: 2, // Button
-          style: 5, // Link
+          type: 2,
+          style: 5,
           label: 'Ticket Guide',
           url: 'https://discord.com',
           emoji: { name: '🎫' }
         }
       },
       {
-        type: 9, // Section with required accessory
+        type: 9, // Section: Create Ticket
         components: [
           {
             type: 10,
@@ -215,7 +216,7 @@ function buildTicketHubPayload(bannerUrl = 'https://i.imgur.com/8Q9Z5Yw.png') {
         ],
         accessory: {
           type: 2,
-          style: 1, // Primary
+          style: 1,
           custom_id: 'btn_open_ticket_menu',
           label: 'Create Ticket',
           emoji: { name: '🤝' }
@@ -606,7 +607,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const isServerTicket = ticketType === 'server_ticket';
         const permissionOverwrites = [
-          { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
+          { 
+            id: client.user.id, 
+            allow: [
+              PermissionsBitField.Flags.ViewChannel, 
+              PermissionsBitField.Flags.SendMessages, 
+              PermissionsBitField.Flags.ManageChannels,
+              PermissionsBitField.Flags.ManageMessages
+            ] 
+          },
+          { 
+            id: interaction.user.id, 
+            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] 
+          }
         ];
 
         if (isServerTicket) {
@@ -906,7 +919,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         try {
           const channel = options.getChannel('channel');
-          const bannerUrl = options.getString('banner_url') || 'https://i.imgur.com/8Q9Z5Yw.png';
+          const bannerUrl = options.getString('banner_url') || 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
           const category = options.getChannel('category');
           const logChannel = options.getChannel('log_channel');
 
