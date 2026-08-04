@@ -46,7 +46,7 @@ const userRequestCounts = new Map();
 const guildSettings = new Map();
 const roleRewards = new Map();
 
-// Global Stats Store (Photo 2)
+// Global Stats Store
 const globalStats = {
   totalTicketsCompleted: 0,
   totalPointsGiven: 0,
@@ -173,7 +173,7 @@ async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
   }
 }
 
-// --- MAIN HUB PANEL BUILDER (PHOTO 1) ---
+// --- MAIN HUB PANEL BUILDER ---
 function buildTicketHubPayload(bannerUrl = 'https://i.imgur.com/8Q9Z5Yw.png') {
   const container = new ContainerBuilder()
     .setAccentColor(0x3498db);
@@ -403,7 +403,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('stats')
-    .setDescription('Display global ticket stats counter (Photo 2)'),
+    .setDescription('Display global ticket stats counter'),
 
   new SlashCommandBuilder()
     .setName('embed')
@@ -489,7 +489,7 @@ client.once(Events.ClientReady, async () => {
   client.user.setPresence({
     status: 'dnd',
     activities: [{
-      name: 'Sindria Ticket Helper',
+      name: 'Im weird',
       type: 5
     }]
   });
@@ -502,7 +502,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.guild || interaction.guild.id !== GUILD_ID) return;
 
   try {
-    // 1. OPEN TICKET CATEGORY SELECT MENU (FROM MAIN HUB BUTTON)
+    // 1. OPEN TICKET CATEGORY SELECT MENU
     if (interaction.isButton() && interaction.customId === 'btn_open_ticket_menu') {
       const selectMenu = new StringSelectMenuBuilder()
         .setCustomId('select_ticket_cat')
@@ -906,7 +906,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
             await checkAndAssignHelperRoles(interaction.guild, hId, updated);
           }
 
-          // UPDATE GLOBAL STATS COUNTER
           globalStats.totalTicketsCompleted += 1;
           globalStats.totalPointsGiven += pointsToAward;
           globalStats.totalBossesSlain += 1;
@@ -945,30 +944,37 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
 
-    // 6. COMMANDS
+    // 6. COMMAND HANDLERS
     if (interaction.isChatInputCommand()) {
       const { commandName, options } = interaction;
 
       if (commandName === 'setup-ticket-hub') {
+        // Immediate Deferral to prevent timing out
         await interaction.deferReply({ ephemeral: true });
-        const channel = options.getChannel('channel');
-        const bannerUrl = options.getString('banner_url') || 'https://i.imgur.com/8Q9Z5Yw.png';
-        const category = options.getChannel('category');
-        const logChannel = options.getChannel('log_channel');
 
-        const cfg = guildSettings.get(interaction.guild.id) || {};
-        if (category) cfg.ticketCategory = category.id;
-        if (logChannel) cfg.logChannelId = logChannel.id;
-        guildSettings.set(interaction.guild.id, cfg);
+        try {
+          const channel = options.getChannel('channel');
+          const bannerUrl = options.getString('banner_url') || 'https://i.imgur.com/8Q9Z5Yw.png';
+          const category = options.getChannel('category');
+          const logChannel = options.getChannel('log_channel');
 
-        const payload = buildTicketHubPayload(bannerUrl);
+          const cfg = guildSettings.get(interaction.guild.id) || {};
+          if (category) cfg.ticketCategory = category.id;
+          if (logChannel) cfg.logChannelId = logChannel.id;
+          guildSettings.set(interaction.guild.id, cfg);
 
-        await channel.send({
-          components: payload.components,
-          flags: payload.flags
-        });
+          const payload = buildTicketHubPayload(bannerUrl);
 
-        return await interaction.editReply(`✅ Ticket Hub Panel posted to ${channel}!`);
+          await channel.send({
+            components: payload.components,
+            flags: payload.flags
+          });
+
+          return await interaction.editReply(`✅ Ticket Hub Panel successfully posted to ${channel}!`);
+        } catch (err) {
+          console.error('Error posting ticket hub panel:', err);
+          return await interaction.editReply(`❌ Failed to post panel: ${err.message}. Please check bot channel permissions.`);
+        }
       }
 
       if (commandName === 'stats') {
