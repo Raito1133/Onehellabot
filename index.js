@@ -221,7 +221,8 @@ function buildTicketHubPayload(bannerUrl = 'https://i.imgur.com/8Q9Z5Yw.png') {
         .setEmoji('🤝')
     );
 
-  container.addComponents(bannerSection, statsSection, guideSection, createSection);
+  // FIXED: ContainerBuilder uses setComponents in v14.27.0+
+  container.setComponents(bannerSection, statsSection, guideSection, createSection);
 
   return {
     components: [container],
@@ -264,7 +265,8 @@ function buildTicketControlPayload(ticketData) {
         new ButtonBuilder().setCustomId('btn_complete').setLabel('Complete Ticket').setStyle(ButtonStyle.Success).setEmoji('🎫')
       );
 
-    container.addComponents(infoSection, claimSection, finishSection);
+    // FIXED: ContainerBuilder uses setComponents in v14.27.0+
+    container.setComponents(infoSection, claimSection, finishSection);
 
     return {
       components: [container],
@@ -348,7 +350,8 @@ function buildTicketControlPayload(ticketData) {
       new ButtonBuilder().setCustomId('btn_leave').setLabel('Leave Ticket').setStyle(ButtonStyle.Secondary).setEmoji('🚪')
     );
 
-  container.addComponents(
+  // FIXED: ContainerBuilder uses setComponents in v14.27.0+
+  container.setComponents(
     pointsSection,
     serverSection,
     bossSection,
@@ -486,8 +489,9 @@ async function registerCommands() {
 client.once(Events.ClientReady, async () => {
   console.log(`Logged in as ${client.user.tag}`);
 
+  // UPDATED: Set bot status to Idle (yellow moon icon)
   client.user.setPresence({
-    status: 'dnd',
+    status: 'idle',
     activities: [{
       name: 'Im weird',
       type: 5
@@ -949,7 +953,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const { commandName, options } = interaction;
 
       if (commandName === 'setup-ticket-hub') {
-        // Immediate Deferral to prevent timing out
         await interaction.deferReply({ ephemeral: true });
 
         try {
