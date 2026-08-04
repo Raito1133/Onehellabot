@@ -522,7 +522,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const mapInput = new TextInputBuilder()
           .setCustomId('map_name')
           .setLabel('Map Name / Room')
-          .setPlaceholder('ultraezrajal, timeinn, etc.')
+          .setPlaceholder('ultraezrajal, ultrakala, etc.')
           .setStyle(TextInputStyle.Short)
           .setRequired(true);
 
