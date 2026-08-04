@@ -17,9 +17,6 @@ const {
   Routes,
   SlashCommandBuilder,
   ChannelType,
-  ContainerBuilder,
-  SectionBuilder,
-  TextDisplayBuilder,
   MessageFlags
 } = require('discord.js');
 const http = require('http');
@@ -173,187 +170,177 @@ async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
   }
 }
 
-// --- MAIN HUB PANEL BUILDER ---
+// --- SAFE JSON COMPONENTS V2 BUILDERS ---
 function buildTicketHubPayload(bannerUrl = 'https://i.imgur.com/8Q9Z5Yw.png') {
-  const container = new ContainerBuilder().setAccentColor(0x3498db);
-
-  const bannerSection = new SectionBuilder().addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(bannerUrl)
-  );
-
-  const statsSection = new SectionBuilder().addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(
-      `🔖 **Ticket Stats** (Since ${globalStats.startDate})\n\n` +
-      `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed\n` +
-      `🏅 **\`${globalStats.totalPointsGiven}\`** points awarded\n` +
-      `⚔️ **\`${globalStats.totalBossesSlain}\`** bosses slain`
-    )
-  );
-
-  const guideSection = new SectionBuilder()
-    .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(
-        `🔖 **Tickets, rules and how to**\n\n` +
-        `🔖 Before creating a ticket, read the guide for how they work.\nCheck it out by clicking on '**Ticket Guide**'`
-      )
-    )
-    .setButtonAccessory(
-      new ButtonBuilder()
-        .setLabel('Ticket Guide')
-        .setStyle(ButtonStyle.Link)
-        .setURL('https://discord.com')
-        .setEmoji('🎫')
-    );
-
-  const createSection = new SectionBuilder()
-    .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(
-        `🔖 **Need help with one or more bosses?**\n\n` +
-        `• Create a ticket by clicking the '**Create Ticket**' button!\nHelpers will be with you shortly to help you ❤️`
-      )
-    )
-    .setButtonAccessory(
-      new ButtonBuilder()
-        .setCustomId('btn_open_ticket_menu')
-        .setLabel('Create Ticket')
-        .setStyle(ButtonStyle.Primary)
-        .setEmoji('🤝')
-    );
-
-  if (typeof container.addSection === 'function') {
-    container.addSection(bannerSection).addSection(statsSection).addSection(guideSection).addSection(createSection);
-  } else {
-    container.addComponents(bannerSection, statsSection, guideSection, createSection);
-  }
+  const containerComponent = {
+    type: 17, // Container
+    accent_color: 0x3498db,
+    components: [
+      {
+        type: 9, // Section
+        components: [
+          { type: 10, content: bannerUrl } // TextDisplay
+        ]
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `🔖 **Ticket Stats** (Since ${globalStats.startDate})\n\n` +
+                     `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed\n` +
+                     `🏅 **\`${globalStats.totalPointsGiven}\`** points awarded\n` +
+                     `⚔️ **\`${globalStats.totalBossesSlain}\`** bosses slain`
+          }
+        ]
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `🔖 **Tickets, rules and how to**\n\n` +
+                     `🔖 Before creating a ticket, read the guide for how they work.\nCheck it out by clicking on '**Ticket Guide**'`
+          }
+        ],
+        accessory: {
+          type: 2, // Button
+          style: 5, // Link
+          label: 'Ticket Guide',
+          url: 'https://discord.com',
+          emoji: { name: '🎫' }
+        }
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `🔖 **Need help with one or more bosses?**\n\n` +
+                     `• Create a ticket by clicking the '**Create Ticket**' button!\nHelpers will be with you shortly to help you ❤️`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 1, // Primary
+          custom_id: 'btn_open_ticket_menu',
+          label: 'Create Ticket',
+          emoji: { name: '🤝' }
+        }
+      }
+    ]
+  };
 
   return {
-    components: [container],
+    components: [containerComponent],
     flags: MessageFlags.IsComponentsV2
   };
 }
 
-// --- BLUE THEME TICKET CONTROL PANEL BUILDER ---
 function buildTicketControlPayload(ticketData) {
   const maxLimit = ticketData.maxHelpers || 6;
   const helpersList = ticketData.helpers.length > 0
     ? ticketData.helpers.map(id => `• <@${id}>`).join('\n')
     : 'None';
 
-  const container = new ContainerBuilder().setAccentColor(0x3498db);
+  let sections = [];
 
   if (ticketData.type === 'server_ticket') {
-    const infoSection = new SectionBuilder().addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(
-        `🔷 **SERVER SUPPORT TICKET**\n\n` +
-        `🎖️ **Points:** \`${ticketData.customPoints}\`\n` +
-        `👤 **Requester:** <@${ticketData.requesterId}>\n\n` +
-        `📌 **Subject:**\n${ticketData.subject}\n\n` +
-        `📝 **Description:**\n${ticketData.description}\n\n` +
-        `--------------------------------------\n` +
-        `👥 **Helpers (${ticketData.helpers.length}/${maxLimit}):**\n${helpersList}`
-      )
-    );
-
-    const claimSection = new SectionBuilder()
-      .addTextDisplayComponents(new TextDisplayBuilder().setContent("Accept or assist with this ticket:"))
-      .setButtonAccessory(
-        new ButtonBuilder().setCustomId('btn_claim').setLabel('Claim Ticket').setStyle(ButtonStyle.Primary).setEmoji('🤝')
-      );
-
-    const finishSection = new SectionBuilder()
-      .addTextDisplayComponents(new TextDisplayBuilder().setContent("Finished or closing support?"))
-      .setButtonAccessory(
-        new ButtonBuilder().setCustomId('btn_complete').setLabel('Complete Ticket').setStyle(ButtonStyle.Success).setEmoji('🎫')
-      );
-
-    if (typeof container.addSection === 'function') {
-      container.addSection(infoSection).addSection(claimSection).addSection(finishSection);
-    } else {
-      container.addComponents(infoSection, claimSection, finishSection);
-    }
-
-    return {
-      components: [container],
-      flags: MessageFlags.IsComponentsV2
-    };
+    sections = [
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `🔷 **SERVER SUPPORT TICKET**\n\n` +
+                     `🎖️ **Points:** \`${ticketData.customPoints}\`\n` +
+                     `👤 **Requester:** <@${ticketData.requesterId}>\n\n` +
+                     `📌 **Subject:**\n${ticketData.subject}\n\n` +
+                     `📝 **Description:**\n${ticketData.description}\n\n` +
+                     `--------------------------------------\n` +
+                     `👥 **Helpers (${ticketData.helpers.length}/${maxLimit}):**\n${helpersList}`
+          }
+        ]
+      },
+      {
+        type: 9,
+        components: [{ type: 10, content: "Accept or assist with this ticket:" }],
+        accessory: { type: 2, style: 1, custom_id: 'btn_claim', label: 'Claim Ticket', emoji: { name: '🤝' } }
+      },
+      {
+        type: 9,
+        components: [{ type: 10, content: "Finished or closing support?" }],
+        accessory: { type: 2, style: 3, custom_id: 'btn_complete', label: 'Complete Ticket', emoji: { name: '🎫' } }
+      }
+    ];
+  } else {
+    sections = [
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `💎 **TICKET DETAILS**\n` +
+                     `🎖️ **Points:** \`${ticketData.customPoints}\`\n` +
+                     `👤 **Requester:** <@${ticketData.requesterId}>\n\n` +
+                     `🌐 **Selected Server:** \`${ticketData.server}\`\n` +
+                     `⚔️ **Bosses / Details:**\n${ticketData.description}\n\n` +
+                     `--------------------------------------\n` +
+                     `🤝 **Active Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersList}`
+          }
+        ]
+      },
+      {
+        type: 9,
+        components: [{ type: 10, content: `🗄️ Change server location:` }],
+        accessory: { type: 2, style: 2, custom_id: 'btn_change_server', label: 'Change Server', emoji: { name: '🗄️' } }
+      },
+      {
+        type: 9,
+        components: [{ type: 10, content: `💀 Edit bosses or details:` }],
+        accessory: { type: 2, style: 2, custom_id: 'btn_change_bosses', label: 'Change Bosses', emoji: { name: '💀' } }
+      },
+      {
+        type: 9,
+        components: [{ type: 10, content: `📢 Request more squad members:` }],
+        accessory: { type: 2, style: 2, custom_id: 'btn_pinghelpers', label: 'Ping Helpers', emoji: { name: '🔔' } }
+      },
+      {
+        type: 9,
+        components: [{ type: 10, content: `📋 View room commands & IGN:` }],
+        accessory: { type: 2, style: 1, custom_id: 'btn_location', label: 'Room Codes', emoji: { name: '📋' } }
+      },
+      {
+        type: 9,
+        components: [{ type: 10, content: `🤝 Join or step down:` }],
+        accessory: { type: 2, style: 1, custom_id: 'btn_claim', label: 'Claim Ticket', emoji: { name: '🤝' } }
+      },
+      {
+        type: 9,
+        components: [{ type: 10, content: `🚪 Leave current ticket:` }],
+        accessory: { type: 2, style: 2, custom_id: 'btn_leave', label: 'Leave Ticket', emoji: { name: '🚪' } }
+      },
+      {
+        type: 9,
+        components: [{ type: 10, content: `✅ Finish or cancel:` }],
+        accessory: { type: 2, style: 3, custom_id: 'btn_complete', label: 'Complete Ticket', emoji: { name: '🎫' } }
+      },
+      {
+        type: 9,
+        components: [{ type: 10, content: `🚫 Cancel ticket:` }],
+        accessory: { type: 2, style: 4, custom_id: 'btn_cancel', label: 'Cancel Ticket', emoji: { name: '🎟️' } }
+      }
+    ];
   }
 
-  // Grouped details section to minimize component count limit
-  const mainDetailsSection = new SectionBuilder().addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(
-      `💎 **TICKET DETAILS**\n` +
-      `🎖️ **Points:** \`${ticketData.customPoints}\`\n` +
-      `👤 **Requester:** <@${ticketData.requesterId}>\n\n` +
-      `🌐 **Selected Server:** \`${ticketData.server}\`\n` +
-      `⚔️ **Bosses / Details:**\n${ticketData.description}\n\n` +
-      `--------------------------------------\n` +
-      `🤝 **Active Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersList}`
-    )
-  );
-
-  const serverBtnSection = new SectionBuilder()
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`🗄️ Change server or details:`))
-    .setButtonAccessory(
-      new ButtonBuilder().setCustomId('btn_change_server').setLabel('Change Server').setStyle(ButtonStyle.Secondary).setEmoji('🗄️')
-    );
-
-  const bossBtnSection = new SectionBuilder()
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`💀 Edit targets:`))
-    .setButtonAccessory(
-      new ButtonBuilder().setCustomId('btn_change_bosses').setLabel('Change Bosses').setStyle(ButtonStyle.Secondary).setEmoji('💀')
-    );
-
-  const roomCodeSection = new SectionBuilder()
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`📋 View Room Code & Command:`))
-    .setButtonAccessory(
-      new ButtonBuilder().setCustomId('btn_location').setLabel('Room Codes').setStyle(ButtonStyle.Primary).setEmoji('📋')
-    );
-
-  const claimSection = new SectionBuilder()
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`🤝 Claim or leave ticket:`))
-    .setButtonAccessory(
-      new ButtonBuilder().setCustomId('btn_claim').setLabel('Claim Ticket').setStyle(ButtonStyle.Primary).setEmoji('🤝')
-    );
-
-  const leaveSection = new SectionBuilder()
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`🚪 Step down:`))
-    .setButtonAccessory(
-      new ButtonBuilder().setCustomId('btn_leave').setLabel('Leave Ticket').setStyle(ButtonStyle.Secondary).setEmoji('🚪')
-    );
-
-  const completeSection = new SectionBuilder()
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`✅ Finish or cancel:`))
-    .setButtonAccessory(
-      new ButtonBuilder().setCustomId('btn_complete').setLabel('Complete Ticket').setStyle(ButtonStyle.Success).setEmoji('🎫')
-    );
-
-  const cancelSection = new SectionBuilder()
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`🚫 Cancel ticket:`))
-    .setButtonAccessory(
-      new ButtonBuilder().setCustomId('btn_cancel').setLabel('Cancel Ticket').setStyle(ButtonStyle.Danger).setEmoji('🎟️')
-    );
-
-  const secs = [
-    mainDetailsSection,
-    serverBtnSection,
-    bossBtnSection,
-    roomCodeSection,
-    claimSection,
-    leaveSection,
-    completeSection,
-    cancelSection
-  ];
-
-  secs.forEach(sec => {
-    if (typeof container.addSection === 'function') {
-      container.addSection(sec);
-    } else if (typeof container.addComponents === 'function') {
-      container.addComponents(sec);
-    }
-  });
+  const containerComponent = {
+    type: 17,
+    accent_color: 0x3498db,
+    components: sections
+  };
 
   return {
-    components: [container],
+    components: [containerComponent],
     flags: MessageFlags.IsComponentsV2
   };
 }
@@ -466,7 +453,7 @@ async function registerCommands() {
 client.once(Events.ClientReady, async () => {
   console.log(`Logged in as ${client.user.tag}`);
 
-  // Set bot status to Idle
+  // Set bot status to Idle (yellow moon)
   client.user.setPresence({
     status: 'idle',
     activities: [{
