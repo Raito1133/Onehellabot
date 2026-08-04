@@ -175,8 +175,7 @@ async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
 
 // --- MAIN HUB PANEL BUILDER ---
 function buildTicketHubPayload(bannerUrl = 'https://i.imgur.com/8Q9Z5Yw.png') {
-  const container = new ContainerBuilder()
-    .setAccentColor(0x3498db);
+  const container = new ContainerBuilder().setAccentColor(0x3498db);
 
   const bannerSection = new SectionBuilder().addTextDisplayComponents(
     new TextDisplayBuilder().setContent(bannerUrl)
@@ -221,8 +220,14 @@ function buildTicketHubPayload(bannerUrl = 'https://i.imgur.com/8Q9Z5Yw.png') {
         .setEmoji('🤝')
     );
 
-  // FIXED: ContainerBuilder uses setComponents in v14.27.0+
-  container.setComponents(bannerSection, statsSection, guideSection, createSection);
+  // Safely append sections to container
+  [bannerSection, statsSection, guideSection, createSection].forEach(sec => {
+    if (typeof container.addSection === 'function') {
+      container.addSection(sec);
+    } else if (typeof container.addComponents === 'function') {
+      container.addComponents(sec);
+    }
+  });
 
   return {
     components: [container],
@@ -237,132 +242,112 @@ function buildTicketControlPayload(ticketData) {
     ? ticketData.helpers.map(id => `• <@${id}>`).join('\n')
     : 'None';
 
-  const container = new ContainerBuilder()
-    .setAccentColor(0x3498db);
+  const container = new ContainerBuilder().setAccentColor(0x3498db);
+
+  const sections = [];
 
   if (ticketData.type === 'server_ticket') {
-    const infoSection = new SectionBuilder().addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(
-        `🔷 **SERVER SUPPORT TICKET**\n\n` +
-        `🎖️ **Points:** \`${ticketData.customPoints}\`\n` +
-        `👤 **Requester:** <@${ticketData.requesterId}>\n\n` +
-        `📌 **Subject:**\n${ticketData.subject}\n\n` +
-        `📝 **Description:**\n${ticketData.description}\n\n` +
-        `--------------------------------------\n` +
-        `👥 **Helpers (${ticketData.helpers.length}/${maxLimit}):**\n${helpersList}`
-      )
+    sections.push(
+      new SectionBuilder().addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+          `🔷 **SERVER SUPPORT TICKET**\n\n` +
+          `🎖️ **Points:** \`${ticketData.customPoints}\`\n` +
+          `👤 **Requester:** <@${ticketData.requesterId}>\n\n` +
+          `📌 **Subject:**\n${ticketData.subject}\n\n` +
+          `📝 **Description:**\n${ticketData.description}\n\n` +
+          `--------------------------------------\n` +
+          `👥 **Helpers (${ticketData.helpers.length}/${maxLimit}):**\n${helpersList}`
+        )
+      ),
+      new SectionBuilder()
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent("Accept or assist with this ticket:"))
+        .setButtonAccessory(
+          new ButtonBuilder().setCustomId('btn_claim').setLabel('Claim Ticket').setStyle(ButtonStyle.Primary).setEmoji('🤝')
+        ),
+      new SectionBuilder()
+        .addTextDisplayComponents(new TextDisplayBuilder().setContent("Finished or closing support?"))
+        .setButtonAccessory(
+          new ButtonBuilder().setCustomId('btn_complete').setLabel('Complete Ticket').setStyle(ButtonStyle.Success).setEmoji('🎫')
+        )
     );
-
-    const claimSection = new SectionBuilder()
-      .addTextDisplayComponents(new TextDisplayBuilder().setContent("Accept or assist with this ticket:"))
-      .setButtonAccessory(
-        new ButtonBuilder().setCustomId('btn_claim').setLabel('Claim Ticket').setStyle(ButtonStyle.Primary).setEmoji('🤝')
-      );
-
-    const finishSection = new SectionBuilder()
-      .addTextDisplayComponents(new TextDisplayBuilder().setContent("Finished or closing support?"))
-      .setButtonAccessory(
-        new ButtonBuilder().setCustomId('btn_complete').setLabel('Complete Ticket').setStyle(ButtonStyle.Success).setEmoji('🎫')
-      );
-
-    // FIXED: ContainerBuilder uses setComponents in v14.27.0+
-    container.setComponents(infoSection, claimSection, finishSection);
-
-    return {
-      components: [container],
-      flags: MessageFlags.IsComponentsV2
-    };
+  } else {
+    sections.push(
+      new SectionBuilder().addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+          `💎 **TICKET DETAILS**\n` +
+          `🎖️ **Points:** \`${ticketData.customPoints}\`\n` +
+          `👤 **Requester:** <@${ticketData.requesterId}>`
+        )
+      ),
+      new SectionBuilder()
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(`🌐 **Selected Server:**\n\`${ticketData.server}\``)
+        )
+        .setButtonAccessory(
+          new ButtonBuilder().setCustomId('btn_change_server').setLabel('Change Server').setStyle(ButtonStyle.Secondary).setEmoji('🗄️')
+        ),
+      new SectionBuilder()
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(`⚔️ **Bosses / Details:**\n${ticketData.description}`)
+        )
+        .setButtonAccessory(
+          new ButtonBuilder().setCustomId('btn_change_bosses').setLabel('Change Bosses').setStyle(ButtonStyle.Secondary).setEmoji('💀')
+        ),
+      new SectionBuilder()
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(`📢 **Need more squad members?**`)
+        )
+        .setButtonAccessory(
+          new ButtonBuilder().setCustomId('btn_pinghelpers').setLabel('Ping Helpers').setStyle(ButtonStyle.Secondary).setEmoji('🔔')
+        ),
+      new SectionBuilder()
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(`✅ **Finished with the ticket?**`)
+        )
+        .setButtonAccessory(
+          new ButtonBuilder().setCustomId('btn_complete').setLabel('Complete Ticket').setStyle(ButtonStyle.Success).setEmoji('🎫')
+        ),
+      new SectionBuilder()
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(`🚫 **Need to cancel?**`)
+        )
+        .setButtonAccessory(
+          new ButtonBuilder().setCustomId('btn_cancel').setLabel('Cancel Ticket').setStyle(ButtonStyle.Danger).setEmoji('🎟️')
+        ),
+      new SectionBuilder().addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(`--------------------------------------\n🤝 **Active Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersList}`)
+      ),
+      new SectionBuilder()
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(`📌 **View room commands & IGN:**`)
+        )
+        .setButtonAccessory(
+          new ButtonBuilder().setCustomId('btn_location').setLabel('Room Codes').setStyle(ButtonStyle.Primary).setEmoji('📋')
+        ),
+      new SectionBuilder()
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(`🔹 **Claim ticket to view room codes!**`)
+        )
+        .setButtonAccessory(
+          new ButtonBuilder().setCustomId('btn_claim').setLabel('Claim Ticket').setStyle(ButtonStyle.Primary).setEmoji('🤝')
+        ),
+      new SectionBuilder()
+        .addTextDisplayComponents(
+          new TextDisplayBuilder().setContent(`🚪 **Step down from squad:**`)
+        )
+        .setButtonAccessory(
+          new ButtonBuilder().setCustomId('btn_leave').setLabel('Leave Ticket').setStyle(ButtonStyle.Secondary).setEmoji('🚪')
+        )
+    );
   }
 
-  const pointsSection = new SectionBuilder().addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(
-      `💎 **TICKET DETAILS**\n` +
-      `🎖️ **Points:** \`${ticketData.customPoints}\`\n` +
-      `👤 **Requester:** <@${ticketData.requesterId}>`
-    )
-  );
-
-  const serverSection = new SectionBuilder()
-    .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(`🌐 **Selected Server:**\n\`${ticketData.server}\``)
-    )
-    .setButtonAccessory(
-      new ButtonBuilder().setCustomId('btn_change_server').setLabel('Change Server').setStyle(ButtonStyle.Secondary).setEmoji('🗄️')
-    );
-
-  const bossSection = new SectionBuilder()
-    .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(`⚔️ **Bosses / Details:**\n${ticketData.description}`)
-    )
-    .setButtonAccessory(
-      new ButtonBuilder().setCustomId('btn_change_bosses').setLabel('Change Bosses').setStyle(ButtonStyle.Secondary).setEmoji('💀')
-    );
-
-  const pingSection = new SectionBuilder()
-    .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(`📢 **Need more squad members?**`)
-    )
-    .setButtonAccessory(
-      new ButtonBuilder().setCustomId('btn_pinghelpers').setLabel('Ping Helpers').setStyle(ButtonStyle.Secondary).setEmoji('🔔')
-    );
-
-  const completeSection = new SectionBuilder()
-    .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(`✅ **Finished with the ticket?**`)
-    )
-    .setButtonAccessory(
-      new ButtonBuilder().setCustomId('btn_complete').setLabel('Complete Ticket').setStyle(ButtonStyle.Success).setEmoji('🎫')
-    );
-
-  const cancelSection = new SectionBuilder()
-    .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(`🚫 **Need to cancel?**`)
-    )
-    .setButtonAccessory(
-      new ButtonBuilder().setCustomId('btn_cancel').setLabel('Cancel Ticket').setStyle(ButtonStyle.Danger).setEmoji('🎟️')
-    );
-
-  const helpersSection = new SectionBuilder().addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(`--------------------------------------\n🤝 **Active Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersList}`)
-  );
-
-  const roomCodeSection = new SectionBuilder()
-    .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(`📌 **View room commands & IGN:**`)
-    )
-    .setButtonAccessory(
-      new ButtonBuilder().setCustomId('btn_location').setLabel('Room Codes').setStyle(ButtonStyle.Primary).setEmoji('📋')
-    );
-
-  const claimSection = new SectionBuilder()
-    .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(`🔹 **Claim ticket to view room codes!**`)
-    )
-    .setButtonAccessory(
-      new ButtonBuilder().setCustomId('btn_claim').setLabel('Claim Ticket').setStyle(ButtonStyle.Primary).setEmoji('🤝')
-    );
-
-  const leaveSection = new SectionBuilder()
-    .addTextDisplayComponents(
-      new TextDisplayBuilder().setContent(`🚪 **Step down from squad:**`)
-    )
-    .setButtonAccessory(
-      new ButtonBuilder().setCustomId('btn_leave').setLabel('Leave Ticket').setStyle(ButtonStyle.Secondary).setEmoji('🚪')
-    );
-
-  // FIXED: ContainerBuilder uses setComponents in v14.27.0+
-  container.setComponents(
-    pointsSection,
-    serverSection,
-    bossSection,
-    pingSection,
-    completeSection,
-    cancelSection,
-    helpersSection,
-    roomCodeSection,
-    claimSection,
-    leaveSection
-  );
+  sections.forEach(sec => {
+    if (typeof container.addSection === 'function') {
+      container.addSection(sec);
+    } else if (typeof container.addComponents === 'function') {
+      container.addComponents(sec);
+    }
+  });
 
   return {
     components: [container],
@@ -381,17 +366,6 @@ async function updateTicketEmbed(channel, ticketData) {
   } catch (err) {
     console.error('Failed to update ticket embed in real-time:', err);
   }
-}
-
-function parseCustomPlaceholders(str, member, boostCount = 0, verifyChannelId = DEFAULT_VERIFY_CHANNEL_ID) {
-  if (!str) return '';
-  return str
-    .replace(/{user}/g, `${member}`)
-    .replace(/{username}/g, member.user.username)
-    .replace(/{server}/g, member.guild.name)
-    .replace(/{boostCount}/g, boostCount)
-    .replace(/{verifyChannel}/g, `<#${verifyChannelId}>`)
-    .replace(/\\n/g, '\n');
 }
 
 // --- SLASH COMMANDS REGISTRATION ---
@@ -489,7 +463,7 @@ async function registerCommands() {
 client.once(Events.ClientReady, async () => {
   console.log(`Logged in as ${client.user.tag}`);
 
-  // UPDATED: Set bot status to Idle (yellow moon icon)
+  // Bot Status set to Idle (yellow moon)
   client.user.setPresence({
     status: 'idle',
     activities: [{
