@@ -21,7 +21,7 @@ const {
 const http = require('http');
 
 // --- ⚠️ CONFIGURATION ⚠️ ---
-const GUILD_ID = '1371775026264670228'; // Server ID
+const GUILD_ID = '1243470533316579361'; // Server ID
 const HELPER_ROLE_ID = 'YOUR_HELPER_ROLE_ID'; // Fallback Helper Role ID
 const DEFAULT_VERIFY_CHANNEL_ID = '1531294593780416743';
 
@@ -42,7 +42,7 @@ const userRequestCounts = new Map();
 const guildSettings = new Map();
 const roleRewards = new Map();
 
-// --- ⚙️ YOUR CUSTOM TICKET PRESETS ⚙️ ---
+// --- ⚙️ CUSTOM TICKET PRESETS ⚙️ ---
 const TICKET_PRESETS = {
   farming: { 
     label: 'Farming Assistance', 
@@ -95,7 +95,7 @@ const TICKET_PRESETS = {
   }
 };
 
-// Helper to send ticket log embeds
+// --- HELPER LOGGING FUNCTION ---
 async function sendTicketLog(guild, title, description, color = '#2b2d31', fields = []) {
   try {
     const cfg = guildSettings.get(guild.id) || {};
@@ -118,7 +118,6 @@ async function sendTicketLog(guild, title, description, color = '#2b2d31', field
   }
 }
 
-// Helper to check if helper is already in another ticket
 function isHelperInActiveTicket(userId) {
   for (const [channelId, ticket] of activeTickets.entries()) {
     if (ticket.helpers.includes(userId)) {
@@ -128,14 +127,13 @@ function isHelperInActiveTicket(userId) {
   return null;
 }
 
-// Helper to calculate points
 function getPointsForTicket(ticketData) {
   if (ticketData.customPoints !== undefined && ticketData.customPoints >= 0) {
     return ticketData.customPoints;
   }
   const normalized = (ticketData.type || '').toLowerCase();
   if (normalized.includes('weekly') || normalized.includes('ultraweekly') || normalized.includes('ultra weeklies')) {
-    return 10;
+    return 8;
   }
   if (normalized.includes('daily') || normalized.includes('ultradaily') || normalized.includes('ultra dailies')) {
     return 5;
@@ -146,7 +144,6 @@ function getPointsForTicket(ticketData) {
   return 1;
 }
 
-// Helper function to check & assign auto-roles
 async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
   try {
     const member = await guild.members.fetch(userId).catch(() => null);
@@ -164,46 +161,89 @@ async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
   }
 }
 
-// Helper to update control panel embed
+// --- REAL-TIME EMBED & BUTTON PAYLOAD BUILDER ---
+function buildTicketControlPayload(ticketData) {
+  const maxLimit = ticketData.maxHelpers || 6;
+  const helpersList = ticketData.helpers.length > 0
+    ? ticketData.helpers.map(id => `• <@${id}>`).join('\n')
+    : 'None';
+
+  const embed = new EmbedBuilder()
+    .setTitle(`🎫 ${ticketData.type.replace(/_/g, ' ').toUpperCase()}`)
+    .setColor('#a82b2b')
+    .setTimestamp();
+
+  if (ticketData.type === 'server_ticket') {
+    embed.setDescription(
+      `🎖️ **Points:**\n\`${ticketData.customPoints}\`\n\n` +
+      `👤 **Requester:** <@${ticketData.requesterId}>\n\n` +
+      `📌 **Subject:**\n${ticketData.subject}\n\n` +
+      `📝 **Description:**\n${ticketData.description}\n\n` +
+      `🤝 **Helpers (${ticketData.helpers.length}/${maxLimit}):**\n${helpersList}`
+    );
+
+    const rowAction = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('btn_claim').setLabel('Claim Ticket').setStyle(ButtonStyle.Success).setEmoji('🤝'),
+      new ButtonBuilder().setCustomId('btn_complete').setLabel('Complete Ticket').setStyle(ButtonStyle.Success).setEmoji('🎫'),
+      new ButtonBuilder().setCustomId('btn_cancel').setLabel('Cancel Ticket').setStyle(ButtonStyle.Danger).setEmoji('🎟️')
+    );
+
+    return { embeds: [embed], components: [rowAction] };
+  }
+
+  // Exact Match Layout
+  embed.setDescription(
+    `🎖️ **Points:**\n\`${ticketData.customPoints}\`\n\n` +
+    `👤 **Requester:** <@${ticketData.requesterId}>\n\n` +
+    `**Selected server:**\n\`${ticketData.server}\`\n\n` +
+    `**Bosses / Details:**\n${ticketData.description}\n\n` +
+    `**Still in need of help?** **Ping helpers!**\n\n` +
+    `**Finished with the ticket?**\n\n` +
+    `--------------------------------------\n` +
+    `🖐️ **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersList}\n\n` +
+    `**Forgot room codes? Click Room codes!**\n\n` +
+    `**Claim the ticket, and get room codes!**`
+  );
+
+  const rowServer = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('btn_change_server').setLabel('Change server').setStyle(ButtonStyle.Secondary).setEmoji('🗄️')
+  );
+
+  const rowBosses = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('btn_change_bosses').setLabel('Change bosses').setStyle(ButtonStyle.Secondary).setEmoji('💀')
+  );
+
+  const rowPing = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('btn_pinghelpers').setLabel('Ping helpers').setStyle(ButtonStyle.Secondary).setEmoji('🔔')
+  );
+
+  const rowFinish = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('btn_complete').setLabel('Complete ticket').setStyle(ButtonStyle.Success).setEmoji('🎫'),
+    new ButtonBuilder().setCustomId('btn_cancel').setLabel('Cancel ticket').setStyle(ButtonStyle.Danger).setEmoji('🎟️')
+  );
+
+  const rowClaim = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('btn_location').setLabel('Room codes').setStyle(ButtonStyle.Secondary).setEmoji('📋'),
+    new ButtonBuilder().setCustomId('btn_claim').setLabel('Claim ticket').setStyle(ButtonStyle.Success).setEmoji('🤝'),
+    new ButtonBuilder().setCustomId('btn_leave').setLabel('Leave ticket').setStyle(ButtonStyle.Secondary).setEmoji('🚪')
+  );
+
+  return { embeds: [embed], components: [rowServer, rowBosses, rowPing, rowFinish, rowClaim] };
+}
+
 async function updateTicketEmbed(channel, ticketData) {
   try {
     const pinnedMessages = await channel.messages.fetchPinned();
     const panelMsg = pinnedMessages.first();
-    if (!panelMsg || !panelMsg.embeds.length) return;
+    if (!panelMsg) return;
 
-    const helpersList = ticketData.helpers.length > 0
-      ? ticketData.helpers.map(id => `<@${id}>`).join('\n')
-      : 'None';
-
-    const maxLimit = ticketData.maxHelpers || 6;
-
-    const oldEmbed = panelMsg.embeds[0];
-    const fields = [
-      { name: 'Requester:', value: `<@${ticketData.requesterId}>`, inline: true },
-      { name: 'IGN:', value: `\`${ticketData.ign}\``, inline: true }
-    ];
-
-    if (ticketData.type === 'server_ticket') {
-      fields.push(
-        { name: 'Subject:', value: `\`${ticketData.subject}\``, inline: true },
-        { name: 'Description:', value: ticketData.description }
-      );
-    } else {
-      fields.push(
-        { name: 'Server:', value: `\`${ticketData.server}\``, inline: true },
-        { name: 'Details:', value: ticketData.description },
-        { name: `👥 Helpers (${ticketData.helpers.length}/${maxLimit})`, value: helpersList }
-      );
-    }
-
-    const newEmbed = EmbedBuilder.from(oldEmbed).setFields(fields);
-    await panelMsg.edit({ embeds: [newEmbed] });
+    const payload = buildTicketControlPayload(ticketData);
+    await panelMsg.edit(payload);
   } catch (err) {
-    console.error('Failed to update ticket embed:', err);
+    console.error('Failed to update ticket embed in real-time:', err);
   }
 }
 
-// Format custom placeholder variables in embed strings
 function parseCustomPlaceholders(str, member, boostCount = 0, verifyChannelId = DEFAULT_VERIFY_CHANNEL_ID) {
   if (!str) return '';
   return str
@@ -218,8 +258,8 @@ function parseCustomPlaceholders(str, member, boostCount = 0, verifyChannelId = 
 // --- SLASH COMMANDS REGISTRATION ---
 const commands = [
   new SlashCommandBuilder()
-    .setName('ticket-setup-panel')
-    .setDescription('Post the unified 7-option ticket panel under one single embed')
+    .setName('setup-ticket-hub')
+    .setDescription('Post the unified ticket panel embed')
     .addChannelOption(opt => opt.setName('channel').setDescription('Channel to post panel').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Embed Title').setRequired(true))
     .addStringOption(opt => opt.setName('description').setDescription('Embed Description').setRequired(true))
@@ -228,49 +268,49 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('embed')
-    .setDescription('Create and send a fully customized embed message to a channel')
+    .setDescription('Create and send a customized embed message')
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
-    .addChannelOption(opt => opt.setName('channel').setDescription('Channel to send the embed').setRequired(true))
+    .addChannelOption(opt => opt.setName('channel').setDescription('Target channel').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Embed Title').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Embed Description (Use \\n for new lines)').setRequired(true))
-    .addStringOption(opt => opt.setName('outer_message').setDescription('Message OUTSIDE/above the embed (e.g. pings)').setRequired(false))
-    .addStringOption(opt => opt.setName('color').setDescription('Hex color code (e.g. #2b2d31 or #ff0000)').setRequired(false))
-    .addStringOption(opt => opt.setName('image_url').setDescription('Large banner image URL').setRequired(false))
-    .addStringOption(opt => opt.setName('thumbnail_url').setDescription('Small thumbnail image URL').setRequired(false))
-    .addStringOption(opt => opt.setName('footer').setDescription('Footer text at the bottom').setRequired(false)),
+    .addStringOption(opt => opt.setName('description').setDescription('Embed Description').setRequired(true))
+    .addStringOption(opt => opt.setName('outer_message').setDescription('Message outside embed').setRequired(false))
+    .addStringOption(opt => opt.setName('color').setDescription('Hex color code').setRequired(false))
+    .addStringOption(opt => opt.setName('image_url').setDescription('Banner image URL').setRequired(false))
+    .addStringOption(opt => opt.setName('thumbnail_url').setDescription('Thumbnail URL').setRequired(false))
+    .addStringOption(opt => opt.setName('footer').setDescription('Footer text').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('setup-channels')
-    .setDescription('Configure server channels for logs, welcome messages, and server boosts')
+    .setDescription('Configure server system channels')
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
-    .addChannelOption(opt => opt.setName('log_channel').setDescription('Channel for ticket activity logs').setRequired(false))
-    .addChannelOption(opt => opt.setName('welcome_channel').setDescription('Channel for welcome embeds').setRequired(false))
-    .addChannelOption(opt => opt.setName('boost_channel').setDescription('Channel for server boost embeds').setRequired(false)),
+    .addChannelOption(opt => opt.setName('log_channel').setDescription('Log channel').setRequired(false))
+    .addChannelOption(opt => opt.setName('welcome_channel').setDescription('Welcome channel').setRequired(false))
+    .addChannelOption(opt => opt.setName('boost_channel').setDescription('Boost channel').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('set-welcome-embed')
     .setDescription('Customize the welcome message and embed')
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
-    .addStringOption(opt => opt.setName('title').setDescription('Embed Title').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Vars: {user}, {username}, {server}, {verifyChannel}').setRequired(true))
-    .addStringOption(opt => opt.setName('message').setDescription('Message OUTSIDE embed to ping user (e.g., Welcome {user}!)').setRequired(false))
-    .addStringOption(opt => opt.setName('footer').setDescription('Footer text inside the embed').setRequired(false))
-    .addChannelOption(opt => opt.setName('verify_channel').setDescription('Channel where members must verify first').setRequired(false))
-    .addStringOption(opt => opt.setName('image_url').setDescription('Banner image URL').setRequired(false))
-    .addStringOption(opt => opt.setName('thumbnail_url').setDescription('Thumbnail image URL').setRequired(false))
-    .addStringOption(opt => opt.setName('color').setDescription('Hex color code (e.g. #2b2d31)').setRequired(false)),
+    .addStringOption(opt => opt.setName('title').setDescription('Title').setRequired(true))
+    .addStringOption(opt => opt.setName('description').setDescription('Description').setRequired(true))
+    .addStringOption(opt => opt.setName('message').setDescription('Outer ping message').setRequired(false))
+    .addStringOption(opt => opt.setName('footer').setDescription('Footer').setRequired(false))
+    .addChannelOption(opt => opt.setName('verify_channel').setDescription('Verification Channel').setRequired(false))
+    .addStringOption(opt => opt.setName('image_url').setDescription('Image URL').setRequired(false))
+    .addStringOption(opt => opt.setName('thumbnail_url').setDescription('Thumbnail URL').setRequired(false))
+    .addStringOption(opt => opt.setName('color').setDescription('Color').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('set-boost-embed')
-    .setDescription('Customize the server boost message and embed')
+    .setDescription('Customize server boost embed')
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
-    .addStringOption(opt => opt.setName('title').setDescription('Embed Title').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Vars: {user}, {username}, {server}, {boostCount}').setRequired(true))
-    .addStringOption(opt => opt.setName('message').setDescription('Message OUTSIDE embed to ping user').setRequired(false))
-    .addStringOption(opt => opt.setName('footer').setDescription('Footer text inside the embed').setRequired(false))
-    .addStringOption(opt => opt.setName('image_url').setDescription('Banner image URL').setRequired(false))
-    .addStringOption(opt => opt.setName('thumbnail_url').setDescription('Thumbnail image URL').setRequired(false))
-    .addStringOption(opt => opt.setName('color').setDescription('Hex color code (e.g. #f47fff)').setRequired(false)),
+    .addStringOption(opt => opt.setName('title').setDescription('Title').setRequired(true))
+    .addStringOption(opt => opt.setName('description').setDescription('Description').setRequired(true))
+    .addStringOption(opt => opt.setName('message').setDescription('Outer message').setRequired(false))
+    .addStringOption(opt => opt.setName('footer').setDescription('Footer').setRequired(false))
+    .addStringOption(opt => opt.setName('image_url').setDescription('Image URL').setRequired(false))
+    .addStringOption(opt => opt.setName('thumbnail_url').setDescription('Thumbnail URL').setRequired(false))
+    .addStringOption(opt => opt.setName('color').setDescription('Color').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('leaderboard')
@@ -328,9 +368,9 @@ async function registerCommands() {
   }
 }
 
-// --- BOT READY ---
+// --- BOT INITIALIZATION ---
 client.once(Events.ClientReady, async () => {
-  console.log(`LoggedIn as ${client.user.tag}`);
+  console.log(`Logged in as ${client.user.tag}`);
 
   client.user.setPresence({
     status: 'dnd',
@@ -343,7 +383,7 @@ client.once(Events.ClientReady, async () => {
   await registerCommands();
 });
 
-// --- WELCOME EMBED LISTENER ---
+// --- WELCOME EVENT ---
 client.on(Events.GuildMemberAdd, async (member) => {
   if (member.guild.id !== GUILD_ID) return;
 
@@ -358,12 +398,10 @@ client.on(Events.GuildMemberAdd, async (member) => {
     const customEmbed = cfg.welcomeEmbed || {};
     const verifyChanId = customEmbed.verifyChannelId || DEFAULT_VERIFY_CHANNEL_ID;
 
-    const defaultDesc = `Hey {user}, welcome to **{server}**! 🎉\n\n📌 **First Step:** Please verify your account in {verifyChannel} first to gain access to the rest of the server.\n\n🎫 **Need Help?** After verifying, check out our ticket system if you need gameplay assistance or support!`;
+    const defaultDesc = `Hey {user}, welcome to **{server}**! 🎉\n\n📌 **First Step:** Please verify your account in {verifyChannel} first to gain access.\n\n🎫 **Need Help?** Check our ticket system after verifying!`;
 
     const title = parseCustomPlaceholders(customEmbed.title || `Welcome to ${member.guild.name}!`, member, 0, verifyChanId);
     const desc = parseCustomPlaceholders(customEmbed.description || defaultDesc, member, 0, verifyChanId);
-    
-    // Message OUTSIDE embed to ping user
     const contentMessage = customEmbed.outerMessage 
       ? parseCustomPlaceholders(customEmbed.outerMessage, member, 0, verifyChanId) 
       : `Welcome ${member}!`;
@@ -390,14 +428,11 @@ client.on(Events.GuildMemberAdd, async (member) => {
   }
 });
 
-// --- BOOST EMBED LISTENER ---
+// --- BOOST EVENT ---
 client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
   if (newMember.guild.id !== GUILD_ID) return;
 
-  const wasBoosting = oldMember.premiumSince;
-  const isBoosting = newMember.premiumSince;
-
-  if (!wasBoosting && isBoosting) {
+  if (!oldMember.premiumSince && newMember.premiumSince) {
     try {
       const cfg = guildSettings.get(newMember.guild.id) || {};
       const boostChannelId = cfg.boostChannelId;
@@ -410,8 +445,7 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
       const customEmbed = cfg.boostEmbed || {};
 
       const title = parseCustomPlaceholders(customEmbed.title || '🚀 Server Boost Received!', newMember, boostCount);
-      const desc = parseCustomPlaceholders(customEmbed.description || `Thank you **{username}** for boosting the server!\n\n{user} just boosted! We now have **{boostCount}** total boosts! 🎉`, newMember, boostCount);
-      
+      const desc = parseCustomPlaceholders(customEmbed.description || `Thank you **{username}** for boosting!\n\nWe now have **{boostCount}** total boosts! 🎉`, newMember, boostCount);
       const contentMessage = customEmbed.outerMessage 
         ? parseCustomPlaceholders(customEmbed.outerMessage, newMember, boostCount) 
         : `Thank you for boosting ${newMember}!`;
@@ -426,13 +460,8 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
         .setThumbnail(thumbnail)
         .setTimestamp();
 
-      if (customEmbed.image) {
-        boostEmbed.setImage(customEmbed.image);
-      }
-
-      if (customEmbed.footer) {
-        boostEmbed.setFooter({ text: parseCustomPlaceholders(customEmbed.footer, newMember, boostCount) });
-      }
+      if (customEmbed.image) boostEmbed.setImage(customEmbed.image);
+      if (customEmbed.footer) boostEmbed.setFooter({ text: parseCustomPlaceholders(customEmbed.footer, newMember, boostCount) });
 
       await boostChannel.send({ content: contentMessage, embeds: [boostEmbed] });
     } catch (err) {
@@ -441,12 +470,12 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
   }
 });
 
-// --- INTERACTION HANDLER ---
+// --- INTERACTION LISTENER ---
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.guild || interaction.guild.id !== GUILD_ID) return;
 
   try {
-    // 1. DROPDOWN SELECTION -> MODAL
+    // 1. SELECT MENU SELECTION -> OPEN MODAL
     if (interaction.isStringSelectMenu() && interaction.customId === 'select_ticket_cat') {
       const selectedKey = interaction.values[0];
       const preset = TICKET_PRESETS[selectedKey] || { label: 'Ticket', max: 6, points: 1, roleIds: [HELPER_ROLE_ID] };
@@ -473,7 +502,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const descInput = new TextInputBuilder()
           .setCustomId('description')
           .setLabel('DESCRIPTION')
-          .setPlaceholder('Provide details about your concern...')
+          .setPlaceholder('Provide details...')
           .setStyle(TextInputStyle.Paragraph)
           .setRequired(true);
 
@@ -492,7 +521,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const mapInput = new TextInputBuilder()
           .setCustomId('map_name')
-          .setLabel('Map Name')
+          .setLabel('Map Name / Room')
           .setPlaceholder('ultraezrajal, timeinn, etc.')
           .setStyle(TextInputStyle.Short)
           .setRequired(true);
@@ -500,7 +529,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const descInput = new TextInputBuilder()
           .setCustomId('description')
           .setLabel('Details / Bosses')
-          .setPlaceholder('Details on what you need help with...')
+          .setPlaceholder('List bosses or details needed...')
           .setStyle(TextInputStyle.Paragraph)
           .setRequired(true);
 
@@ -515,7 +544,32 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return await interaction.showModal(modal);
     }
 
-    // 2. MODAL SUBMIT -> CREATE CHANNEL
+    // 2. MODALS -> CHANGE SERVER / CHANGE BOSSES
+    if (interaction.isModalSubmit() && interaction.customId === 'modal_edit_server') {
+      const ticketData = activeTickets.get(interaction.channel.id);
+      if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
+
+      const newServer = interaction.fields.getTextInputValue('new_server');
+      ticketData.server = newServer;
+      activeTickets.set(interaction.channel.id, ticketData);
+
+      await interaction.reply({ content: `✅ Updated server to **${newServer}**`, ephemeral: true });
+      return updateTicketEmbed(interaction.channel, ticketData);
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId === 'modal_edit_bosses') {
+      const ticketData = activeTickets.get(interaction.channel.id);
+      if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
+
+      const newDetails = interaction.fields.getTextInputValue('new_details');
+      ticketData.description = newDetails;
+      activeTickets.set(interaction.channel.id, ticketData);
+
+      await interaction.reply({ content: `✅ Updated boss details!`, ephemeral: true });
+      return updateTicketEmbed(interaction.channel, ticketData);
+    }
+
+    // 3. MODAL SUBMIT -> CREATE TICKET CHANNEL
     if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket_form_')) {
       await interaction.deferReply({ ephemeral: true });
 
@@ -547,7 +601,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const cfg = guildSettings.get(interaction.guild.id) || {};
         const chName = `ticket-${ticketType}-${interaction.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g, '');
 
-        // --- DYNAMIC PUBLIC / PRIVATE PERMISSIONS ---
         const isServerTicket = ticketType === 'server_ticket';
         const permissionOverwrites = [
           { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
@@ -573,7 +626,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           permissionOverwrites
         });
 
-        activeTickets.set(ticketChannel.id, {
+        const newTicketData = {
           requesterId: interaction.user.id,
           type: ticketType,
           ign,
@@ -585,65 +638,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
           customPoints,
           pingRoleIds,
           helpers: []
-        });
+        };
 
-        const embed = new EmbedBuilder()
-          .setTitle(`Ticket - ${ticketType.replace(/_/g, ' ').toUpperCase()}`)
-          .setColor('#2b2d31')
-          .setTimestamp();
-
-        if (ticketType === 'server_ticket') {
-          embed.addFields(
-            { name: 'Requester:', value: `${interaction.user}`, inline: true },
-            { name: 'IGN:', value: `\`${ign}\``, inline: true },
-            { name: 'Subject:', value: `\`${subject}\``, inline: true },
-            { name: 'Description:', value: description }
-          );
-        } else {
-          embed.addFields(
-            { name: 'Requester:', value: `${interaction.user}`, inline: true },
-            { name: 'IGN:', value: `\`${ign}\``, inline: true },
-            { name: 'Server:', value: `\`${serverName}\``, inline: true },
-            { name: 'Details:', value: description },
-            { name: `👥 Helpers (0/${maxHelpers})`, value: 'None' }
-          );
-        }
-
-        let actionComponents = [];
-
-        if (ticketType === 'server_ticket') {
-          const simpleRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('btn_claim').setLabel('Accept').setStyle(ButtonStyle.Success).setEmoji('✅'),
-            new ButtonBuilder().setCustomId('btn_cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger)
-          );
-          actionComponents.push(simpleRow);
-        } else {
-          const row1 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('btn_location').setLabel('View Location').setStyle(ButtonStyle.Secondary).setEmoji('🚪'),
-            new ButtonBuilder().setCustomId('btn_claim').setLabel('Accept').setStyle(ButtonStyle.Success).setEmoji('✅'),
-            new ButtonBuilder().setCustomId('btn_leave').setLabel('Leave').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('btn_pinghelpers').setLabel('Ping').setStyle(ButtonStyle.Secondary).setEmoji('📢')
-          );
-
-          const row2 = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('btn_cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId('btn_complete').setLabel('Complete').setStyle(ButtonStyle.Primary)
-          );
-          actionComponents.push(row1, row2);
-        }
+        activeTickets.set(ticketChannel.id, newTicketData);
 
         const helperRolePing = pingRoleIds.length > 0 
           ? pingRoleIds.map(id => `<@&${id}>`).join(' ') 
           : '@Helper';
         
+        const payload = buildTicketControlPayload(newTicketData);
         const mainMsg = await ticketChannel.send({ 
           content: `Hey ${interaction.user}! ${helperRolePing}`, 
-          embeds: [embed], 
-          components: actionComponents 
+          embeds: payload.embeds, 
+          components: payload.components 
         });
+
         await mainMsg.pin().catch(() => {});
 
-        // --- TICKET CREATION LOG ---
         await sendTicketLog(
           interaction.guild,
           '📩 Ticket Created',
@@ -658,10 +669,56 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
 
-    // 3. TICKET ACTIONS
+    // 4. BUTTON ACTIONS
     if (interaction.isButton()) {
       const ticketData = activeTickets.get(interaction.channel.id);
       const customId = interaction.customId;
+
+      if (customId === 'btn_change_server') {
+        if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
+        if (interaction.user.id !== ticketData.requesterId && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+          return interaction.reply({ content: '❌ Only the requester can change the server.', ephemeral: true });
+        }
+
+        const modal = new ModalBuilder()
+          .setCustomId('modal_edit_server')
+          .setTitle('Change Server')
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('new_server')
+                .setLabel('New Server Name')
+                .setValue(ticketData.server)
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+            )
+          );
+
+        return await interaction.showModal(modal);
+      }
+
+      if (customId === 'btn_change_bosses') {
+        if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
+        if (interaction.user.id !== ticketData.requesterId && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+          return interaction.reply({ content: '❌ Only the requester can edit boss details.', ephemeral: true });
+        }
+
+        const modal = new ModalBuilder()
+          .setCustomId('modal_edit_bosses')
+          .setTitle('Change Bosses / Details')
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('new_details')
+                .setLabel('New Bosses or Details')
+                .setValue(ticketData.description)
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(true)
+            )
+          );
+
+        return await interaction.showModal(modal);
+      }
 
       if (customId === 'btn_location') {
         if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
@@ -672,13 +729,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         if (!isRequester && !isHelper && !isAdmin) {
           return interaction.reply({
-            content: '🔒 **Access Denied:** Click **Accept** first to view the private location.',
+            content: '🔒 **Access Denied:** Click **Claim ticket** first to view the room code.',
             ephemeral: true
           });
         }
 
         return interaction.reply({
-          content: `📍 **Private Location Details:**\n• **IGN:** \`${ticketData.ign}\`\n• **Server:** \`${ticketData.server}\`\n• **Command:** \`${ticketData.room}\``,
+          content: `📍 **Room Details:**\n• **IGN:** \`${ticketData.ign}\`\n• **Server:** \`${ticketData.server}\`\n• **Command:** \`${ticketData.room}\``,
           ephemeral: true
         });
       }
@@ -688,19 +745,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         if (interaction.user.id === ticketData.requesterId) {
           return interaction.reply({ 
-            content: '⚠️ You are the requester of this ticket! You do not need to accept it.', 
+            content: '⚠️ You are the requester of this ticket!', 
             ephemeral: true 
           });
         }
 
         if (ticketData.helpers.includes(interaction.user.id)) {
-          return interaction.reply({ content: '⚠️ You already accepted!', ephemeral: true });
+          return interaction.reply({ content: '⚠️ You already claimed this ticket!', ephemeral: true });
         }
 
         const activeChannelId = isHelperInActiveTicket(interaction.user.id);
         if (activeChannelId) {
           return interaction.reply({
-            content: `⚠️ You are already handling an active ticket (<#${activeChannelId}>)! Finish that ticket before accepting another one.`,
+            content: `⚠️ You are already in an active ticket (<#${activeChannelId}>)!`,
             ephemeral: true
           });
         }
@@ -716,27 +773,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const spotsLeft = maxAllowed - ticketData.helpers.length;
 
         await interaction.channel.send({
-          content: `✅ ${interaction.user} joined the team. (${spotsLeft} left)`
+          content: `✅ ${interaction.user} joined the helper team! (${spotsLeft} spots left)`
         });
 
         await sendTicketLog(
           interaction.guild,
-          '🤝 Ticket Accepted',
+          '🤝 Ticket Claimed',
           `**Helper:** ${interaction.user} (\`${interaction.user.id}\`)\n**Ticket:** ${interaction.channel}\n**Requester:** <@${ticketData.requesterId}>`,
           '#f1c40f'
         );
 
-        if (ticketData.type === 'server_ticket') {
-          await interaction.reply({
-            content: `✅ **Accepted!** You are now assisting <@${ticketData.requesterId}> with their concern.`,
-            ephemeral: true
-          });
-        } else {
-          await interaction.reply({
-            content: `✅ **Accepted!** Room Info:\n📍 **Server:** \`${ticketData.server}\`\n📍 **Command:** \`${ticketData.room}\``,
-            ephemeral: true
-          });
-        }
+        await interaction.reply({
+          content: `✅ **Claimed!** Room Code:\n📍 **Server:** \`${ticketData.server}\`\n📍 **Command:** \`${ticketData.room}\``,
+          ephemeral: true
+        });
 
         return updateTicketEmbed(interaction.channel, ticketData);
       }
@@ -751,14 +801,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
         ticketData.helpers = ticketData.helpers.filter(id => id !== interaction.user.id);
         activeTickets.set(interaction.channel.id, ticketData);
 
-        await interaction.reply({ content: `🚪 ${interaction.user} stepped down.` });
+        await interaction.reply({ content: `🚪 ${interaction.user} stepped down from helping.` });
         return updateTicketEmbed(interaction.channel, ticketData);
       }
 
       if (customId === 'btn_pinghelpers') {
         const pingRoleIds = ticketData?.pingRoleIds || [];
         const helperRolePing = pingRoleIds.length > 0 ? pingRoleIds.map(id => `<@&${id}>`).join(' ') : '@Helper';
-        return interaction.reply({ content: `📢 ${helperRolePing} assistance requested!` });
+        return interaction.reply({ content: `🔔 ${helperRolePing} assistance requested!` });
       }
 
       if (customId === 'btn_cancel') {
@@ -766,7 +816,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return interaction.reply({ content: '❌ Only requester or staff can cancel.', ephemeral: true });
         }
 
-        await interaction.reply('❌ Closed. Deleting in 3s...');
+        await interaction.reply('🎟️ Ticket Canceled. Deleting channel in 3 seconds...');
 
         await sendTicketLog(
           interaction.guild,
@@ -787,7 +837,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         await interaction.deferReply();
 
-        // Lock channel
         await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: false });
 
         if (ticketData) {
@@ -810,12 +859,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
           const helperMentions = ticketData.helpers.map(id => `<@${id}>`).join(', ');
           awardedText = `\n🏆 **+${pointsToAward} pts** awarded to: ${helperMentions}`;
         } else {
-          awardedText = '\n⚠️ No helpers accepted.';
+          awardedText = '\n⚠️ No helpers joined.';
         }
 
         const embed = new EmbedBuilder()
           .setTitle('🔒 Ticket Completed')
-          .setDescription(`Resolved successfully!${awardedText}\n\n*This channel will automatically delete in 5 seconds...*`)
+          .setDescription(`Resolved successfully!${awardedText}\n\n*Deleting channel in 5 seconds...*`)
           .setColor('#2ecc71')
           .setTimestamp();
 
@@ -832,7 +881,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         await interaction.editReply({ embeds: [embed] });
 
-        // Auto Delete Channel After 5 seconds
         activeTickets.delete(interaction.channel.id);
         setTimeout(() => {
           interaction.channel.delete().catch(() => {});
@@ -842,11 +890,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
 
-    // 4. COMMANDS
+    // 5. COMMANDS
     if (interaction.isChatInputCommand()) {
       const { commandName, options } = interaction;
 
-      if (commandName === 'ticket-setup-panel') {
+      if (commandName === 'setup-ticket-hub') {
         await interaction.deferReply({ ephemeral: true });
         const channel = options.getChannel('channel');
         const title = options.getString('title');
@@ -879,7 +927,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const row = new ActionRowBuilder().addComponents(selectMenu);
 
         await channel.send({ embeds: [embed], components: [row] });
-        return await interaction.editReply(`✅ Unified 7-option panel posted to ${channel}!`);
+        return await interaction.editReply(`✅ Ticket Panel posted to ${channel}!`);
       }
 
       if (commandName === 'embed') {
@@ -911,10 +959,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
           }
 
           await channel.send(messageOptions);
-          return await interaction.editReply(`✅ Custom embed successfully posted to ${channel}!`);
+          return await interaction.editReply(`✅ Embed posted to ${channel}!`);
         } catch (err) {
-          console.error('Error posting custom embed:', err);
-          return await interaction.editReply(`❌ Failed to post embed: ${err.message}`);
+          console.error('Error posting embed:', err);
+          return await interaction.editReply(`❌ Failed: ${err.message}`);
         }
       }
 
@@ -940,7 +988,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         ].filter(Boolean);
 
         if (statusUpdates.length === 0) {
-          return await interaction.editReply('⚠️ No channels were updated. Please select at least one channel option.');
+          return await interaction.editReply('⚠️ No channels updated.');
         }
 
         return await interaction.editReply(`✅ **Configured Channels:**\n${statusUpdates.join('\n')}`);
@@ -1083,7 +1131,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Error handling interaction:', error);
   }
 });
 
