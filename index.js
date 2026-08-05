@@ -378,7 +378,7 @@ function buildTicketControlPayload(ticketData, userMention) {
       accessory: {
         type: 2,
         style: 2,
-        custom_id: 'btn_all_helpers',
+        custom_id: 'btn_helpers_list',
         label: 'Helpers',
         emoji: { name: '👥' }
       }
@@ -451,7 +451,7 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
       accessory: {
         type: 2,
         style: 2,
-        custom_id: 'btn_all_helpers',
+        custom_id: 'btn_support_info',
         label: 'Support',
         emoji: { name: '🛠️' }
       }
@@ -468,7 +468,7 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
       accessory: {
         type: 2,
         style: 2,
-        custom_id: 'btn_all_helpers',
+        custom_id: 'btn_support_details',
         label: 'Details',
         emoji: { name: '📋' }
       }
@@ -532,17 +532,17 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
   };
 }
 
-// --- V2 COMPLETION PANEL BUILDER ---
+// --- AESTHETIC V2 COMPLETION PANEL BUILDER ---
 function buildCompletionPayload(ticketData, pointsAwarded) {
   const categoryPreset = TICKET_PRESETS[ticketData?.type] || {};
   const accentColor = categoryPreset.accentColor || 0x2ecc71;
 
-  let helperText = '⚠️ **No helpers joined.**';
+  let detailContent = '⚠️ **No helpers joined this ticket.**';
   if (ticketData && ticketData.type === 'server_ticket') {
-    helperText = '🛠️ **Support ticket resolved by staff.**';
+    detailContent = '🛠️ **Support ticket handled and resolved by staff.**';
   } else if (ticketData && ticketData.helpers.length > 0) {
     const helperMentions = ticketData.helpers.map(h => `<@${h.id}>`).join(', ');
-    helperText = `🏆 **+${pointsAwarded} pts** awarded to: ${helperMentions}`;
+    detailContent = `🏆 **+${pointsAwarded} pts** awarded to:\n-# > ${helperMentions}`;
   }
 
   const containerComponent = {
@@ -554,7 +554,10 @@ function buildCompletionPayload(ticketData, pointsAwarded) {
         components: [
           {
             type: 10,
-            content: `🔒 **Ticket Completed**\n\nResolved successfully!\n${helperText}\n\n-# Deleting channel in 5 seconds...`
+            content: `🔒 **Ticket Completed**\n\n` +
+                     `Resolved successfully!\n` +
+                     `${detailContent}\n\n` +
+                     `-# *Deleting channel in 5 seconds...*`
           }
         ]
       }
@@ -726,7 +729,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    if (interaction.isButton() && interaction.customId === 'btn_all_helpers') {
+    if (interaction.isButton() && ['btn_all_helpers', 'btn_helpers_list', 'btn_support_info', 'btn_support_details'].includes(interaction.customId)) {
       return await interaction.reply({
         content: '🔒 **Status:** Showing active ticket details.',
         ephemeral: true
