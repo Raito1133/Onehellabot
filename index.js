@@ -243,6 +243,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
+// --- TICKET PANEL CONTROL (WITH REQUESTED CUSTOM EMOJIS & LINES) ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -274,7 +275,7 @@ function buildTicketControlPayload(ticketData, userMention) {
         style: 2,
         custom_id: 'btn_helpers_list',
         label: 'Helpers',
-        emoji: { name: 'queststart', id: '1531490481991843862' }
+        emoji: { id: '1326878430284742707', name: 'n_nox_y' }
       }
     },
     { type: 14 },
@@ -292,7 +293,7 @@ function buildTicketControlPayload(ticketData, userMention) {
         style: 2,
         custom_id: 'btn_change_server',
         label: 'Server',
-        emoji: { name: 'aqwDecay', id: '1533349135460335668' }
+        emoji: { id: '1534553693884514404', name: 'arrow' }
       }
     },
     { type: 14 },
@@ -309,7 +310,7 @@ function buildTicketControlPayload(ticketData, userMention) {
         style: 3,
         custom_id: 'btn_claim',
         label: 'Claim',
-        emoji: { name: 'aqwGauntlet', id: '1531490394146078820' }
+        emoji: { id: '1534558039183458526', name: 'greendot' }
       }
     },
     { type: 14 },
@@ -326,7 +327,7 @@ function buildTicketControlPayload(ticketData, userMention) {
         style: 2,
         custom_id: 'btn_change_bosses',
         label: 'Change Mobs',
-        emoji: { name: 'wolfblade', id: '1533348197223632956' }
+        emoji: { name: 'chuckles' }
       }
     },
     { type: 14 },
@@ -343,7 +344,7 @@ function buildTicketControlPayload(ticketData, userMention) {
         style: 2,
         custom_id: 'btn_pinghelpers',
         label: 'Ping',
-        emoji: { name: 'AQW_sword', id: '1531490097768304714' }
+        emoji: { id: '1534551074550190110', name: '1369announce' }
       }
     },
     { type: 14 },
@@ -359,8 +360,8 @@ function buildTicketControlPayload(ticketData, userMention) {
         type: 2,
         style: 2,
         custom_id: 'btn_location',
-        label: 'Codes',
-        emoji: { name: 'aqwScroll', id: '1533349936438181908' }
+        label: 'Room Details',
+        emoji: { id: '1534547674164887622', name: 'AttentionAnimated' }
       }
     },
     { type: 14 },
@@ -377,7 +378,7 @@ function buildTicketControlPayload(ticketData, userMention) {
         style: 3,
         custom_id: 'btn_complete',
         label: 'Complete',
-        emoji: { name: 'Ticket', id: '1533348464908435526' }
+        emoji: { id: '1534558091801006142', name: 'bluedot' }
       }
     },
     { type: 14 },
@@ -394,7 +395,7 @@ function buildTicketControlPayload(ticketData, userMention) {
         style: 4,
         custom_id: 'btn_cancel',
         label: 'Cancel',
-        emoji: { name: 'Ticket', id: '1533348464908435526' }
+        emoji: { id: '1534558064261206076', name: 'reddot' }
       }
     }
   ];
@@ -432,7 +433,7 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
         style: 2,
         custom_id: 'btn_support_info',
         label: 'Support',
-        emoji: { name: 'Ticket', id: '1533348464908435526' }
+        emoji: { id: '1534553693884514404', name: 'arrow' }
       }
     },
     { type: 14 },
@@ -449,7 +450,7 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
         style: 2,
         custom_id: 'btn_support_details',
         label: 'Details',
-        emoji: { name: 'aqwScroll', id: '1533349936438181908' }
+        emoji: { name: 'chuckles' }
       }
     },
     { type: 14 },
@@ -466,7 +467,7 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
         style: 2,
         custom_id: 'btn_pinghelpers',
         label: 'Ping',
-        emoji: { name: 'AQW_sword', id: '1531490097768304714' }
+        emoji: { id: '1534551074550190110', name: '1369announce' }
       }
     },
     { type: 14 },
@@ -483,7 +484,7 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
         style: 3,
         custom_id: 'btn_complete',
         label: 'Complete',
-        emoji: { name: 'Ticket', id: '1533348464908435526' }
+        emoji: { id: '1534558091801006142', name: 'bluedot' }
       }
     },
     { type: 14 },
@@ -500,7 +501,7 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
         style: 4,
         custom_id: 'btn_cancel',
         label: 'Cancel',
-        emoji: { name: 'Ticket', id: '1533348464908435526' }
+        emoji: { id: '1534558064261206076', name: 'reddot' }
       }
     }
   ];
@@ -1263,7 +1264,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const sub = options.getSubcommand();
         const targetUser = options.getUser('user');
 
-        if (sub === 'add') {
+        Id (sub === 'add') {
           const amount = options.getInteger('amount');
           const current = helperPoints.get(targetUser.id) || 0;
           const updated = current + amount;
@@ -1324,6 +1325,6 @@ client.login(process.env.DISCORD_TOKEN);
 
 // --- HTTP SERVER FOR KEEP-ALIVE ---
 http.createServer((req, res) => {
-  res.write("Bot is alive!");
+  res.write("bot is alive!");
   res.end();
 }).listen(process.env.PORT || 3000);
