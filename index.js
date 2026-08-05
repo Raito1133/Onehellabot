@@ -243,7 +243,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- TICKET PANEL CONTROL ---
+// --- TICKET PANEL CONTROL (WITH VALIDATED ANIMATED EMOJI OBJECTS) ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -293,7 +293,7 @@ function buildTicketControlPayload(ticketData, userMention) {
         style: 2,
         custom_id: 'btn_change_server',
         label: 'Server',
-        emoji: { id: '1534553693884514404', name: 'arrow' }
+        emoji: { id: '1534553693884514404', name: 'arrow', animated: true }
       }
     },
     { type: 14 },
@@ -310,7 +310,7 @@ function buildTicketControlPayload(ticketData, userMention) {
         style: 3,
         custom_id: 'btn_claim',
         label: 'Claim',
-        emoji: { id: '1534558039183458526', name: 'greendot' }
+        emoji: { id: '1534558039183458526', name: 'greendot', animated: true }
       }
     },
     { type: 14 },
@@ -344,7 +344,7 @@ function buildTicketControlPayload(ticketData, userMention) {
         style: 2,
         custom_id: 'btn_pinghelpers',
         label: 'Ping',
-        emoji: { id: '1534551074550190110', name: '1369announce' }
+        emoji: { id: '1534551074550190110', name: '1369announce', animated: true }
       }
     },
     { type: 14 },
@@ -361,7 +361,7 @@ function buildTicketControlPayload(ticketData, userMention) {
         style: 2,
         custom_id: 'btn_location',
         label: 'Room Details',
-        emoji: { id: '1534547674164887622', name: 'AttentionAnimated' }
+        emoji: { id: '1534547674164887622', name: 'AttentionAnimated', animated: true }
       }
     },
     { type: 14 },
@@ -378,7 +378,7 @@ function buildTicketControlPayload(ticketData, userMention) {
         style: 3,
         custom_id: 'btn_complete',
         label: 'Complete',
-        emoji: { id: '1534558091801006142', name: 'bluedot' }
+        emoji: { id: '1534558091801006142', name: 'bluedot', animated: true }
       }
     },
     { type: 14 },
@@ -395,7 +395,7 @@ function buildTicketControlPayload(ticketData, userMention) {
         style: 4,
         custom_id: 'btn_cancel',
         label: 'Cancel',
-        emoji: { id: '1534558064261206076', name: 'reddot' }
+        emoji: { id: '1534558064261206076', name: 'reddot', animated: true }
       }
     }
   ];
@@ -433,7 +433,7 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
         style: 2,
         custom_id: 'btn_support_info',
         label: 'Support',
-        emoji: { id: '1534553693884514404', name: 'arrow' }
+        emoji: { id: '1534553693884514404', name: 'arrow', animated: true }
       }
     },
     { type: 14 },
@@ -467,7 +467,7 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
         style: 2,
         custom_id: 'btn_pinghelpers',
         label: 'Ping',
-        emoji: { id: '1534551074550190110', name: '1369announce' }
+        emoji: { id: '1534551074550190110', name: '1369announce', animated: true }
       }
     },
     { type: 14 },
@@ -484,7 +484,7 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
         style: 3,
         custom_id: 'btn_complete',
         label: 'Complete',
-        emoji: { id: '1534558091801006142', name: 'bluedot' }
+        emoji: { id: '1534558091801006142', name: 'bluedot', animated: true }
       }
     },
     { type: 14 },
@@ -501,7 +501,7 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
         style: 4,
         custom_id: 'btn_cancel',
         label: 'Cancel',
-        emoji: { id: '1534558064261206076', name: 'reddot' }
+        emoji: { id: '1534558064261206076', name: 'reddot', animated: true }
       }
     }
   ];
@@ -1289,9 +1289,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
           } else {
             helperPoints.clear();
             return await interaction.reply({ content: '✅ Reset all helper points!', ephemeral: true });
+          }
         }
       }
-    }
 
       if (commandName === 'helper-roles') {
         const sub = options.getSubcommand();
