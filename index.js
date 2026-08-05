@@ -187,54 +187,31 @@ function buildTicketHubPayload(options = {}) {
     createDesc = "Select a category from the menu to open a new ticket. Our helpers will join shortly!"
   } = options;
 
-  const containerComponent = {
-    type: 17,
-    accent_color: 0x8b0000,
-    components: [
-      {
-        type: 12,
-        items: [{ media: { url: imageUrl } }]
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `🔖 **TICKET GUIDE**\n\n${guideDesc.replace(/\\n/g, '\n')}`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 5,
-          url: guideUrl,
-          label: 'Guide'
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `🤝 **MAKE A TICKET**\n\n${createDesc.replace(/\\n/g, '\n')}`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_open_ticket_menu',
-          label: 'Create'
-        }
-      }
-    ]
-  };
+  const embed = new EmbedBuilder()
+    .setTitle('🎫 Ticket Hub')
+    .setDescription(`**TICKET GUIDE**\n\n${guideDesc.replace(/\\n/g, '\n')}\n\n**MAKE A TICKET**\n\n${createDesc.replace(/\\n/g, '\n')}`)
+    .setImage(imageUrl)
+    .setColor(0x8b0000)
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setStyle(ButtonStyle.Link)
+      .setURL(guideUrl)
+      .setLabel('Guide'),
+    new ButtonBuilder()
+      .setCustomId('btn_open_ticket_menu')
+      .setStyle(ButtonStyle.Primary)
+      .setLabel('Create Ticket')
+  );
 
   return {
-    components: [containerComponent],
-    flags: MessageFlags.IsComponentsV2
+    embeds: [embed],
+    components: [row]
   };
 }
 
-// --- ERROR-FREE TICKET PANEL CONTROL ---
+// --- BULLETPROOF TICKET PANEL CONTROL (USING STANDARD EMBEDS & ACTION ROWS) ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -246,28 +223,17 @@ function buildTicketControlPayload(ticketData, userMention) {
     ? ticketData.helpers.map(h => `• <@${h.id}>`).join('\n')
     : '• None';
 
-  const containerComponent = {
-    type: 17,
-    accent_color: accentColor,
-    components: [
-      {
-        type: 12,
-        items: [{ media: { url: ticketBanner } }]
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `🖐️ **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}\n\n` +
-                     `👤 **Requester:** ${requesterTag}\n\n` +
-                     `🖥️ **Selected Server:** \`${ticketData.server}\`\n\n` +
-                     `💀 **Bosses / Mobs:** \`${ticketData.description}\``
-          }
-        ]
-      }
-    ]
-  };
+  const embed = new EmbedBuilder()
+    .setTitle('🎫 Ticket Control Panel')
+    .setDescription(
+      `🖐️ **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}\n\n` +
+      `👤 **Requester:** ${requesterTag}\n\n` +
+      `🖥️ **Selected Server:** \`${ticketData.server}\`\n\n` +
+      `💀 **Bosses / Mobs:** \`${ticketData.description}\``
+    )
+    .setImage(ticketBanner)
+    .setColor(accentColor)
+    .setTimestamp();
 
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('btn_change_server').setLabel('Server').setStyle(ButtonStyle.Secondary),
@@ -283,8 +249,8 @@ function buildTicketControlPayload(ticketData, userMention) {
   );
 
   return {
-    components: [containerComponent, row1, row2],
-    flags: MessageFlags.IsComponentsV2
+    embeds: [embed],
+    components: [row1, row2]
   };
 }
 
@@ -295,27 +261,16 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
 
   const requesterTag = `<@${ticketData.requesterId}> (${ticketData.ign})`;
 
-  const containerComponent = {
-    type: 17,
-    accent_color: accentColor,
-    components: [
-      {
-        type: 12,
-        items: [{ media: { url: ticketBanner } }]
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `👤 **User:** ${requesterTag}\n\n` +
-                     `**Subject / Concern:** \`${ticketData.subject}\`\n\n` +
-                     `**Details / Report:** \`${ticketData.description}\``
-          }
-        ]
-      }
-    ]
-  };
+  const embed = new EmbedBuilder()
+    .setTitle('🛠️ Support Ticket Panel')
+    .setDescription(
+      `👤 **User:** ${requesterTag}\n\n` +
+      `**Subject / Concern:** \`${ticketData.subject}\`\n\n` +
+      `**Details / Report:** \`${ticketData.description}\``
+    )
+    .setImage(ticketBanner)
+    .setColor(accentColor)
+    .setTimestamp();
 
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('btn_pinghelpers').setLabel('Ping Staff').setStyle(ButtonStyle.Secondary),
@@ -324,8 +279,8 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
   );
 
   return {
-    components: [containerComponent, row1],
-    flags: MessageFlags.IsComponentsV2
+    embeds: [embed],
+    components: [row1]
   };
 }
 
@@ -716,7 +671,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           ? buildSupportTicketControlPayload(newTicketData, `${interaction.user}`)
           : buildTicketControlPayload(newTicketData, `${interaction.user}`);
 
-        const mainMsg = await ticketChannel.send({ components: payload.components, flags: payload.flags });
+        const mainMsg = await ticketChannel.send({ embeds: payload.embeds, components: payload.components });
 
         await mainMsg.pin().catch(() => {});
 
@@ -982,8 +937,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
           });
 
           await channel.send({
-            components: payload.components,
-            flags: payload.flags
+            embeds: payload.embeds,
+            components: payload.components
           });
 
           return await interaction.editReply(`✅ Ticket Hub Panel successfully posted to ${channel}!`);
