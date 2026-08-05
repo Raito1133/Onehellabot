@@ -173,28 +173,16 @@ async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
 // --- SAFE JSON COMPONENTS V2 BUILDERS ---
 function buildTicketHubPayload(options = {}) {
   const {
-    bannerUrl = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif',
     guideTitle = 'Tickets, rules and how to',
     guideDesc = "🔖 Before creating a ticket, read the guide for how they work.\nCheck it out by clicking on '**Ticket Guide**'",
-    guideUrl = 'https://discord.com',
     createTitle = 'Need help with one or more bosses?',
     createDesc = "✨ Create a ticket by clicking the '**Create Ticket**' button!\nHelpers will be with you shortly to help you ❤️"
   } = options;
 
   const containerComponent = {
     type: 17, // Container
-    accent_color: 0x8b0000, // Dark Red accent
+    accent_color: 0x8b0000, // Dark Red Accent
     components: [
-      {
-        type: 13, // Media Gallery Component (Type 13 allowed inside Container)
-        items: [
-          {
-            media: {
-              url: bannerUrl
-            }
-          }
-        ]
-      },
       {
         type: 9, // Section 1: Ticket Stats
         components: [
@@ -218,8 +206,8 @@ function buildTicketHubPayload(options = {}) {
         accessory: {
           type: 2,
           style: 2, // Secondary / Grey
+          custom_id: 'btn_ticket_guide',
           label: 'Ticket Guide',
-          url: guideUrl,
           emoji: { name: '🎫' }
         }
       },
@@ -498,6 +486,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return await interaction.reply({
         content: '🎫 **Select the ticket category you need assistance with:**',
         components: [row],
+        ephemeral: true
+      });
+    }
+
+    if (interaction.isButton() && interaction.customId === 'btn_ticket_guide') {
+      return await interaction.reply({
+        content: '📖 **Ticket Guide:** Read through the channel rules or ping an active staff member if you need assistance submitting requests.',
         ephemeral: true
       });
     }
@@ -942,10 +937,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         try {
           const channel = options.getChannel('channel');
-          const bannerUrl = options.getString('banner_url') || undefined;
           const guideTitle = options.getString('guide_title') || undefined;
           const guideDesc = options.getString('guide_desc') || undefined;
-          const guideUrl = options.getString('guide_url') || undefined;
           const createTitle = options.getString('create_title') || undefined;
           const createDesc = options.getString('create_desc') || undefined;
           const category = options.getChannel('category');
@@ -957,10 +950,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
           guildSettings.set(interaction.guild.id, cfg);
 
           const payload = buildTicketHubPayload({
-            bannerUrl,
             guideTitle,
             guideDesc,
-            guideUrl,
             createTitle,
             createDesc
           });
