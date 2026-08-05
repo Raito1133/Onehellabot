@@ -24,7 +24,6 @@ const GUILD_ID = '1243470533316579361'; // Server ID
 const HELPER_ROLE_ID = 'YOUR_HELPER_ROLE_ID'; // Fallback Helper Role ID
 const TICKET_GUIDE_URL = 'https://discord.com'; // Replace with actual Guide URL or Channel Link
 
-// Default Main Header Banner (Used as fallback)
 const DEFAULT_BANNER_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
 
 const client = new Client({
@@ -44,18 +43,29 @@ const userRequestCounts = new Map();
 const guildSettings = new Map();
 const roleRewards = new Map();
 
-// Incremental Ticket Counter
 let ticketCounter = 0;
 
-// Reset Global Stats
 const globalStats = {
   totalTicketsCompleted: 0,
   totalPointsGiven: 0,
   totalBossesSlain: 0
 };
 
+// --- ⚔️ AQW CLASS DEFINITIONS (10 CLASSES) ⚙️ ---
+const AQW_CLASSES = {
+  lr: { label: 'Legion Revenant', short: 'LR', emoji: '💀' },
+  ap: { label: 'ArchPaladin', short: 'AP', emoji: '🛡️' },
+  loo: { label: 'Lord of Order', short: 'LoO', emoji: '👑' },
+  sc: { label: 'StoneCrusher', short: 'SC', emoji: '🗿' },
+  dss: { label: 'DragonSoul Shinobi', short: 'DSS', emoji: '🐉' },
+  vdk: { label: 'Verus DoomKnight', short: 'VDK', emoji: '⚔️' },
+  ai: { label: 'Arcana Invoker', short: 'AI', emoji: '🃏' },
+  vhl: { label: 'Void Highlord', short: 'VHL', emoji: '🩸' },
+  cc: { label: 'Chrono Commander', short: 'CC', emoji: '⏳' },
+  lc: { label: 'LightCaster', short: 'LC', emoji: '✨' }
+};
+
 // --- ⚙️ CUSTOM TICKET PRESETS & CATEGORY BANNERS ⚙️ ---
-// Replace the bannerUrl strings below with your custom banner image links!
 const TICKET_PRESETS = {
   farming: { 
     label: 'Farming Assistance', 
@@ -63,7 +73,7 @@ const TICKET_PRESETS = {
     points: 3, 
     emoji: '<:queststart:1531490481991843862>', 
     roleIds: ['1529499059596038285'],
-    bannerUrl: 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif'
+    bannerUrl: DEFAULT_BANNER_URL
   },
   ultra_weeklies: { 
     label: 'Ultra Weeklies', 
@@ -71,7 +81,7 @@ const TICKET_PRESETS = {
     points: 8, 
     emoji: '<:aqwDecay:1533349135460335668>', 
     roleIds: ['1529499021884919858'],
-    bannerUrl: 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif'
+    bannerUrl: DEFAULT_BANNER_URL
   },
   seven_man_dailies: { 
     label: '7-Man Dailies', 
@@ -79,7 +89,7 @@ const TICKET_PRESETS = {
     points: 5, 
     emoji: '<:aqwGauntlet:1531490394146078820>', 
     roleIds: ['1529499059596038285', '1529499021884919858'],
-    bannerUrl: 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif'
+    bannerUrl: DEFAULT_BANNER_URL
   },
   ultra_dailies: { 
     label: 'Ultra Dailies', 
@@ -87,7 +97,7 @@ const TICKET_PRESETS = {
     points: 5, 
     emoji: '<:wolfblade:1533348197223632956>', 
     roleIds: ['1529499021884919858'],
-    bannerUrl: 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif'
+    bannerUrl: DEFAULT_BANNER_URL
   },
   server_ticket: { 
     label: 'Server Ticket / Support', 
@@ -95,7 +105,7 @@ const TICKET_PRESETS = {
     points: 0, 
     emoji: '<:Ticket:1533348464908435526>', 
     roleIds: ['1529498802149392614'],
-    bannerUrl: 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif'
+    bannerUrl: DEFAULT_BANNER_URL
   },
   boss_help: { 
     label: 'General Boss Help', 
@@ -103,7 +113,7 @@ const TICKET_PRESETS = {
     points: 2, 
     emoji: '<:AQW_sword:1531490097768304714>', 
     roleIds: ['1529499059596038285'],
-    bannerUrl: 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif'
+    bannerUrl: DEFAULT_BANNER_URL
   },
   other_help: { 
     label: 'Other Requests', 
@@ -111,7 +121,7 @@ const TICKET_PRESETS = {
     points: 1, 
     emoji: '<:aqwScroll:1533349936438181908>', 
     roleIds: ['1529499059596038285'],
-    bannerUrl: 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif'
+    bannerUrl: DEFAULT_BANNER_URL
   }
 };
 
@@ -140,7 +150,7 @@ async function sendTicketLog(guild, title, description, color = '#3498db', field
 
 function isHelperInActiveTicket(userId) {
   for (const [channelId, ticket] of activeTickets.entries()) {
-    if (ticket.helpers.includes(userId)) {
+    if (ticket.helpers.some(h => h.id === userId)) {
       return channelId;
     }
   }
@@ -191,21 +201,15 @@ function buildTicketHubPayload(options = {}) {
   } = options;
 
   const containerComponent = {
-    type: 17, // Container
+    type: 17,
     accent_color: 0x8b0000,
     components: [
       {
-        type: 12, // Media Gallery Header Banner
-        items: [
-          {
-            media: {
-              url: imageUrl
-            }
-          }
-        ]
+        type: 12,
+        items: [{ media: { url: imageUrl } }]
       },
       {
-        type: 9, // Section 1: Ticket Stats
+        type: 9,
         components: [
           {
             type: 10,
@@ -224,7 +228,7 @@ function buildTicketHubPayload(options = {}) {
         }
       },
       {
-        type: 9, // Section 2: Ticket Guide
+        type: 9,
         components: [
           {
             type: 10,
@@ -240,7 +244,7 @@ function buildTicketHubPayload(options = {}) {
         }
       },
       {
-        type: 9, // Section 3: Make a Ticket
+        type: 9,
         components: [
           {
             type: 10,
@@ -264,119 +268,172 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- MINIMALIST IN-TICKET PANEL BUILDER (DYNAMIC CATEGORY BANNER) ---
-function buildTicketControlPayload(ticketData, userMention, rolePing) {
-  const maxLimit = ticketData.maxHelpers || 6;
-  const helpersList = ticketData.helpers.length > 0
-    ? ticketData.helpers.map(id => `<@${id}>`).join(', ')
-    : 'None';
-
-  // Retrieve custom banner for this category (or use default banner)
+// --- MATCHING REFERENCE DESIGN PANEL BUILDER ---
+function buildTicketControlPayload(ticketData, userMention) {
+  const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
   const ticketBanner = categoryPreset.bannerUrl || DEFAULT_BANNER_URL;
 
-  const bannerSection = {
-    type: 12,
-    items: [
-      {
-        media: {
-          url: ticketBanner
-        }
-      }
-    ]
-  };
+  const reqClass = AQW_CLASSES[ticketData.requesterClass] || { label: 'DPS', emoji: '⚔️' };
+  const requesterTag = `<@${ticketData.requesterId}> (${ticketData.ign})`;
 
-  const headerSection = {
-    type: 9,
-    components: [
-      {
-        type: 10,
-        content: `👋 **Welcome ${userMention}!** ${rolePing}`
-      }
-    ],
-    accessory: {
-      type: 2,
-      style: 2,
-      custom_id: 'btn_ticket_info',
-      label: 'Info',
-      emoji: { name: 'ℹ️' }
-    }
-  };
-
-  let detailsText = '';
-  if (ticketData.type === 'server_ticket') {
-    detailsText = `🔷 **SUPPORT TICKET**\n\n` +
-                  `• Requester: <@${ticketData.requesterId}>\n` +
-                  `• Subject: \`${ticketData.subject}\`\n` +
-                  `• Details: \`${ticketData.description}\`\n\n` +
-                  `👥 **Helpers (${ticketData.helpers.length}/${maxLimit}):** ${helpersList}`;
-  } else {
-    detailsText = `⚔️ **TICKET DETAILS**\n\n` +
-                  `• Requester: <@${ticketData.requesterId}>\n` +
-                  `• Server: \`${ticketData.server}\`\n` +
-                  `• Points: \`${ticketData.customPoints}\`\n` +
-                  `• Target: \`${ticketData.description}\`\n\n` +
-                  `👥 **Helpers (${ticketData.helpers.length}/${maxLimit}):** ${helpersList}`;
-  }
+  const helpersFormatted = ticketData.helpers.length > 0
+    ? ticketData.helpers.map(h => {
+        const cls = AQW_CLASSES[h.classKey] || { label: 'DPS', emoji: '⚔️' };
+        return `• ${cls.emoji} **${cls.label}:** <@${h.id}>`;
+      }).join('\n')
+    : '• None';
 
   const sections = [
-    bannerSection,
-    headerSection,
+    {
+      type: 12,
+      items: [{ media: { url: ticketBanner } }]
+    },
     {
       type: 9,
       components: [
         {
           type: 10,
-          content: detailsText
+          content: `🎯 **Points:**\n> **${ticketData.customPoints}**`
         }
       ],
-      accessory: { type: 2, style: 1, custom_id: 'btn_claim', label: 'Claim', emoji: { name: '🤝' } }
+      accessory: {
+        type: 2,
+        style: 2,
+        custom_id: 'btn_all_helpers',
+        label: 'All helpers',
+        emoji: { name: '🔒' }
+      }
     },
     {
       type: 9,
-      components: [{ type: 10, content: `🗄️ Location / Details` }],
-      accessory: { type: 2, style: 2, custom_id: 'btn_change_server', label: 'Server', emoji: { name: '🗄️' } }
+      components: [
+        {
+          type: 10,
+          content: `👤 **Requester ${reqClass.emoji}${reqClass.label}:** ${requesterTag}\n\n` +
+                   `**Selected server:**\n> **${ticketData.server}**`
+        }
+      ],
+      accessory: {
+        type: 2,
+        style: 2,
+        custom_id: 'btn_change_server',
+        label: 'Change server',
+        emoji: { name: '🖥️' }
+      }
     },
     {
       type: 9,
-      components: [{ type: 10, content: `💀 Target / Bosses` }],
-      accessory: { type: 2, style: 2, custom_id: 'btn_change_bosses', label: 'Edit', emoji: { name: '💀' } }
+      components: [
+        {
+          type: 10,
+          content: `**Bosses:**\n> **${ticketData.description}**`
+        }
+      ],
+      accessory: {
+        type: 2,
+        style: 2,
+        custom_id: 'btn_change_bosses',
+        label: 'Change bosses',
+        emoji: { name: '💀' }
+      }
     },
     {
       type: 9,
-      components: [{ type: 10, content: `📢 Request Helpers` }],
-      accessory: { type: 2, style: 2, custom_id: 'btn_pinghelpers', label: 'Ping', emoji: { name: '🔔' } }
+      components: [
+        {
+          type: 10,
+          content: `Still in need of help? **Ping helpers!**`
+        }
+      ],
+      accessory: {
+        type: 2,
+        style: 2,
+        custom_id: 'btn_pinghelpers',
+        label: 'Ping helpers',
+        emoji: { name: '🔔' }
+      }
     },
     {
       type: 9,
-      components: [{ type: 10, content: `📋 Room Code & IGN` }],
-      accessory: { type: 2, style: 1, custom_id: 'btn_location', label: 'Codes', emoji: { name: '📋' } }
+      components: [
+        {
+          type: 10,
+          content: `Finished with the ticket?`
+        }
+      ]
+    },
+    {
+      type: 1, // Action Row for Finish Controls
+      components: [
+        {
+          type: 2,
+          style: 3, // Green
+          custom_id: 'btn_complete',
+          label: 'Complete ticket',
+          emoji: { name: '🎟️' }
+        },
+        {
+          type: 2,
+          style: 4, // Red
+          custom_id: 'btn_cancel',
+          label: 'Cancel ticket',
+          emoji: { name: '🎟️' }
+        }
+      ]
     },
     {
       type: 9,
-      components: [{ type: 10, content: `🚪 Leave Squad` }],
-      accessory: { type: 2, style: 2, custom_id: 'btn_leave', label: 'Leave', emoji: { name: '🚪' } }
+      components: [
+        {
+          type: 10,
+          content: `🖐️ **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}`
+        }
+      ],
+      accessory: {
+        type: 2,
+        style: 2,
+        custom_id: 'btn_change_role',
+        label: 'Change role',
+        emoji: { name: '👏' }
+      }
     },
     {
       type: 9,
-      components: [{ type: 10, content: `✅ Finish Request` }],
-      accessory: { type: 2, style: 3, custom_id: 'btn_complete', label: 'Complete', emoji: { name: '🎫' } }
+      components: [
+        {
+          type: 10,
+          content: `Forgot room codes? Click **Room codes**!`
+        }
+      ],
+      accessory: {
+        type: 2,
+        style: 2,
+        custom_id: 'btn_location',
+        label: 'Room codes',
+        emoji: { name: '📜' }
+      }
     },
     {
       type: 9,
-      components: [{ type: 10, content: `🚫 Cancel Request` }],
-      accessory: { type: 2, style: 4, custom_id: 'btn_cancel', label: 'Cancel', emoji: { name: '🎟️' } }
+      components: [
+        {
+          type: 10,
+          content: `Claim the ticket, and get room codes!`
+        }
+      ],
+      accessory: {
+        type: 2,
+        style: 3, // Green
+        custom_id: 'btn_claim',
+        label: 'Claim ticket',
+        emoji: { name: '🤝' }
+      }
     }
   ];
 
-  const containerComponent = {
-    type: 17,
-    accent_color: 0x3498db,
-    components: sections
-  };
-
   return {
-    components: [containerComponent],
+    components: [{ type: 17, accent_color: 0x8b0000, components: sections }],
     flags: MessageFlags.IsComponentsV2
   };
 }
@@ -387,12 +444,7 @@ async function updateTicketEmbed(channel, ticketData) {
     const panelMsg = pinnedMessages.first();
     if (!panelMsg) return;
 
-    const pingRoleIds = ticketData.pingRoleIds || [];
-    const helperRolePing = pingRoleIds.length > 0 
-      ? pingRoleIds.map(id => `<@&${id}>`).join(' ') 
-      : '@Helper';
-
-    const payload = buildTicketControlPayload(ticketData, `<@${ticketData.requesterId}>`, helperRolePing);
+    const payload = buildTicketControlPayload(ticketData, `<@${ticketData.requesterId}>`);
     await panelMsg.edit(payload);
   } catch (err) {
     console.error('Failed to update ticket embed in real-time:', err);
@@ -535,11 +587,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
           )
         );
 
-      const row = new ActionRowBuilder().addComponents(selectMenu);
-
       return await interaction.reply({
         content: '🎫 **Select the ticket category you need assistance with:**',
-        components: [row],
+        components: [new ActionRowBuilder().addComponents(selectMenu)],
         ephemeral: true
       });
     }
@@ -551,19 +601,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    if (interaction.isButton() && interaction.customId === 'btn_ticket_info') {
+    if (interaction.isButton() && interaction.customId === 'btn_all_helpers') {
       return await interaction.reply({
-        content: 'ℹ️ **Ticket Panel:** Use the buttons below to manage room settings, ping helpers, or complete your request when finished.',
+        content: '🔒 **Helpers Status:** Showing active assigned squad members for this ticket.',
         ephemeral: true
       });
     }
 
-    // 2. SELECT MENU SELECTION -> OPEN STEP 1 or MODAL
+    // 2. CATEGORY SELECT -> OPEN DROPDOWNS OR MODAL
     if (interaction.isStringSelectMenu() && interaction.customId === 'select_ticket_cat') {
       const selectedKey = interaction.values[0];
       const preset = TICKET_PRESETS[selectedKey] || { label: 'Ticket', max: 6, points: 1, roleIds: [HELPER_ROLE_ID] };
 
-      // Ultra Weeklies Dropdown
       if (selectedKey === 'ultra_weeklies') {
         const menu = new StringSelectMenuBuilder()
           .setCustomId('select_bosses_ultra_weeklies')
@@ -585,7 +634,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         });
       }
 
-      // Ultra Dailies Dropdown
       if (selectedKey === 'ultra_dailies') {
         const menu = new StringSelectMenuBuilder()
           .setCustomId('select_bosses_ultra_dailies')
@@ -607,7 +655,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         });
       }
 
-      // 7-Man Dailies Dropdown
       if (selectedKey === 'seven_man_dailies') {
         const menu = new StringSelectMenuBuilder()
           .setCustomId('select_bosses_seven_man_dailies')
@@ -627,7 +674,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         });
       }
 
-      // Standard Modal for other categories
       const modal = new ModalBuilder()
         .setCustomId(`ticket_form_${preset.max}_${preset.points}_${selectedKey}`)
         .setTitle(`Ticket: ${preset.label}`);
@@ -640,59 +686,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setRequired(true);
 
       if (selectedKey === 'server_ticket') {
-        const subjectInput = new TextInputBuilder()
-          .setCustomId('subject')
-          .setLabel('SUBJECT')
-          .setPlaceholder('Enter subject/concern...')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true);
-
-        const descInput = new TextInputBuilder()
-          .setCustomId('description')
-          .setLabel('DESCRIPTION')
-          .setPlaceholder('Provide details...')
-          .setStyle(TextInputStyle.Paragraph)
-          .setRequired(true);
-
-        modal.addComponents(
-          new ActionRowBuilder().addComponents(ignInput),
-          new ActionRowBuilder().addComponents(subjectInput),
-          new ActionRowBuilder().addComponents(descInput)
-        );
+        const subjectInput = new TextInputBuilder().setCustomId('subject').setLabel('SUBJECT').setPlaceholder('Enter subject...').setStyle(TextInputStyle.Short).setRequired(true);
+        const descInput = new TextInputBuilder().setCustomId('description').setLabel('DESCRIPTION').setPlaceholder('Provide details...').setStyle(TextInputStyle.Paragraph).setRequired(true);
+        modal.addComponents(new ActionRowBuilder().addComponents(ignInput), new ActionRowBuilder().addComponents(subjectInput), new ActionRowBuilder().addComponents(descInput));
       } else {
-        const serverInput = new TextInputBuilder()
-          .setCustomId('server')
-          .setLabel('Server')
-          .setPlaceholder('Artix, Safiria, etc.')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true);
-
-        const mapInput = new TextInputBuilder()
-          .setCustomId('map_name')
-          .setLabel('Map Name / Room')
-          .setPlaceholder('ultraezrajal, ultrakala, etc.')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true);
-
-        const descInput = new TextInputBuilder()
-          .setCustomId('description')
-          .setLabel('Details / Bosses')
-          .setPlaceholder('List bosses or details needed...')
-          .setStyle(TextInputStyle.Paragraph)
-          .setRequired(true);
-
-        modal.addComponents(
-          new ActionRowBuilder().addComponents(ignInput),
-          new ActionRowBuilder().addComponents(serverInput),
-          new ActionRowBuilder().addComponents(mapInput),
-          new ActionRowBuilder().addComponents(descInput)
-        );
+        const serverInput = new TextInputBuilder().setCustomId('server').setLabel('Server').setPlaceholder('Artix, Safiria, etc.').setStyle(TextInputStyle.Short).setRequired(true);
+        const mapInput = new TextInputBuilder().setCustomId('map_name').setLabel('Map Name / Room').setPlaceholder('ultraezrajal, ultrakala, etc.').setStyle(TextInputStyle.Short).setRequired(true);
+        const descInput = new TextInputBuilder().setCustomId('description').setLabel('Details / Bosses').setPlaceholder('List bosses...').setStyle(TextInputStyle.Paragraph).setRequired(true);
+        modal.addComponents(new ActionRowBuilder().addComponents(ignInput), new ActionRowBuilder().addComponents(serverInput), new ActionRowBuilder().addComponents(mapInput), new ActionRowBuilder().addComponents(descInput));
       }
 
       return await interaction.showModal(modal);
     }
 
-    // 2b. MULTI-SELECT BOSS DROPDOWNS -> OPEN FINAL MODAL
+    // 2b. MULTI-SELECT BOSS DROPDOWNS
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_bosses_')) {
       const categoryKey = interaction.customId.replace('select_bosses_', '');
       const selectedBosses = interaction.values.join(', ');
@@ -702,33 +709,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setCustomId(`ticket_form_${preset.max}_${preset.points}_${categoryKey}`)
         .setTitle(`Ticket: ${preset.label || 'Help Request'}`);
 
-      const ignInput = new TextInputBuilder()
-        .setCustomId('ign')
-        .setLabel('AQW IGN')
-        .setPlaceholder('Enter IGN...')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      const serverInput = new TextInputBuilder()
-        .setCustomId('server')
-        .setLabel('Server')
-        .setPlaceholder('Artix, Safiria, etc.')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      const mapInput = new TextInputBuilder()
-        .setCustomId('map_name')
-        .setLabel('Map Name / Room')
-        .setPlaceholder('ultraezrajal, ultrakala, etc.')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      const descInput = new TextInputBuilder()
-        .setCustomId('description')
-        .setLabel('Selected Bosses / Details')
-        .setValue(selectedBosses)
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(true);
+      const ignInput = new TextInputBuilder().setCustomId('ign').setLabel('AQW IGN').setPlaceholder('Enter IGN...').setStyle(TextInputStyle.Short).setRequired(true);
+      const serverInput = new TextInputBuilder().setCustomId('server').setLabel('Server').setPlaceholder('Artix, Safiria, etc.').setStyle(TextInputStyle.Short).setRequired(true);
+      const mapInput = new TextInputBuilder().setCustomId('map_name').setLabel('Map Name / Room').setPlaceholder('ultraezrajal, ultrakala, etc.').setStyle(TextInputStyle.Short).setRequired(true);
+      const descInput = new TextInputBuilder().setCustomId('description').setLabel('Selected Bosses / Details').setValue(selectedBosses).setStyle(TextInputStyle.Paragraph).setRequired(true);
 
       modal.addComponents(
         new ActionRowBuilder().addComponents(ignInput),
@@ -740,7 +724,39 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return await interaction.showModal(modal);
     }
 
-    // 3. MODALS -> CHANGE SERVER / CHANGE BOSSES
+    // 3. CHANGE ROLE SELECT MENU HANDLER (10 CLASSES)
+    if (interaction.isStringSelectMenu() && interaction.customId === 'select_change_class') {
+      const ticketData = activeTickets.get(interaction.channel.id);
+      if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
+
+      const selectedClassKey = interaction.values[0];
+      const cls = AQW_CLASSES[selectedClassKey] || { label: 'DPS', short: 'DPS' };
+
+      const isRequester = interaction.user.id === ticketData.requesterId;
+      const helperObj = ticketData.helpers.find(h => h.id === interaction.user.id);
+
+      if (!isRequester && !helperObj) {
+        return interaction.reply({ content: '❌ You must be the requester or a helper to change roles.', ephemeral: true });
+      }
+
+      if (isRequester) {
+        ticketData.requesterClass = selectedClassKey;
+      } else if (helperObj) {
+        helperObj.classKey = selectedClassKey;
+      }
+
+      activeTickets.set(interaction.channel.id, ticketData);
+
+      // Simple status update bar inside ticket channel
+      await interaction.channel.send({
+        content: `🟢 **${interaction.user.username}** changed class to **${cls.label} (${cls.short})**`
+      });
+
+      await interaction.reply({ content: `✅ Updated class to **${cls.label}**!`, ephemeral: true });
+      return updateTicketEmbed(interaction.channel, ticketData);
+    }
+
+    // 4. MODALS -> CHANGE SERVER / CHANGE BOSSES
     if (interaction.isModalSubmit() && interaction.customId === 'modal_edit_server') {
       const ticketData = activeTickets.get(interaction.channel.id);
       if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
@@ -765,13 +781,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return updateTicketEmbed(interaction.channel, ticketData);
     }
 
-    // 4. MODAL SUBMIT -> CREATE TICKET CHANNEL
+    // 5. CREATE TICKET CHANNEL
     if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket_form_')) {
       await interaction.deferReply({ ephemeral: true });
 
       try {
         const parts = interaction.customId.replace('ticket_form_', '').split('_');
-        const maxHelpers = parseInt(parts[0]) || 6;
+        const maxHelpers = parseInt(parts[0]) || 3;
         const customPoints = parseInt(parts[1]) || 0;
         const ticketType = parts.slice(2).join('_');
 
@@ -810,32 +826,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const isServerTicket = ticketType === 'server_ticket';
         const permissionOverwrites = [
-          { 
-            id: client.user.id, 
-            allow: [
-              PermissionsBitField.Flags.ViewChannel, 
-              PermissionsBitField.Flags.SendMessages, 
-              PermissionsBitField.Flags.ManageChannels,
-              PermissionsBitField.Flags.ManageMessages
-            ] 
-          },
-          { 
-            id: interaction.user.id, 
-            allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] 
-          }
+          { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages] },
+          { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
         ];
 
         if (isServerTicket) {
-          permissionOverwrites.push({
-            id: interaction.guild.id,
-            deny: [PermissionsBitField.Flags.ViewChannel]
-          });
+          permissionOverwrites.push({ id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] });
         } else {
-          permissionOverwrites.push({
-            id: interaction.guild.id,
-            allow: [PermissionsBitField.Flags.ViewChannel],
-            deny: [PermissionsBitField.Flags.SendMessages]
-          });
+          permissionOverwrites.push({ id: interaction.guild.id, allow: [PermissionsBitField.Flags.ViewChannel], deny: [PermissionsBitField.Flags.SendMessages] });
         }
 
         const ticketChannel = await interaction.guild.channels.create({
@@ -847,6 +845,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const newTicketData = {
           requesterId: interaction.user.id,
+          requesterClass: 'lr', // Default Class
           type: ticketType,
           ign,
           server: serverName,
@@ -861,19 +860,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         activeTickets.set(ticketChannel.id, newTicketData);
 
-        const helperRolePing = pingRoleIds.length > 0 
-          ? pingRoleIds.map(id => `<@&${id}>`).join(' ') 
-          : '@Helper';
+        const helperRolePing = pingRoleIds.length > 0 ? pingRoleIds.map(id => `<@&${id}>`).join(' ') : '@Helper';
         
-        await ticketChannel.send({
-          content: `${helperRolePing} New ticket requested by ${interaction.user}!`
-        });
+        await ticketChannel.send({ content: `${helperRolePing} New ticket requested by ${interaction.user}!` });
 
-        const payload = buildTicketControlPayload(newTicketData, `${interaction.user}`, helperRolePing);
-        const mainMsg = await ticketChannel.send({ 
-          components: payload.components,
-          flags: payload.flags
-        });
+        const payload = buildTicketControlPayload(newTicketData, `${interaction.user}`);
+        const mainMsg = await ticketChannel.send({ components: payload.components, flags: payload.flags });
 
         await mainMsg.pin().catch(() => {});
 
@@ -891,10 +883,40 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
 
-    // 5. BUTTON ACTIONS
+    // 6. BUTTON ACTIONS
     if (interaction.isButton()) {
       const ticketData = activeTickets.get(interaction.channel.id);
       const customId = interaction.customId;
+
+      if (customId === 'btn_change_role') {
+        if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
+
+        const isRequester = interaction.user.id === ticketData.requesterId;
+        const isHelper = ticketData.helpers.some(h => h.id === interaction.user.id);
+
+        if (!isRequester && !isHelper) {
+          return interaction.reply({ content: '❌ Claim the ticket first to change your class!', ephemeral: true });
+        }
+
+        // Dropdown menu featuring 10 top classes
+        const classMenu = new StringSelectMenuBuilder()
+          .setCustomId('select_change_class')
+          .setPlaceholder('Select your AQW class role...')
+          .addOptions(
+            Object.entries(AQW_CLASSES).map(([key, cls]) => 
+              new StringSelectMenuOptionBuilder()
+                .setLabel(cls.label)
+                .setValue(key)
+                .setEmoji(cls.emoji)
+            )
+          );
+
+        return await interaction.reply({
+          content: '⚔️ **Select your active AQW class role:**',
+          components: [new ActionRowBuilder().addComponents(classMenu)],
+          ephemeral: true
+        });
+      }
 
       if (customId === 'btn_change_server') {
         if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
@@ -905,16 +927,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const modal = new ModalBuilder()
           .setCustomId('modal_edit_server')
           .setTitle('Change Server')
-          .addComponents(
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId('new_server')
-                .setLabel('New Server Name')
-                .setValue(ticketData.server)
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true)
-            )
-          );
+          .addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('new_server').setLabel('New Server Name').setValue(ticketData.server).setStyle(TextInputStyle.Short).setRequired(true)
+          ));
 
         return await interaction.showModal(modal);
       }
@@ -928,16 +943,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const modal = new ModalBuilder()
           .setCustomId('modal_edit_bosses')
           .setTitle('Change Bosses / Details')
-          .addComponents(
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId('new_details')
-                .setLabel('New Bosses or Details')
-                .setValue(ticketData.description)
-                .setStyle(TextInputStyle.Paragraph)
-                .setRequired(true)
-            )
-          );
+          .addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('new_details').setLabel('New Bosses or Details').setValue(ticketData.description).setStyle(TextInputStyle.Paragraph).setRequired(true)
+          ));
 
         return await interaction.showModal(modal);
       }
@@ -946,14 +954,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
 
         const isRequester = interaction.user.id === ticketData.requesterId;
-        const isHelper = ticketData.helpers.includes(interaction.user.id);
+        const isHelper = ticketData.helpers.some(h => h.id === interaction.user.id);
         const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels);
 
         if (!isRequester && !isHelper && !isAdmin) {
-          return interaction.reply({
-            content: '🔒 **Access Denied:** Click **Claim Ticket** first to view room codes.',
-            ephemeral: true
-          });
+          return interaction.reply({ content: '🔒 **Access Denied:** Click **Claim ticket** first to view room codes.', ephemeral: true });
         }
 
         return interaction.reply({
@@ -966,36 +971,31 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
 
         if (interaction.user.id === ticketData.requesterId) {
-          return interaction.reply({ 
-            content: '⚠️ You are the requester of this ticket!', 
-            ephemeral: true 
-          });
+          return interaction.reply({ content: '⚠️ You are the requester of this ticket!', ephemeral: true });
         }
 
-        if (ticketData.helpers.includes(interaction.user.id)) {
+        if (ticketData.helpers.some(h => h.id === interaction.user.id)) {
           return interaction.reply({ content: '⚠️ You already claimed this ticket!', ephemeral: true });
         }
 
         const activeChannelId = isHelperInActiveTicket(interaction.user.id);
         if (activeChannelId) {
-          return interaction.reply({
-            content: `⚠️ You are already in an active ticket (<#${activeChannelId}>)!`,
-            ephemeral: true
-          });
+          return interaction.reply({ content: `⚠️ You are already in an active ticket (<#${activeChannelId}>)!`, ephemeral: true });
         }
 
-        const maxAllowed = ticketData.maxHelpers || 6;
+        const maxAllowed = ticketData.maxHelpers || 3;
         if (ticketData.helpers.length >= maxAllowed) {
           return interaction.reply({ content: `⚠️ Helper spots are full (${maxAllowed}/${maxAllowed})!`, ephemeral: true });
         }
 
-        ticketData.helpers.push(interaction.user.id);
+        // Default new helpers to Legion Revenant
+        ticketData.helpers.push({ id: interaction.user.id, classKey: 'lr' });
         activeTickets.set(interaction.channel.id, ticketData);
 
-        const spotsLeft = maxAllowed - ticketData.helpers.length;
+        const claimedCount = ticketData.helpers.length;
 
         await interaction.channel.send({
-          content: `✅ ${interaction.user} joined the helper team! (${spotsLeft} spots left)`
+          content: `🟢 **${interaction.user.username} claimed LR (${claimedCount}/${maxAllowed})**`
         });
 
         await sendTicketLog(
@@ -1010,20 +1010,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
           ephemeral: true
         });
 
-        return updateTicketEmbed(interaction.channel, ticketData);
-      }
-
-      if (customId === 'btn_leave') {
-        if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
-
-        if (!ticketData.helpers.includes(interaction.user.id)) {
-          return interaction.reply({ content: '⚠️ You are not on this ticket.', ephemeral: true });
-        }
-
-        ticketData.helpers = ticketData.helpers.filter(id => id !== interaction.user.id);
-        activeTickets.set(interaction.channel.id, ticketData);
-
-        await interaction.reply({ content: `🚪 ${interaction.user} stepped down from helping.` });
         return updateTicketEmbed(interaction.channel, ticketData);
       }
 
@@ -1070,19 +1056,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (ticketData && ticketData.helpers.length > 0) {
           const pointsToAward = getPointsForTicket(ticketData);
 
-          for (const hId of ticketData.helpers) {
-            const current = helperPoints.get(hId) || 0;
+          for (const hObj of ticketData.helpers) {
+            const current = helperPoints.get(hObj.id) || 0;
             const updated = current + pointsToAward;
-            helperPoints.set(hId, updated);
+            helperPoints.set(hObj.id, updated);
 
-            await checkAndAssignHelperRoles(interaction.guild, hId, updated);
+            await checkAndAssignHelperRoles(interaction.guild, hObj.id, updated);
           }
 
           globalStats.totalTicketsCompleted += 1;
           globalStats.totalPointsGiven += pointsToAward;
           globalStats.totalBossesSlain += 1;
 
-          const helperMentions = ticketData.helpers.map(id => `<@${id}>`).join(', ');
+          const helperMentions = ticketData.helpers.map(h => `<@${h.id}>`).join(', ');
           awardedText = `\n🏆 **+${pointsToAward} pts** awarded to: ${helperMentions}`;
         } else {
           awardedText = '\n⚠️ No helpers joined.';
@@ -1095,7 +1081,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setTimestamp();
 
         const helperMentionsLog = ticketData && ticketData.helpers.length > 0
-          ? ticketData.helpers.map(id => `<@${id}>`).join(', ')
+          ? ticketData.helpers.map(h => `<@${h.id}>`).join(', ')
           : 'None';
 
         await sendTicketLog(
@@ -1116,7 +1102,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
 
-    // 6. COMMAND HANDLERS
+    // 7. COMMAND HANDLERS
     if (interaction.isChatInputCommand()) {
       const { commandName, options } = interaction;
 
@@ -1190,20 +1176,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const footer = options.getString('footer');
 
         try {
-          const customEmbed = new EmbedBuilder()
-            .setTitle(title)
-            .setDescription(desc)
-            .setColor(color)
-            .setTimestamp();
-
+          const customEmbed = new EmbedBuilder().setTitle(title).setDescription(desc).setColor(color).setTimestamp();
           if (image) customEmbed.setImage(image);
           if (thumbnail) customEmbed.setThumbnail(thumbnail);
           if (footer) customEmbed.setFooter({ text: footer });
 
           const messageOptions = { embeds: [customEmbed] };
-          if (rawOuterMessage) {
-            messageOptions.content = rawOuterMessage.replace(/\\n/g, '\n');
-          }
+          if (rawOuterMessage) messageOptions.content = rawOuterMessage.replace(/\\n/g, '\n');
 
           await channel.send(messageOptions);
           return await interaction.editReply(`✅ Embed posted to ${channel}!`);
@@ -1221,7 +1200,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const boostChannel = options.getChannel('boost_channel');
 
         const cfg = guildSettings.get(interaction.guild.id) || {};
-
         if (logChannel) cfg.logChannelId = logChannel.id;
         if (welcomeChannel) cfg.welcomeChannelId = welcomeChannel.id;
         if (boostChannel) cfg.boostChannelId = boostChannel.id;
@@ -1234,9 +1212,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           boostChannel ? `• **Boost Channel:** ${boostChannel}` : null,
         ].filter(Boolean);
 
-        if (statusUpdates.length === 0) {
-          return await interaction.editReply('⚠️ No channels updated.');
-        }
+        if (statusUpdates.length === 0) return await interaction.editReply('⚠️ No channels updated.');
 
         return await interaction.editReply(`✅ **Configured Channels:**\n${statusUpdates.join('\n')}`);
       }
@@ -1245,22 +1221,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const sortedHelpers = [...helperPoints.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20);
         const sortedRequesters = [...userRequestCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20);
 
-        const helpersStr = sortedHelpers.length > 0
-          ? sortedHelpers.map(([id, pts], i) => `**${i + 1}.** <@${id}> — \`${pts} pts\``).join('\n')
-          : 'No helper data yet';
+        const helpersStr = sortedHelpers.length > 0 ? sortedHelpers.map(([id, pts], i) => `**${i + 1}.** <@${id}> — \`${pts} pts\``).join('\n') : 'No helper data yet';
+        const requestersStr = sortedRequesters.length > 0 ? sortedRequesters.map(([id, reqs], i) => `**${i + 1}.** <@${id}> — \`${reqs} tickets\``).join('\n') : 'No request data yet';
 
-        const requestersStr = sortedRequesters.length > 0
-          ? sortedRequesters.map(([id, reqs], i) => `**${i + 1}.** <@${id}> — \`${reqs} tickets\``).join('\n')
-          : 'No request data yet';
-
-        const lbEmbed = new EmbedBuilder()
-          .setTitle('📊 Server Activity Leaderboard (Top 20)')
-          .addFields(
-            { name: '🏆 Top Helpers', value: helpersStr, inline: true },
-            { name: '📩 Top Requesters', value: requestersStr, inline: true }
-          )
-          .setColor('#3498db')
-          .setTimestamp();
+        const lbEmbed = new EmbedBuilder().setTitle('📊 Server Activity Leaderboard (Top 20)').addFields({ name: '🏆 Top Helpers', value: helpersStr, inline: true }, { name: '📩 Top Requesters', value: requestersStr, inline: true }).setColor('#3498db').setTimestamp();
 
         return await interaction.reply({ embeds: [lbEmbed] });
       }
@@ -1306,25 +1270,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
           const role = options.getRole('role');
 
           roleRewards.set(requiredPts, role.id);
-          return await interaction.reply({
-            content: `✅ Role ${role} set for **${requiredPts} pts**.`,
-            ephemeral: true
-          });
+          return await interaction.reply({ content: `✅ Role ${role} set for **${requiredPts} pts**.`, ephemeral: true });
         }
 
         if (sub === 'list') {
-          if (roleRewards.size === 0) {
-            return await interaction.reply({ content: '⚙️ No role rewards set.', ephemeral: true });
-          }
+          if (roleRewards.size === 0) return await interaction.reply({ content: '⚙️ No role rewards set.', ephemeral: true });
 
           const sorted = [...roleRewards.entries()].sort((a, b) => a[0] - b[0]);
           const rewardList = sorted.map(([pts, roleId]) => `• **${pts} Pts** -> <@&${roleId}>`).join('\n');
 
-          const embed = new EmbedBuilder()
-            .setTitle('🏅 Role Rewards')
-            .setDescription(rewardList)
-            .setColor('#3498db');
-
+          const embed = new EmbedBuilder().setTitle('🏅 Role Rewards').setDescription(rewardList).setColor('#3498db');
           return await interaction.reply({ embeds: [embed], ephemeral: true });
         }
       }
