@@ -24,8 +24,8 @@ const GUILD_ID = '1243470533316579361'; // Server ID
 const HELPER_ROLE_ID = 'YOUR_HELPER_ROLE_ID'; // Fallback Helper Role ID
 const TICKET_GUIDE_URL = 'https://discord.com'; // Replace with actual Guide URL or Channel Link
 
-// Direct Image URL for Header Banner
-const BANNER_IMAGE_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
+// Default Main Header Banner (Used as fallback)
+const DEFAULT_BANNER_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
 
 const client = new Client({
   intents: [
@@ -54,56 +54,64 @@ const globalStats = {
   totalBossesSlain: 0
 };
 
-// --- ⚙️ CUSTOM TICKET PRESETS ⚙️ ---
+// --- ⚙️ CUSTOM TICKET PRESETS & CATEGORY BANNERS ⚙️ ---
+// Replace the bannerUrl strings below with your custom banner image links!
 const TICKET_PRESETS = {
   farming: { 
     label: 'Farming Assistance', 
     max: 6, 
     points: 3, 
     emoji: '<:queststart:1531490481991843862>', 
-    roleIds: ['1529499059596038285'] 
+    roleIds: ['1529499059596038285'],
+    bannerUrl: 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif'
   },
   ultra_weeklies: { 
     label: 'Ultra Weeklies', 
     max: 3, 
     points: 8, 
     emoji: '<:aqwDecay:1533349135460335668>', 
-    roleIds: ['1529499021884919858'] 
+    roleIds: ['1529499021884919858'],
+    bannerUrl: 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif'
   },
   seven_man_dailies: { 
     label: '7-Man Dailies', 
     max: 6, 
     points: 5, 
     emoji: '<:aqwGauntlet:1531490394146078820>', 
-    roleIds: ['1529499059596038285', '1529499021884919858'] 
+    roleIds: ['1529499059596038285', '1529499021884919858'],
+    bannerUrl: 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif'
   },
   ultra_dailies: { 
     label: 'Ultra Dailies', 
     max: 3, 
     points: 5, 
     emoji: '<:wolfblade:1533348197223632956>', 
-    roleIds: ['1529499021884919858'] 
+    roleIds: ['1529499021884919858'],
+    bannerUrl: 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif'
   },
   server_ticket: { 
     label: 'Server Ticket / Support', 
     max: 2, 
     points: 0, 
     emoji: '<:Ticket:1533348464908435526>', 
-    roleIds: ['1529498802149392614'] 
+    roleIds: ['1529498802149392614'],
+    bannerUrl: 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif'
   },
   boss_help: { 
     label: 'General Boss Help', 
     max: 6, 
     points: 2, 
     emoji: '<:AQW_sword:1531490097768304714>', 
-    roleIds: ['1529499059596038285'] 
+    roleIds: ['1529499059596038285'],
+    bannerUrl: 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif'
   },
   other_help: { 
     label: 'Other Requests', 
     max: 6, 
     points: 1, 
     emoji: '<:aqwScroll:1533349936438181908>', 
-    roleIds: ['1529499059596038285'] 
+    roleIds: ['1529499059596038285'],
+    bannerUrl: 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif'
   }
 };
 
@@ -176,12 +184,10 @@ async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
 // --- SAFE JSON COMPONENTS V2 BUILDERS ---
 function buildTicketHubPayload(options = {}) {
   const {
-    imageUrl = BANNER_IMAGE_URL,
-    guideTitle = 'Tickets, rules and how to',
-    guideDesc = "🔖 Before creating a ticket, read the guide for how they work.\n\nCheck it out by clicking on '**Ticket Guide**'",
+    imageUrl = DEFAULT_BANNER_URL,
+    guideDesc = "Read through the ticket rules and guidelines before requesting assistance.",
     guideUrl = TICKET_GUIDE_URL,
-    createTitle = 'Need help with one or more bosses?',
-    createDesc = "✨ Create a ticket by clicking the '**Create Ticket**' button!\n\nHelpers will be with you shortly to help you ❤️"
+    createDesc = "Select a category from the menu to open a new ticket. Our helpers will join shortly!"
   } = options;
 
   const containerComponent = {
@@ -199,13 +205,13 @@ function buildTicketHubPayload(options = {}) {
         ]
       },
       {
-        type: 9, // Section 1: Minimalist Stats Counter with double spacing
+        type: 9, // Section 1: Ticket Stats
         components: [
           {
             type: 10,
-            content: `📊 **TICKET STATS**\n\n\n` +
-                     `• Completed: \`${globalStats.totalTicketsCompleted}\`\n\n` +
-                     `• Points: \`${globalStats.totalPointsGiven}\`\n\n` +
+            content: `📊 **TICKET STATS**\n\n` +
+                     `• Completed: \`${globalStats.totalTicketsCompleted}\`\n` +
+                     `• Points: \`${globalStats.totalPointsGiven}\`\n` +
                      `• Slain: \`${globalStats.totalBossesSlain}\``
           }
         ],
@@ -218,11 +224,11 @@ function buildTicketHubPayload(options = {}) {
         }
       },
       {
-        type: 9, // Section 2: Ticket Guide with double spacing
+        type: 9, // Section 2: Ticket Guide
         components: [
           {
             type: 10,
-            content: `🔖 **TICKET GUIDE**\n\n\n${guideTitle}\n\n\n${guideDesc.replace(/\\n/g, '\n')}`
+            content: `🔖 **TICKET GUIDE**\n\n${guideDesc.replace(/\\n/g, '\n')}`
           }
         ],
         accessory: {
@@ -234,11 +240,11 @@ function buildTicketHubPayload(options = {}) {
         }
       },
       {
-        type: 9, // Section 3: Make a Ticket with double spacing
+        type: 9, // Section 3: Make a Ticket
         components: [
           {
             type: 10,
-            content: `🤝 **MAKE A TICKET**\n\n\n${createTitle}\n\n\n${createDesc.replace(/\\n/g, '\n')}`
+            content: `🤝 **MAKE A TICKET**\n\n${createDesc.replace(/\\n/g, '\n')}`
           }
         ],
         accessory: {
@@ -258,18 +264,23 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
+// --- MINIMALIST IN-TICKET PANEL BUILDER (DYNAMIC CATEGORY BANNER) ---
 function buildTicketControlPayload(ticketData, userMention, rolePing) {
   const maxLimit = ticketData.maxHelpers || 6;
   const helpersList = ticketData.helpers.length > 0
-    ? ticketData.helpers.map(id => `• <@${id}>`).join('\n')
+    ? ticketData.helpers.map(id => `<@${id}>`).join(', ')
     : 'None';
+
+  // Retrieve custom banner for this category (or use default banner)
+  const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
+  const ticketBanner = categoryPreset.bannerUrl || DEFAULT_BANNER_URL;
 
   const bannerSection = {
     type: 12,
     items: [
       {
         media: {
-          url: BANNER_IMAGE_URL
+          url: ticketBanner
         }
       }
     ]
@@ -280,7 +291,7 @@ function buildTicketControlPayload(ticketData, userMention, rolePing) {
     components: [
       {
         type: 10,
-        content: `👋 Hey ${userMention}! ${rolePing}`
+        content: `👋 **Welcome ${userMention}!** ${rolePing}`
       }
     ],
     accessory: {
@@ -292,91 +303,71 @@ function buildTicketControlPayload(ticketData, userMention, rolePing) {
     }
   };
 
-  let sections = [];
-
+  let detailsText = '';
   if (ticketData.type === 'server_ticket') {
-    sections = [
-      bannerSection,
-      headerSection,
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `🔷 **SERVER SUPPORT TICKET**\n\n` +
-                     `🎖️ **Points:** \`${ticketData.customPoints}\`\n` +
-                     `👤 **Requester:** <@${ticketData.requesterId}>\n\n` +
-                     `📌 **Subject:**\n${ticketData.subject}\n\n` +
-                     `📝 **Description:**\n${ticketData.description}\n\n` +
-                     `--------------------------------------\n` +
-                     `👥 **Helpers (${ticketData.helpers.length}/${maxLimit}):**\n${helpersList}`
-          }
-        ],
-        accessory: { type: 2, style: 1, custom_id: 'btn_claim', label: 'Claim Ticket', emoji: { name: '🤝' } }
-      },
-      {
-        type: 9,
-        components: [{ type: 10, content: "Finished or closing support?" }],
-        accessory: { type: 2, style: 3, custom_id: 'btn_complete', label: 'Complete Ticket', emoji: { name: '🎫' } }
-      }
-    ];
+    detailsText = `🔷 **SUPPORT TICKET**\n\n` +
+                  `• Requester: <@${ticketData.requesterId}>\n` +
+                  `• Subject: \`${ticketData.subject}\`\n` +
+                  `• Details: \`${ticketData.description}\`\n\n` +
+                  `👥 **Helpers (${ticketData.helpers.length}/${maxLimit}):** ${helpersList}`;
   } else {
-    sections = [
-      bannerSection,
-      headerSection,
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `💎 **TICKET DETAILS**\n` +
-                     `🎖️ **Points:** \`${ticketData.customPoints}\`\n` +
-                     `👤 **Requester:** <@${ticketData.requesterId}>\n\n` +
-                     `🌐 **Selected Server:** \`${ticketData.server}\`\n` +
-                     `⚔️ **Bosses / Details:**\n${ticketData.description}\n\n` +
-                     `--------------------------------------\n` +
-                     `🤝 **Active Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersList}`
-          }
-        ],
-        accessory: { type: 2, style: 1, custom_id: 'btn_claim', label: 'Claim Ticket', emoji: { name: '🤝' } }
-      },
-      {
-        type: 9,
-        components: [{ type: 10, content: `🗄️ Change server location:` }],
-        accessory: { type: 2, style: 2, custom_id: 'btn_change_server', label: 'Change Server', emoji: { name: '🗄️' } }
-      },
-      {
-        type: 9,
-        components: [{ type: 10, content: `💀 Edit bosses or details:` }],
-        accessory: { type: 2, style: 2, custom_id: 'btn_change_bosses', label: 'Change Bosses', emoji: { name: '💀' } }
-      },
-      {
-        type: 9,
-        components: [{ type: 10, content: `📢 Request more squad members:` }],
-        accessory: { type: 2, style: 2, custom_id: 'btn_pinghelpers', label: 'Ping Helpers', emoji: { name: '🔔' } }
-      },
-      {
-        type: 9,
-        components: [{ type: 10, content: `📋 View room commands & IGN:` }],
-        accessory: { type: 2, style: 1, custom_id: 'btn_location', label: 'Room Codes', emoji: { name: '📋' } }
-      },
-      {
-        type: 9,
-        components: [{ type: 10, content: `🚪 Leave current ticket:` }],
-        accessory: { type: 2, style: 2, custom_id: 'btn_leave', label: 'Leave Ticket', emoji: { name: '🚪' } }
-      },
-      {
-        type: 9,
-        components: [{ type: 10, content: `✅ Finish or cancel:` }],
-        accessory: { type: 2, style: 3, custom_id: 'btn_complete', label: 'Complete Ticket', emoji: { name: '🎫' } }
-      },
-      {
-        type: 9,
-        components: [{ type: 10, content: `🚫 Cancel ticket:` }],
-        accessory: { type: 2, style: 4, custom_id: 'btn_cancel', label: 'Cancel Ticket', emoji: { name: '🎟️' } }
-      }
-    ];
+    detailsText = `⚔️ **TICKET DETAILS**\n\n` +
+                  `• Requester: <@${ticketData.requesterId}>\n` +
+                  `• Server: \`${ticketData.server}\`\n` +
+                  `• Points: \`${ticketData.customPoints}\`\n` +
+                  `• Target: \`${ticketData.description}\`\n\n` +
+                  `👥 **Helpers (${ticketData.helpers.length}/${maxLimit}):** ${helpersList}`;
   }
+
+  const sections = [
+    bannerSection,
+    headerSection,
+    {
+      type: 9,
+      components: [
+        {
+          type: 10,
+          content: detailsText
+        }
+      ],
+      accessory: { type: 2, style: 1, custom_id: 'btn_claim', label: 'Claim', emoji: { name: '🤝' } }
+    },
+    {
+      type: 9,
+      components: [{ type: 10, content: `🗄️ Location / Details` }],
+      accessory: { type: 2, style: 2, custom_id: 'btn_change_server', label: 'Server', emoji: { name: '🗄️' } }
+    },
+    {
+      type: 9,
+      components: [{ type: 10, content: `💀 Target / Bosses` }],
+      accessory: { type: 2, style: 2, custom_id: 'btn_change_bosses', label: 'Edit', emoji: { name: '💀' } }
+    },
+    {
+      type: 9,
+      components: [{ type: 10, content: `📢 Request Helpers` }],
+      accessory: { type: 2, style: 2, custom_id: 'btn_pinghelpers', label: 'Ping', emoji: { name: '🔔' } }
+    },
+    {
+      type: 9,
+      components: [{ type: 10, content: `📋 Room Code & IGN` }],
+      accessory: { type: 2, style: 1, custom_id: 'btn_location', label: 'Codes', emoji: { name: '📋' } }
+    },
+    {
+      type: 9,
+      components: [{ type: 10, content: `🚪 Leave Squad` }],
+      accessory: { type: 2, style: 2, custom_id: 'btn_leave', label: 'Leave', emoji: { name: '🚪' } }
+    },
+    {
+      type: 9,
+      components: [{ type: 10, content: `✅ Finish Request` }],
+      accessory: { type: 2, style: 3, custom_id: 'btn_complete', label: 'Complete', emoji: { name: '🎫' } }
+    },
+    {
+      type: 9,
+      components: [{ type: 10, content: `🚫 Cancel Request` }],
+      accessory: { type: 2, style: 4, custom_id: 'btn_cancel', label: 'Cancel', emoji: { name: '🎟️' } }
+    }
+  ];
 
   const containerComponent = {
     type: 17,
@@ -517,7 +508,7 @@ client.once(Events.ClientReady, async () => {
   client.user.setPresence({
     status: 'idle',
     activities: [{
-      name: 'SANA ITO NA',
+      name: 'Im weird',
       type: 5
     }]
   });
@@ -805,7 +796,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const cfg = guildSettings.get(interaction.guild.id) || {};
         
-        // Incremental Ticket Number Channel Name
         ticketCounter += 1;
         const formattedNum = String(ticketCounter).padStart(4, '0');
         const chName = `ticket-${formattedNum}`;
@@ -814,7 +804,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (parentCategoryId) {
           const fetchedCategory = interaction.guild.channels.cache.get(parentCategoryId);
           if (!fetchedCategory || fetchedCategory.type !== ChannelType.GuildCategory) {
-            parentCategoryId = null; // Prevent parent_id type mismatches
+            parentCategoryId = null;
           }
         }
 
@@ -1150,7 +1140,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           guildSettings.set(interaction.guild.id, cfg);
 
           const payload = buildTicketHubPayload({
-            imageUrl: customBanner || BANNER_IMAGE_URL,
+            imageUrl: customBanner || DEFAULT_BANNER_URL,
             guideTitle,
             guideDesc,
             guideUrl,
