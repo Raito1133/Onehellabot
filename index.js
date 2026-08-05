@@ -22,9 +22,8 @@ const http = require('http');
 // --- ⚠️ CONFIGURATION ⚠️ ---
 const GUILD_ID = '1243470533316579361'; // Server ID
 const HELPER_ROLE_ID = 'YOUR_HELPER_ROLE_ID'; // Fallback Helper Role ID
-const TICKET_GUIDE_URL = 'https://discord.com'; // Replace with actual Guide URL or Channel Link
+const TICKET_GUIDE_URL = 'https://discord.com'; 
 
-// Standard header banner
 const STANDARD_BANNER_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
 
 const client = new Client({
@@ -52,7 +51,7 @@ const globalStats = {
   totalBossesSlain: 0
 };
 
-// --- ⚙️ CUSTOM TICKET PRESETS (WITH ACCENT COLORS) ⚙️ ---
+// --- ⚙️ CUSTOM TICKET PRESETS ⚙️ ---
 const TICKET_PRESETS = {
   farming: { 
     label: 'Farming Assistance', 
@@ -61,7 +60,7 @@ const TICKET_PRESETS = {
     emoji: '<:queststart:1531490481991843862>', 
     roleIds: ['1529499059596038285'],
     bannerUrl: STANDARD_BANNER_URL,
-    accentColor: 0x8b0000 // Deep Red
+    accentColor: 0x8b0000 
   },
   ultra_weeklies: { 
     label: 'Ultra Weeklies', 
@@ -70,7 +69,7 @@ const TICKET_PRESETS = {
     emoji: '<:aqwDecay:1533349135460335668>', 
     roleIds: ['1529499021884919858'],
     bannerUrl: STANDARD_BANNER_URL,
-    accentColor: 0x9b59b6 // Purple
+    accentColor: 0x9b59b6 
   },
   seven_man_dailies: { 
     label: '7-Man Dailies', 
@@ -79,7 +78,7 @@ const TICKET_PRESETS = {
     emoji: '<:aqwGauntlet:1531490394146078820>', 
     roleIds: ['1529499059596038285', '1529499021884919858'],
     bannerUrl: STANDARD_BANNER_URL,
-    accentColor: 0xe67e22 // Orange
+    accentColor: 0xe67e22 
   },
   ultra_dailies: { 
     label: 'Ultra Dailies', 
@@ -88,7 +87,7 @@ const TICKET_PRESETS = {
     emoji: '<:wolfblade:1533348197223632956>', 
     roleIds: ['1529499021884919858'],
     bannerUrl: STANDARD_BANNER_URL,
-    accentColor: 0x3498db // Blue
+    accentColor: 0x3498db 
   },
   server_ticket: { 
     label: 'Server Ticket / Support', 
@@ -97,7 +96,7 @@ const TICKET_PRESETS = {
     emoji: '<:Ticket:1533348464908435526>', 
     roleIds: ['1529498802149392614'],
     bannerUrl: STANDARD_BANNER_URL,
-    accentColor: 0x2ecc71 // Emerald Green
+    accentColor: 0x2ecc71 
   },
   boss_help: { 
     label: 'General Boss Help', 
@@ -106,7 +105,7 @@ const TICKET_PRESETS = {
     emoji: '<:AQW_sword:1531490097768304714>', 
     roleIds: ['1529499059596038285'],
     bannerUrl: STANDARD_BANNER_URL,
-    accentColor: 0xe74c3c // Crimson
+    accentColor: 0xe74c3c 
   },
   other_help: { 
     label: 'Other Requests', 
@@ -115,7 +114,7 @@ const TICKET_PRESETS = {
     emoji: '<:aqwScroll:1533349936438181908>', 
     roleIds: ['1529499059596038285'],
     bannerUrl: STANDARD_BANNER_URL,
-    accentColor: 0x95a5a6 // Slate Gray
+    accentColor: 0x95a5a6 
   }
 };
 
@@ -185,7 +184,6 @@ async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
   }
 }
 
-// --- SAFE JSON COMPONENTS V2 BUILDERS ---
 function buildTicketHubPayload(options = {}) {
   const {
     imageUrl = STANDARD_BANNER_URL,
@@ -245,7 +243,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- STANDARD AQW IN-TICKET PANEL BUILDER ---
+// --- REORDERED TICKET PANEL CONTROL ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -269,15 +267,15 @@ function buildTicketControlPayload(ticketData, userMention) {
       components: [
         {
           type: 10,
-          content: `🎖️ **Points:**\n-# > **${ticketData.customPoints}**`
+          content: `🖐️ **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}`
         }
       ],
       accessory: {
         type: 2,
         style: 2,
-        custom_id: 'btn_all_helpers',
+        custom_id: 'btn_helpers_list',
         label: 'Helpers',
-        emoji: { name: '🔒' }
+        emoji: { name: '👥' }
       }
     },
     { type: 14 },
@@ -304,14 +302,31 @@ function buildTicketControlPayload(ticketData, userMention) {
       components: [
         {
           type: 10,
-          content: `**Bosses:**\n-# > **${ticketData.description}**`
+          content: `Claim the ticket to assist!`
+        }
+      ],
+      accessory: {
+        type: 2,
+        style: 3,
+        custom_id: 'btn_claim',
+        label: 'Claim',
+        emoji: { name: '🤝' }
+      }
+    },
+    { type: 14 },
+    {
+      type: 9,
+      components: [
+        {
+          type: 10,
+          content: `**Bosses / Mobs:**\n-# > **${ticketData.description}**`
         }
       ],
       accessory: {
         type: 2,
         style: 2,
         custom_id: 'btn_change_bosses',
-        label: 'Edit',
+        label: 'Change Mobs',
         emoji: { name: '💀' }
       }
     },
@@ -321,7 +336,7 @@ function buildTicketControlPayload(ticketData, userMention) {
       components: [
         {
           type: 10,
-          content: `Still in need of help? **Ping helpers!**`
+          content: `Need assistance? **Ping helpers!**`
         }
       ],
       accessory: {
@@ -338,58 +353,7 @@ function buildTicketControlPayload(ticketData, userMention) {
       components: [
         {
           type: 10,
-          content: `Finished with the ticket? Click **Complete** or **Cancel**!`
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 3,
-        custom_id: 'btn_complete',
-        label: 'Complete',
-        emoji: { name: '🎟️' }
-      }
-    },
-    { type: 14 },
-    {
-      type: 9,
-      components: [
-        {
-          type: 10,
-          content: `Need to cancel this request?`
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 4,
-        custom_id: 'btn_cancel',
-        label: 'Cancel',
-        emoji: { name: '🎟️' }
-      }
-    },
-    { type: 14 },
-    {
-      type: 9,
-      components: [
-        {
-          type: 10,
-          content: `🖐️ **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}`
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 2,
-        custom_id: 'btn_helpers_list',
-        label: 'Helpers',
-        emoji: { name: '👥' }
-      }
-    },
-    { type: 14 },
-    {
-      type: 9,
-      components: [
-        {
-          type: 10,
-          content: `Forgot room codes? Click **Codes**!`
+          content: `View room codes and location details!`
         }
       ],
       accessory: {
@@ -406,15 +370,32 @@ function buildTicketControlPayload(ticketData, userMention) {
       components: [
         {
           type: 10,
-          content: `Claim the ticket, and get room codes!`
+          content: `Finished with the ticket?`
         }
       ],
       accessory: {
         type: 2,
         style: 3,
-        custom_id: 'btn_claim',
-        label: 'Claim',
-        emoji: { name: '🤝' }
+        custom_id: 'btn_complete',
+        label: 'Complete',
+        emoji: { name: '🎟️' }
+      }
+    },
+    { type: 14 },
+    {
+      type: 9,
+      components: [
+        {
+          type: 10,
+          content: `Cancel this ticket request?`
+        }
+      ],
+      accessory: {
+        type: 2,
+        style: 4,
+        custom_id: 'btn_cancel',
+        label: 'Cancel',
+        emoji: { name: '🎟️' }
       }
     }
   ];
@@ -425,7 +406,6 @@ function buildTicketControlPayload(ticketData, userMention) {
   };
 }
 
-// --- DEDICATED SUPPORT TICKET PANEL BUILDER ---
 function buildSupportTicketControlPayload(ticketData, userMention) {
   const categoryPreset = TICKET_PRESETS.server_ticket;
   const ticketBanner = categoryPreset.bannerUrl || STANDARD_BANNER_URL;
@@ -528,44 +508,6 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
 
   return {
     components: [{ type: 17, accent_color: accentColor, components: sections }],
-    flags: MessageFlags.IsComponentsV2
-  };
-}
-
-// --- AESTHETIC V2 COMPLETION PANEL BUILDER ---
-function buildCompletionPayload(ticketData, pointsAwarded) {
-  const categoryPreset = TICKET_PRESETS[ticketData?.type] || {};
-  const accentColor = categoryPreset.accentColor || 0x2ecc71;
-
-  let detailContent = '⚠️ **No helpers joined this ticket.**';
-  if (ticketData && ticketData.type === 'server_ticket') {
-    detailContent = '🛠️ **Support ticket handled and resolved by staff.**';
-  } else if (ticketData && ticketData.helpers.length > 0) {
-    const helperMentions = ticketData.helpers.map(h => `<@${h.id}>`).join(', ');
-    detailContent = `🏆 **+${pointsAwarded} pts** awarded to:\n-# > ${helperMentions}`;
-  }
-
-  const containerComponent = {
-    type: 17,
-    accent_color: accentColor,
-    components: [
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `🔒 **Ticket Completed**\n\n` +
-                     `Resolved successfully!\n` +
-                     `${detailContent}\n\n` +
-                     `-# *Deleting channel in 5 seconds...*`
-          }
-        ]
-      }
-    ]
-  };
-
-  return {
-    components: [containerComponent],
     flags: MessageFlags.IsComponentsV2
   };
 }
@@ -708,7 +650,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.guild || interaction.guild.id !== GUILD_ID) return;
 
   try {
-    // 1. OPEN TICKET CATEGORY SELECT MENU
     if (interaction.isButton() && interaction.customId === 'btn_open_ticket_menu') {
       const selectMenu = new StringSelectMenuBuilder()
         .setCustomId('select_ticket_cat')
@@ -736,7 +677,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    // 2. CATEGORY SELECT -> OPEN DROPDOWNS OR MODAL
     if (interaction.isStringSelectMenu() && interaction.customId === 'select_ticket_cat') {
       const selectedKey = interaction.values[0];
       const preset = TICKET_PRESETS[selectedKey] || { label: 'Ticket', max: 6, points: 1, roleIds: [HELPER_ROLE_ID] };
@@ -827,7 +767,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return await interaction.showModal(modal);
     }
 
-    // 2b. MULTI-SELECT BOSS DROPDOWNS
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_bosses_')) {
       const categoryKey = interaction.customId.replace('select_bosses_', '');
       const selectedBosses = interaction.values.join(', ');
@@ -852,7 +791,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return await interaction.showModal(modal);
     }
 
-    // 3. MODALS -> CHANGE SERVER / CHANGE BOSSES
     if (interaction.isModalSubmit() && interaction.customId === 'modal_edit_server') {
       const ticketData = activeTickets.get(interaction.channel.id);
       if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
@@ -877,7 +815,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return updateTicketEmbed(interaction.channel, ticketData);
     }
 
-    // 4. CREATE TICKET CHANNEL
     if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket_form_')) {
       await interaction.deferReply({ ephemeral: true });
 
@@ -981,7 +918,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
 
-    // 5. BUTTON ACTIONS
     if (interaction.isButton()) {
       const ticketData = activeTickets.get(interaction.channel.id);
       const customId = interaction.customId;
@@ -1018,7 +954,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return await interaction.showModal(modal);
       }
 
-      // --- UPDATED CODES BUTTON WITH EPHEMERAL EMBED ---
       if (customId === 'btn_location') {
         if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
 
@@ -1050,6 +985,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         });
       }
 
+      // --- CLAIM BUTTON WITH MENTION FOR USER ---
       if (customId === 'btn_claim') {
         if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
 
@@ -1076,8 +1012,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const claimedCount = ticketData.helpers.length;
 
+        // Mention user directly on channel claim message
         await interaction.channel.send({
-          content: `🟢 **${interaction.user.username} claimed ticket (${claimedCount}/${maxAllowed})**`
+          content: `🟢 ${interaction.user} **claimed ticket (${claimedCount}/${maxAllowed})**`
         });
 
         await sendTicketLog(
@@ -1120,17 +1057,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      // --- DEBUGGED & FIXED COMPLETION BUTTON HANDLER ---
+      // --- RELIABLE COMPLETION FLOW WITH EMBEDBUILDER ---
       if (customId === 'btn_complete') {
         if (ticketData && interaction.user.id !== ticketData.requesterId && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
           return interaction.reply({ content: '❌ Only requester or staff can complete.', ephemeral: true });
         }
 
-        // Acknowledge immediately to prevent hanging
         await interaction.deferReply();
 
         try {
-          // Lock channel permissions safely
           await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: false }).catch(() => {});
 
           if (ticketData) {
@@ -1147,7 +1082,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
               const updated = current + pointsToAward;
               helperPoints.set(hObj.id, updated);
 
-              // Non-blocking role check
               checkAndAssignHelperRoles(interaction.guild, hObj.id, updated).catch(console.error);
             }
 
@@ -1167,8 +1101,24 @@ client.on(Events.InteractionCreate, async (interaction) => {
             '#2ecc71'
           ).catch(() => {});
 
-          const completionPayload = buildCompletionPayload(ticketData, pointsToAward);
-          await interaction.editReply(completionPayload);
+          const categoryPreset = TICKET_PRESETS[ticketData?.type] || {};
+          const accentColor = categoryPreset.accentColor || 0x2ecc71;
+
+          let detailContent = '⚠️ **No helpers joined this ticket.**';
+          if (ticketData && ticketData.type === 'server_ticket') {
+            detailContent = '🛠️ **Support ticket handled and resolved by staff.**';
+          } else if (ticketData && ticketData.helpers.length > 0) {
+            const helperMentions = ticketData.helpers.map(h => `<@${h.id}>`).join(', ');
+            detailContent = `🏆 **+${pointsToAward} pts** awarded to:\n> ${helperMentions}`;
+          }
+
+          const completionEmbed = new EmbedBuilder()
+            .setTitle('🔒 Ticket Completed')
+            .setDescription(`Resolved successfully!\n${detailContent}\n\n*Deleting channel in 5 seconds...*`)
+            .setColor(accentColor)
+            .setTimestamp();
+
+          await interaction.editReply({ embeds: [completionEmbed] });
 
           activeTickets.delete(interaction.channel.id);
           setTimeout(() => {
@@ -1187,7 +1137,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
 
-    // 6. COMMAND HANDLERS
     if (interaction.isChatInputCommand()) {
       const { commandName, options } = interaction;
 
