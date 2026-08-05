@@ -212,7 +212,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- 100% STABLE TICKET PANEL CONTROL WITH CUSTOM ANIMATED EMOJIS ---
+// --- TICKET PANEL CONTROL WITH YOUR NEW EMOJI IDs ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -241,7 +241,7 @@ function buildTicketControlPayload(ticketData, userMention) {
       .setCustomId('btn_change_server')
       .setLabel('Server')
       .setStyle(ButtonStyle.Secondary)
-      .setEmoji({ id: '1534553693884514404', name: 'arrow', animated: true }),
+      .setEmoji({ id: '1534587149322686464', name: 'arrowgreen', animated: true }),
     new ButtonBuilder()
       .setCustomId('btn_claim')
       .setLabel('Claim')
@@ -256,7 +256,7 @@ function buildTicketControlPayload(ticketData, userMention) {
       .setCustomId('btn_pinghelpers')
       .setLabel('Ping')
       .setStyle(ButtonStyle.Secondary)
-      .setEmoji({ id: '1534551074550190110', name: '1369announce', animated: true })
+      .setEmoji({ id: '1534587116087017543', name: 'announce', animated: true })
   );
 
   const row2 = new ActionRowBuilder().addComponents(
@@ -264,7 +264,7 @@ function buildTicketControlPayload(ticketData, userMention) {
       .setCustomId('btn_location')
       .setLabel('Room Details')
       .setStyle(ButtonStyle.Secondary)
-      .setEmoji({ id: '1534547674164887622', name: 'AttentionAnimated', animated: true }),
+      .setEmoji({ id: '1534587093051773000', name: 'attention', animated: true }),
     new ButtonBuilder()
       .setCustomId('btn_complete')
       .setLabel('Complete')
@@ -306,7 +306,7 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
       .setCustomId('btn_pinghelpers')
       .setLabel('Ping Staff')
       .setStyle(ButtonStyle.Secondary)
-      .setEmoji({ id: '1534551074550190110', name: '1369announce', animated: true }),
+      .setEmoji({ id: '1534587116087017543', name: 'announce', animated: true }),
     new ButtonBuilder()
       .setCustomId('btn_complete')
       .setLabel('Complete')
@@ -712,7 +712,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           ? buildSupportTicketControlPayload(newTicketData, `${interaction.user}`)
           : buildTicketControlPayload(newTicketData, `${interaction.user}`);
 
-        const mainMsg = await ticketChannel.send({ embeds: payload.embeds, components: payload.components });
+        const mainMsg = await ticketChannel.send({ components: payload.components, flags: payload.flags });
 
         await mainMsg.pin().catch(() => {});
 
@@ -978,8 +978,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
           });
 
           await channel.send({
-            embeds: payload.embeds,
-            components: payload.components
+            components: payload.components,
+            flags: payload.flags
           });
 
           return await interaction.editReply(`✅ Ticket Hub Panel successfully posted to ${channel}!`);
