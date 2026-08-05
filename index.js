@@ -187,31 +187,54 @@ function buildTicketHubPayload(options = {}) {
     createDesc = "Select a category from the menu to open a new ticket. Our helpers will join shortly!"
   } = options;
 
-  const embed = new EmbedBuilder()
-    .setTitle('🎫 Ticket Hub')
-    .setDescription(`**TICKET GUIDE**\n\n${guideDesc.replace(/\\n/g, '\n')}\n\n**MAKE A TICKET**\n\n${createDesc.replace(/\\n/g, '\n')}`)
-    .setImage(imageUrl)
-    .setColor(0x8b0000)
-    .setTimestamp();
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setStyle(ButtonStyle.Link)
-      .setURL(guideUrl)
-      .setLabel('Guide'),
-    new ButtonBuilder()
-      .setCustomId('btn_open_ticket_menu')
-      .setStyle(ButtonStyle.Primary)
-      .setLabel('Create Ticket')
-  );
+  const containerComponent = {
+    type: 17,
+    accent_color: 0x8b0000,
+    components: [
+      {
+        type: 12,
+        items: [{ media: { url: imageUrl } }]
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `🔖 **TICKET GUIDE**\n\n${guideDesc.replace(/\\n/g, '\n')}`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 5,
+          url: guideUrl,
+          label: 'Guide'
+        }
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `🤝 **MAKE A TICKET**\n\n${createDesc.replace(/\\n/g, '\n')}`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 2,
+          custom_id: 'btn_open_ticket_menu',
+          label: 'Create'
+        }
+      }
+    ]
+  };
 
   return {
-    embeds: [embed],
-    components: [row]
+    components: [containerComponent],
+    flags: MessageFlags.IsComponentsV2
   };
 }
 
-// --- BULLETPROOF TICKET PANEL CONTROL (USING STANDARD EMBEDS & ACTION ROWS) ---
+// --- ORIGINAL COMPONENTS V2 TICKET PANEL CONTROL RESTORED ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -223,34 +246,141 @@ function buildTicketControlPayload(ticketData, userMention) {
     ? ticketData.helpers.map(h => `• <@${h.id}>`).join('\n')
     : '• None';
 
-  const embed = new EmbedBuilder()
-    .setTitle('🎫 Ticket Control Panel')
-    .setDescription(
-      `🖐️ **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}\n\n` +
-      `👤 **Requester:** ${requesterTag}\n\n` +
-      `🖥️ **Selected Server:** \`${ticketData.server}\`\n\n` +
-      `💀 **Bosses / Mobs:** \`${ticketData.description}\``
-    )
-    .setImage(ticketBanner)
-    .setColor(accentColor)
-    .setTimestamp();
-
-  const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('btn_change_server').setLabel('Server').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('btn_claim').setLabel('Claim').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('btn_change_bosses').setLabel('Change Mobs').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('btn_pinghelpers').setLabel('Ping').setStyle(ButtonStyle.Secondary)
-  );
-
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('btn_location').setLabel('Room Details').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('btn_complete').setLabel('Complete').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('btn_cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger)
-  );
+  const containerComponent = {
+    type: 17,
+    accent_color: accentColor,
+    components: [
+      {
+        type: 12,
+        items: [{ media: { url: ticketBanner } }]
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `🖐️ **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 2,
+          custom_id: 'btn_helpers_list',
+          label: 'Helpers'
+        }
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `👤 **Requester:** ${requesterTag}\n\n` +
+                     `**Selected server:**\n-# > **${ticketData.server}**`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 2,
+          custom_id: 'btn_change_server',
+          label: 'Server'
+        }
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `Claim the ticket to assist!`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 3,
+          custom_id: 'btn_claim',
+          label: 'Claim'
+        }
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `**Bosses / Mobs:**\n-# > **${ticketData.description}**`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 2,
+          custom_id: 'btn_change_bosses',
+          label: 'Change Mobs'
+        }
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `Need assistance? **Ping helpers!**`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 2,
+          custom_id: 'btn_pinghelpers',
+          label: 'Ping'
+        }
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `View room codes and location details!`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 2,
+          custom_id: 'btn_location',
+          label: 'Room Details'
+        }
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `Finished with the ticket?`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 3,
+          custom_id: 'btn_complete',
+          label: 'Complete'
+        }
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `Cancel this ticket request?`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 4,
+          custom_id: 'btn_cancel',
+          label: 'Cancel'
+        }
+      }
+    ]
+  };
 
   return {
-    embeds: [embed],
-    components: [row1, row2]
+    components: [containerComponent],
+    flags: MessageFlags.IsComponentsV2
   };
 }
 
@@ -261,26 +391,96 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
 
   const requesterTag = `<@${ticketData.requesterId}> (${ticketData.ign})`;
 
-  const embed = new EmbedBuilder()
-    .setTitle('🛠️ Support Ticket Panel')
-    .setDescription(
-      `👤 **User:** ${requesterTag}\n\n` +
-      `**Subject / Concern:** \`${ticketData.subject}\`\n\n` +
-      `**Details / Report:** \`${ticketData.description}\``
-    )
-    .setImage(ticketBanner)
-    .setColor(accentColor)
-    .setTimestamp();
-
-  const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('btn_pinghelpers').setLabel('Ping Staff').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('btn_complete').setLabel('Complete').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('btn_cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger)
-  );
+  const containerComponent = {
+    type: 17,
+    accent_color: accentColor,
+    components: [
+      {
+        type: 12,
+        items: [{ media: { url: ticketBanner } }]
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `👤 **User:** ${requesterTag}\n\n` +
+                     `**Subject / Concern:**\n-# > **${ticketData.subject}**`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 2,
+          custom_id: 'btn_support_info',
+          label: 'Support'
+        }
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `**Details / Report:**\n-# > **${ticketData.description}**`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 2,
+          custom_id: 'btn_support_details',
+          label: 'Details'
+        }
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `Need staff attention? **Ping staff!**`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 2,
+          custom_id: 'btn_pinghelpers',
+          label: 'Ping'
+        }
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `Issue resolved? Click **Complete** or **Cancel**!`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 3,
+          custom_id: 'btn_complete',
+          label: 'Complete'
+        }
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `Need to close or cancel this support request?`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 4,
+          custom_id: 'btn_cancel',
+          label: 'Cancel'
+        }
+      }
+    ]
+  };
 
   return {
-    embeds: [embed],
-    components: [row1]
+    components: [containerComponent],
+    flags: MessageFlags.IsComponentsV2
   };
 }
 
@@ -671,7 +871,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           ? buildSupportTicketControlPayload(newTicketData, `${interaction.user}`)
           : buildTicketControlPayload(newTicketData, `${interaction.user}`);
 
-        const mainMsg = await ticketChannel.send({ embeds: payload.embeds, components: payload.components });
+        const mainMsg = await ticketChannel.send({ components: payload.components, flags: payload.flags });
 
         await mainMsg.pin().catch(() => {});
 
@@ -937,8 +1137,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
           });
 
           await channel.send({
-            embeds: payload.embeds,
-            components: payload.components
+            components: payload.components,
+            flags: payload.flags
           });
 
           return await interaction.editReply(`✅ Ticket Hub Panel successfully posted to ${channel}!`);
