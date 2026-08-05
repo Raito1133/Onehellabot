@@ -48,9 +48,9 @@ const roleRewards = new Map();
 
 // Global Stats Store
 const globalStats = {
-  totalTicketsCompleted: 0,
-  totalPointsGiven: 0,
-  totalBossesSlain: 0,
+  totalTicketsCompleted: 4857,
+  totalPointsGiven: 92354,
+  totalBossesSlain: 13089,
   startDate: "Feb. '26"
 };
 
@@ -188,7 +188,7 @@ function buildTicketHubPayload(options = {}) {
     accent_color: 0x8b0000, // Dark Red Accent
     components: [
       {
-        type: 9, // Section 1: Ticket Stats with Banner Accessory
+        type: 9, // Section 1: Ticket Stats
         components: [
           {
             type: 10,
@@ -199,10 +199,11 @@ function buildTicketHubPayload(options = {}) {
           }
         ],
         accessory: {
-          type: 11, // Thumbnail accessory inside component tree
-          media: {
-            url: imageUrl
-          }
+          type: 2,
+          style: 2,
+          custom_id: 'btn_refresh_stats',
+          label: 'Refresh',
+          emoji: { name: '🔄' }
         }
       },
       {
@@ -215,9 +216,9 @@ function buildTicketHubPayload(options = {}) {
         ],
         accessory: {
           type: 2,
-          style: 2, // Secondary / Grey
+          style: 2,
           custom_id: 'btn_ticket_guide',
-          label: 'Ticket Guide',
+          label: 'BRO GUIDE',
           emoji: { name: '🎫' }
         }
       },
@@ -231,7 +232,7 @@ function buildTicketHubPayload(options = {}) {
         ],
         accessory: {
           type: 2,
-          style: 2, // Secondary / Grey
+          style: 2,
           custom_id: 'btn_open_ticket_menu',
           label: 'Create Ticket',
           emoji: { name: '🤝' }
@@ -240,13 +241,18 @@ function buildTicketHubPayload(options = {}) {
     ]
   };
 
+  const bannerEmbed = new EmbedBuilder()
+    .setImage(imageUrl)
+    .setColor('#8b0000');
+
   return {
+    embeds: [bannerEmbed],
     components: [containerComponent],
     flags: MessageFlags.IsComponentsV2
   };
 }
 
-function buildTicketControlPayload(ticketData) {
+function buildTicketControlPayload(ticketData, userMention, rolePing) {
   const maxLimit = ticketData.maxHelpers || 6;
   const helpersList = ticketData.helpers.length > 0
     ? ticketData.helpers.map(id => `• <@${id}>`).join('\n')
@@ -254,8 +260,20 @@ function buildTicketControlPayload(ticketData) {
 
   let sections = [];
 
+  // Top section with ping text cleanly integrated into the V2 container
+  const headerSection = {
+    type: 9,
+    components: [
+      {
+        type: 10,
+        content: `👋 Hey ${userMention}! ${rolePing}`
+      }
+    ]
+  };
+
   if (ticketData.type === 'server_ticket') {
     sections = [
+      headerSection,
       {
         type: 9,
         components: [
@@ -280,6 +298,7 @@ function buildTicketControlPayload(ticketData) {
     ];
   } else {
     sections = [
+      headerSection,
       {
         type: 9,
         components: [
@@ -352,7 +371,12 @@ async function updateTicketEmbed(channel, ticketData) {
     const panelMsg = pinnedMessages.first();
     if (!panelMsg) return;
 
-    const payload = buildTicketControlPayload(ticketData);
+    const pingRoleIds = ticketData.pingRoleIds || [];
+    const helperRolePing = pingRoleIds.length > 0 
+      ? pingRoleIds.map(id => `<@&${id}>`).join(' ') 
+      : '@Helper';
+
+    const payload = buildTicketControlPayload(ticketData, `<@${ticketData.requesterId}>`, helperRolePing);
     await panelMsg.edit(payload);
   } catch (err) {
     console.error('Failed to update ticket embed in real-time:', err);
@@ -460,7 +484,6 @@ async function registerCommands() {
 client.once(Events.ClientReady, async () => {
   console.log(`Logged in as ${client.user.tag}`);
 
-  // Set bot status to Idle (yellow moon)
   client.user.setPresence({
     status: 'idle',
     activities: [{
@@ -496,6 +519,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return await interaction.reply({
         content: '🎫 **Select the ticket category you need assistance with:**',
         components: [row],
+        ephemeral: true
+      });
+    }
+
+    if (interaction.isButton() && interaction.customId === 'btn_refresh_stats') {
+      return await interaction.reply({
+        content: `🔄 **Stats Refreshed:** Total completed tickets: **${globalStats.totalTicketsCompleted}**`,
         ephemeral: true
       });
     }
@@ -690,9 +720,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
           ? pingRoleIds.map(id => `<@&${id}>`).join(' ') 
           : '@Helper';
         
-        const payload = buildTicketControlPayload(newTicketData);
+        // Build payload and route ping directly inside component tree to maintain strict V2 rules
+        const payload = buildTicketControlPayload(newTicketData, `${interaction.user}`, helperRolePing);
         const mainMsg = await ticketChannel.send({ 
-          content: `Hey ${interaction.user}! ${helperRolePing}`, 
           components: payload.components,
           flags: payload.flags
         });
@@ -969,6 +999,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           });
 
           await channel.send({
+            embeds: payload.embeds,
             components: payload.components,
             flags: payload.flags
           });
