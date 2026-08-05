@@ -5,8 +5,6 @@ const {
   Events,
   EmbedBuilder,
   ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   ModalBuilder,
@@ -207,7 +205,8 @@ function buildTicketHubPayload(options = {}) {
           type: 2,
           style: 5,
           url: guideUrl,
-          label: 'Guide'
+          label: 'Guide',
+          emoji: { id: '1533348464908435526', name: 'Ticket', animated: false }
         }
       },
       {
@@ -222,7 +221,8 @@ function buildTicketHubPayload(options = {}) {
           type: 2,
           style: 2,
           custom_id: 'btn_open_ticket_menu',
-          label: 'Create'
+          label: 'Create',
+          emoji: { id: '1533348464908435526', name: 'Ticket', animated: false }
         }
       }
     ]
@@ -234,7 +234,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- ORIGINAL COMPONENTS V2 TICKET PANEL CONTROL RESTORED ---
+// --- RESTORED COMPONENTS V2 LAYOUT WITH CUSTOM ANIMATED EMOJIS ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -266,7 +266,8 @@ function buildTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 2,
           custom_id: 'btn_helpers_list',
-          label: 'Helpers'
+          label: 'Helpers',
+          emoji: { id: '1326878430284742707', name: 'n_nox_y', animated: false }
         }
       },
       {
@@ -282,7 +283,8 @@ function buildTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 2,
           custom_id: 'btn_change_server',
-          label: 'Server'
+          label: 'Server',
+          emoji: { id: '1534553693884514404', name: 'arrow', animated: true }
         }
       },
       {
@@ -297,7 +299,8 @@ function buildTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 3,
           custom_id: 'btn_claim',
-          label: 'Claim'
+          label: 'Claim',
+          emoji: { id: '1534558039183458526', name: 'greendot', animated: true }
         }
       },
       {
@@ -312,7 +315,8 @@ function buildTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 2,
           custom_id: 'btn_change_bosses',
-          label: 'Change Mobs'
+          label: 'Change Mobs',
+          emoji: { name: 'chuckles' }
         }
       },
       {
@@ -327,7 +331,8 @@ function buildTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 2,
           custom_id: 'btn_pinghelpers',
-          label: 'Ping'
+          label: 'Ping',
+          emoji: { id: '1534551074550190110', name: '1369announce', animated: true }
         }
       },
       {
@@ -342,7 +347,8 @@ function buildTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 2,
           custom_id: 'btn_location',
-          label: 'Room Details'
+          label: 'Room Details',
+          emoji: { id: '1534547674164887622', name: 'AttentionAnimated', animated: true }
         }
       },
       {
@@ -357,7 +363,8 @@ function buildTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 3,
           custom_id: 'btn_complete',
-          label: 'Complete'
+          label: 'Complete',
+          emoji: { id: '1534558091801006142', name: 'bluedot', animated: true }
         }
       },
       {
@@ -372,7 +379,8 @@ function buildTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 4,
           custom_id: 'btn_cancel',
-          label: 'Cancel'
+          label: 'Cancel',
+          emoji: { id: '1534558064261206076', name: 'reddot', animated: true }
         }
       }
     ]
@@ -412,7 +420,8 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 2,
           custom_id: 'btn_support_info',
-          label: 'Support'
+          label: 'Support',
+          emoji: { id: '1534553693884514404', name: 'arrow', animated: true }
         }
       },
       {
@@ -427,7 +436,8 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 2,
           custom_id: 'btn_support_details',
-          label: 'Details'
+          label: 'Details',
+          emoji: { name: 'chuckles' }
         }
       },
       {
@@ -442,7 +452,8 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 2,
           custom_id: 'btn_pinghelpers',
-          label: 'Ping'
+          label: 'Ping',
+          emoji: { id: '1534551074550190110', name: '1369announce', animated: true }
         }
       },
       {
@@ -457,7 +468,8 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 3,
           custom_id: 'btn_complete',
-          label: 'Complete'
+          label: 'Complete',
+          emoji: { id: '1534558091801006142', name: 'bluedot', animated: true }
         }
       },
       {
@@ -472,7 +484,8 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 4,
           custom_id: 'btn_cancel',
-          label: 'Cancel'
+          label: 'Cancel',
+          emoji: { id: '1534558064261206076', name: 'reddot', animated: true }
         }
       }
     ]
