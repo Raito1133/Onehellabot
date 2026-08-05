@@ -27,7 +27,7 @@ const HELPER_ROLE_ID = 'YOUR_HELPER_ROLE_ID'; // Fallback Helper Role ID
 const DEFAULT_VERIFY_CHANNEL_ID = '1531294593780416743';
 
 // Direct Image URL for Header Banner
-const BANNER_IMAGE_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
+const BANNER_IMAGE_URL = 'https://i.pinimg.com/736x/57/89/c2/5789c210d525774e5d8c5d40e4508a2e.jpgf';
 
 const client = new Client({
   intents: [
@@ -173,7 +173,7 @@ async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
   }
 }
 
-// --- STRICT COMPONENTS V2 HUB PAYLOAD ---
+// --- SAFE JSON COMPONENTS V2 BUILDERS ---
 function buildTicketHubPayload(options = {}) {
   const {
     imageUrl = BANNER_IMAGE_URL,
@@ -188,7 +188,7 @@ function buildTicketHubPayload(options = {}) {
     accent_color: 0x8b0000, // Dark Red Accent
     components: [
       {
-        type: 12, // Media Gallery Component (Renders full width banner natively in V2)
+        type: 12, // Media Gallery Component (Native V2 Banner)
         items: [
           {
             media: {
@@ -270,7 +270,14 @@ function buildTicketControlPayload(ticketData, userMention, rolePing) {
         type: 10,
         content: `👋 Hey ${userMention}! ${rolePing}`
       }
-    ]
+    ],
+    accessory: {
+      type: 2,
+      style: 2,
+      custom_id: 'btn_ticket_info',
+      label: 'Info',
+      emoji: { name: 'ℹ️' }
+    }
   };
 
   let sections = [];
@@ -541,11 +548,43 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    // 2. SELECT MENU SELECTION -> OPEN MODAL
+    if (interaction.isButton() && interaction.customId === 'btn_ticket_info') {
+      return await interaction.reply({
+        content: 'ℹ️ **Ticket Panel:** Use the buttons below to manage room settings, ping helpers, or complete your request when finished.',
+        ephemeral: true
+      });
+    }
+
+    // 2. SELECT MENU SELECTION -> OPEN STEP 1 or MODAL
     if (interaction.isStringSelectMenu() && interaction.customId === 'select_ticket_cat') {
       const selectedKey = interaction.values[0];
       const preset = TICKET_PRESETS[selectedKey] || { label: 'Ticket', max: 6, points: 1, roleIds: [HELPER_ROLE_ID] };
 
+      // Special dropdown workflow for Ultra Weeklies
+      if (selectedKey === 'ultra_weeklies') {
+        const weeklyMenu = new StringSelectMenuBuilder()
+          .setCustomId('select_ultra_bosses')
+          .setPlaceholder('Select the Ultra Bosses you need...')
+          .setMinValues(1)
+          .setMaxValues(6)
+          .addOptions(
+            new StringSelectMenuOptionBuilder().setLabel('Champion Drakath').setValue('Champion Drakath').setEmoji('⚔️'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Dage').setValue('Ultra Dage').setEmoji('⚔️'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Darkon').setValue('Ultra Darkon').setEmoji('⚔️'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Drago').setValue('Ultra Drago').setEmoji('⚔️'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Gramiel').setValue('Ultra Gramiel').setEmoji('⚔️'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Speaker').setValue('Ultra Speaker').setEmoji('⚔️')
+          );
+
+        const row = new ActionRowBuilder().addComponents(weeklyMenu);
+
+        return await interaction.update({
+          content: '⚔️ **Select all the Ultra Weeklies bosses you need help with:**',
+          components: [row]
+        });
+      }
+
+      // Standard Modal for other categories
       const modal = new ModalBuilder()
         .setCustomId(`ticket_form_${preset.max}_${preset.points}_${selectedKey}`)
         .setTitle(`Ticket: ${preset.label}`);
@@ -606,6 +645,53 @@ client.on(Events.InteractionCreate, async (interaction) => {
           new ActionRowBuilder().addComponents(descInput)
         );
       }
+
+      return await interaction.showModal(modal);
+    }
+
+    // 2b. ULTRA WEEKLIES BOSS SELECTION -> OPEN FINAL MODAL
+    if (interaction.isStringSelectMenu() && interaction.customId === 'select_ultra_bosses') {
+      const selectedBosses = interaction.values.join(', ');
+      const preset = TICKET_PRESETS['ultra_weeklies'];
+
+      const modal = new ModalBuilder()
+        .setCustomId(`ticket_form_${preset.max}_${preset.points}_ultra_weeklies`)
+        .setTitle('Ticket: Ultra Weeklies');
+
+      const ignInput = new TextInputBuilder()
+        .setCustomId('ign')
+        .setLabel('AQW IGN')
+        .setPlaceholder('Enter IGN...')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const serverInput = new TextInputBuilder()
+        .setCustomId('server')
+        .setLabel('Server')
+        .setPlaceholder('Artix, Safiria, etc.')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const mapInput = new TextInputBuilder()
+        .setCustomId('map_name')
+        .setLabel('Map Name / Room')
+        .setPlaceholder('ultraezrajal, ultrakala, etc.')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const descInput = new TextInputBuilder()
+        .setCustomId('description')
+        .setLabel('Selected Bosses / Details')
+        .setValue(selectedBosses)
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(ignInput),
+        new ActionRowBuilder().addComponents(serverInput),
+        new ActionRowBuilder().addComponents(mapInput),
+        new ActionRowBuilder().addComponents(descInput)
+      );
 
       return await interaction.showModal(modal);
     }
