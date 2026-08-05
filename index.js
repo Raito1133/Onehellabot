@@ -5,6 +5,8 @@ const {
   Events,
   EmbedBuilder,
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   ModalBuilder,
@@ -243,7 +245,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- TICKET PANEL CONTROL (WITH PROPERLY FORMATTED ANIMATED EMOJIS) ---
+// --- STABLE TICKET PANEL CONTROL (USING STANDARD ACTION ROWS FOR BUTTONS) ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -251,157 +253,79 @@ function buildTicketControlPayload(ticketData, userMention) {
   const accentColor = categoryPreset.accentColor || 0x8b0000;
 
   const requesterTag = `<@${ticketData.requesterId}> (${ticketData.ign})`;
-
   const helpersFormatted = ticketData.helpers.length > 0
     ? ticketData.helpers.map(h => `• <@${h.id}>`).join('\n')
     : '• None';
 
-  const sections = [
-    {
-      type: 12,
-      items: [{ media: { url: ticketBanner } }]
-    },
-    { type: 14 },
-    {
-      type: 9,
-      components: [
-        {
-          type: 10,
-          content: `🖐️ **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}`
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 2,
-        custom_id: 'btn_helpers_list',
-        label: 'Helpers',
-        emoji: { id: '1326878430284742707', name: 'n_nox_y', animated: false }
+  // Container to display info cleanly
+  const containerComponent = {
+    type: 17,
+    accent_color: accentColor,
+    components: [
+      {
+        type: 12,
+        items: [{ media: { url: ticketBanner } }]
+      },
+      { type: 14 },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `🖐️ **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}\n\n` +
+                     `👤 **Requester:** ${requesterTag}\n\n` +
+                     `🖥️ **Selected Server:** \`${ticketData.server}\`\n\n` +
+                     `💀 **Bosses / Mobs:** \`${ticketData.description}\``
+          }
+        ]
       }
-    },
-    { type: 14 },
-    {
-      type: 9,
-      components: [
-        {
-          type: 10,
-          content: `👤 **Requester:** ${requesterTag}\n\n` +
-                   `**Selected server:**\n-# > **${ticketData.server}**`
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 2,
-        custom_id: 'btn_change_server',
-        label: 'Server',
-        emoji: { id: '1534553693884514404', name: 'arrow', animated: true }
-      }
-    },
-    { type: 14 },
-    {
-      type: 9,
-      components: [
-        {
-          type: 10,
-          content: `Claim the ticket to assist!`
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 3,
-        custom_id: 'btn_claim',
-        label: 'Claim',
-        emoji: { id: '1534558039183458526', name: 'greendot', animated: true }
-      }
-    },
-    { type: 14 },
-    {
-      type: 9,
-      components: [
-        {
-          type: 10,
-          content: `**Bosses / Mobs:**\n-# > **${ticketData.description}**`
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 2,
-        custom_id: 'btn_change_bosses',
-        label: 'Change Mobs',
-        emoji: { name: 'chuckles' }
-      }
-    },
-    { type: 14 },
-    {
-      type: 9,
-      components: [
-        {
-          type: 10,
-          content: `Need assistance? **Ping helpers!**`
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 2,
-        custom_id: 'btn_pinghelpers',
-        label: 'Ping',
-        emoji: { id: '1534551074550190110', name: '1369announce', animated: true }
-      }
-    },
-    { type: 14 },
-    {
-      type: 9,
-      components: [
-        {
-          type: 10,
-          content: `View room codes and location details!`
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 2,
-        custom_id: 'btn_location',
-        label: 'Room Details',
-        emoji: { id: '1534547674164887622', name: 'AttentionAnimated', animated: true }
-      }
-    },
-    { type: 14 },
-    {
-      type: 9,
-      components: [
-        {
-          type: 10,
-          content: `Finished with the ticket?`
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 3,
-        custom_id: 'btn_complete',
-        label: 'Complete',
-        emoji: { id: '1534558091801006142', name: 'bluedot', animated: true }
-      }
-    },
-    { type: 14 },
-    {
-      type: 9,
-      components: [
-        {
-          type: 10,
-          content: `Cancel this ticket request?`
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 4,
-        custom_id: 'btn_cancel',
-        label: 'Cancel',
-        emoji: { id: '1534558064261206076', name: 'reddot', animated: true }
-      }
-    }
-  ];
+    ]
+  };
+
+  // Button Action Rows with your requested custom animated emojis and names
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('btn_change_server')
+      .setLabel('Server')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji({ id: '1534553693884514404', name: 'arrow', animated: true }),
+    new ButtonBuilder()
+      .setCustomId('btn_claim')
+      .setLabel('Claim')
+      .setStyle(ButtonStyle.Success)
+      .setEmoji({ id: '1534558039183458526', name: 'greendot', animated: true }),
+    new ButtonBuilder()
+      .setCustomId('btn_change_bosses')
+      .setLabel('Change Mobs')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji('chuckles'),
+    new ButtonBuilder()
+      .setCustomId('btn_pinghelpers')
+      .setLabel('Ping')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji({ id: '1534551074550190110', name: '1369announce', animated: true })
+  );
+
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('btn_location')
+      .setLabel('Room Details')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji({ id: '1534547674164887622', name: 'AttentionAnimated', animated: true }),
+    new ButtonBuilder()
+      .setCustomId('btn_complete')
+      .setLabel('Complete')
+      .setStyle(ButtonStyle.Success)
+      .setEmoji({ id: '1534558091801006142', name: 'bluedot', animated: true }),
+    new ButtonBuilder()
+      .setCustomId('btn_cancel')
+      .setLabel('Cancel')
+      .setStyle(ButtonStyle.Danger)
+      .setEmoji({ id: '1534558064261206076', name: 'reddot', animated: true })
+  );
 
   return {
-    components: [{ type: 17, accent_color: accentColor, components: sections }],
+    components: [containerComponent, row1, row2],
     flags: MessageFlags.IsComponentsV2
   };
 }
@@ -413,101 +337,49 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
 
   const requesterTag = `<@${ticketData.requesterId}> (${ticketData.ign})`;
 
-  const sections = [
-    {
-      type: 12,
-      items: [{ media: { url: ticketBanner } }]
-    },
-    { type: 14 },
-    {
-      type: 9,
-      components: [
-        {
-          type: 10,
-          content: `👤 **User:** ${requesterTag}\n\n` +
-                   `**Subject / Concern:**\n-# > **${ticketData.subject}**`
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 2,
-        custom_id: 'btn_support_info',
-        label: 'Support',
-        emoji: { id: '1534553693884514404', name: 'arrow', animated: true }
+  const containerComponent = {
+    type: 17,
+    accent_color: accentColor,
+    components: [
+      {
+        type: 12,
+        items: [{ media: { url: ticketBanner } }]
+      },
+      { type: 14 },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `👤 **User:** ${requesterTag}\n\n` +
+                     `**Subject / Concern:** \`${ticketData.subject}\`\n\n` +
+                     `**Details / Report:** \`${ticketData.description}\``
+          }
+        ]
       }
-    },
-    { type: 14 },
-    {
-      type: 9,
-      components: [
-        {
-          type: 10,
-          content: `**Details / Report:**\n-# > **${ticketData.description}**`
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 2,
-        custom_id: 'btn_support_details',
-        label: 'Details',
-        emoji: { name: 'chuckles' }
-      }
-    },
-    { type: 14 },
-    {
-      type: 9,
-      components: [
-        {
-          type: 10,
-          content: `Need staff attention? **Ping staff!**`
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 2,
-        custom_id: 'btn_pinghelpers',
-        label: 'Ping',
-        emoji: { id: '1534551074550190110', name: '1369announce', animated: true }
-      }
-    },
-    { type: 14 },
-    {
-      type: 9,
-      components: [
-        {
-          type: 10,
-          content: `Issue resolved? Click **Complete** or **Cancel**!`
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 3,
-        custom_id: 'btn_complete',
-        label: 'Complete',
-        emoji: { id: '1534558091801006142', name: 'bluedot', animated: true }
-      }
-    },
-    { type: 14 },
-    {
-      type: 9,
-      components: [
-        {
-          type: 10,
-          content: `Need to close or cancel this support request?`
-        }
-      ],
-      accessory: {
-        type: 2,
-        style: 4,
-        custom_id: 'btn_cancel',
-        label: 'Cancel',
-        emoji: { id: '1534558064261206076', name: 'reddot', animated: true }
-      }
-    }
-  ];
+    ]
+  };
+
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('btn_pinghelpers')
+      .setLabel('Ping Staff')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji({ id: '1534551074550190110', name: '1369announce', animated: true }),
+    new ButtonBuilder()
+      .setCustomId('btn_complete')
+      .setLabel('Complete')
+      .setStyle(ButtonStyle.Success)
+      .setEmoji({ id: '1534558091801006142', name: 'bluedot', animated: true }),
+    new ButtonBuilder()
+      .setCustomId('btn_cancel')
+      .setLabel('Cancel')
+      .setStyle(ButtonStyle.Danger)
+      .setEmoji({ id: '1534558064261206076', name: 'reddot', animated: true })
+  );
 
   return {
-    components: [{ type: 17, accent_color: accentColor, components: sections }],
+    components: [containerComponent, row1],
     flags: MessageFlags.IsComponentsV2
   };
 }
