@@ -20,7 +20,7 @@ const {
 const http = require('http');
 
 // --- ⚠️ CONFIGURATION ⚠️ ---
-const GUILD_ID = '1243470533316579361'; // Server ID
+const GUILD_ID = '1371775026264670228'; // Server ID
 const HELPER_ROLE_ID = 'YOUR_HELPER_ROLE_ID'; // Fallback Helper Role ID
 const TICKET_GUIDE_URL = 'https://discord.com'; 
 
