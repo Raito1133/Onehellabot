@@ -57,7 +57,7 @@ const TICKET_PRESETS = {
     label: 'Farming Assistance', 
     max: 6, 
     points: 3, 
-    emoji: '<:queststart:1531490481991843862>', 
+    emoji: { id: '1531490481991843862', name: 'queststart' }, 
     roleIds: ['1529499059596038285'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x8b0000 
@@ -66,7 +66,7 @@ const TICKET_PRESETS = {
     label: 'Ultra Weeklies', 
     max: 3, 
     points: 8, 
-    emoji: '<:aqwDecay:1533349135460335668>', 
+    emoji: { id: '1533349135460335668', name: 'aqwDecay' }, 
     roleIds: ['1529499021884919858'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x9b59b6 
@@ -75,7 +75,7 @@ const TICKET_PRESETS = {
     label: '7-Man Dailies', 
     max: 6, 
     points: 5, 
-    emoji: '<:aqwGauntlet:1531490394146078820>', 
+    emoji: { id: '1531490394146078820', name: 'aqwGauntlet' }, 
     roleIds: ['1529499059596038285', '1529499021884919858'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0xe67e22 
@@ -84,7 +84,7 @@ const TICKET_PRESETS = {
     label: 'Ultra Dailies', 
     max: 3, 
     points: 5, 
-    emoji: '<:wolfblade:1533348197223632956>', 
+    emoji: { id: '1533348197223632956', name: 'wolfblade' }, 
     roleIds: ['1529499021884919858'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x3498db 
@@ -93,7 +93,7 @@ const TICKET_PRESETS = {
     label: 'Server Ticket / Support', 
     max: 2, 
     points: 0, 
-    emoji: '<:Ticket:1533348464908435526>', 
+    emoji: { id: '1533348464908435526', name: 'Ticket' }, 
     roleIds: ['1529498802149392614'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x2ecc71 
@@ -102,7 +102,7 @@ const TICKET_PRESETS = {
     label: 'General Boss Help', 
     max: 6, 
     points: 2, 
-    emoji: '<:AQW_sword:1531490097768304714>', 
+    emoji: { id: '1531490097768304714', name: 'AQW_sword' }, 
     roleIds: ['1529499059596038285'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0xe74c3c 
@@ -111,7 +111,7 @@ const TICKET_PRESETS = {
     label: 'Other Requests', 
     max: 6, 
     points: 1, 
-    emoji: '<:aqwScroll:1533349936438181908>', 
+    emoji: { id: '1533349936438181908', name: 'aqwScroll' }, 
     roleIds: ['1529499059596038285'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x95a5a6 
@@ -214,7 +214,7 @@ function buildTicketHubPayload(options = {}) {
           style: 5,
           url: guideUrl,
           label: 'Guide',
-          emoji: { name: '🎫', id: '1533348464908435526' }
+          emoji: { id: '1533348464908435526', name: 'Ticket', animated: false }
         }
       },
       { type: 14 },
@@ -231,7 +231,7 @@ function buildTicketHubPayload(options = {}) {
           style: 2,
           custom_id: 'btn_open_ticket_menu',
           label: 'Create',
-          emoji: { name: '🤝' }
+          emoji: { id: '1533348464908435526', name: 'Ticket', animated: false }
         }
       }
     ]
@@ -243,7 +243,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- TICKET PANEL CONTROL ---
+// --- TICKET PANEL CONTROL (WITH PROPERLY FORMATTED ANIMATED EMOJIS) ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -688,12 +688,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setMinValues(1)
           .setMaxValues(6)
           .addOptions(
-            new StringSelectMenuOptionBuilder().setLabel('Champion Drakath').setValue('Champion Drakath').setEmoji('<:drakath:1534544989009477754>'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Dage').setValue('Ultra Dage').setEmoji('<:dage:1534544956713209877>'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Darkon').setValue('Ultra Darkon').setEmoji('<:darkon:1534545103350272131>'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Drago').setValue('Ultra Drago').setEmoji('<:drago:1534545063915290694>'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Gramiel').setValue('Ultra Gramiel').setEmoji('<:gramiel:1534545007468613662>'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Speaker').setValue('Ultra Speaker').setEmoji('<:malgor:1534545145016352778>')
+            new StringSelectMenuOptionBuilder().setLabel('Champion Drakath').setValue('Champion Drakath').setEmoji({ id: '1534544989009477754', name: 'drakath' }),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Dage').setValue('Ultra Dage').setEmoji({ id: '1534544956713209877', name: 'dage' }),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Darkon').setValue('Ultra Darkon').setEmoji({ id: '1534545103350272131', name: 'darkon' }),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Drago').setValue('Ultra Drago').setEmoji({ id: '1534545063915290694', name: 'drago' }),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Gramiel').setValue('Ultra Gramiel').setEmoji({ id: '1534545007468613662', name: 'gramiel' }),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Speaker').setValue('Ultra Speaker').setEmoji({ id: '1534545145016352778', name: 'malgor' })
           );
 
         return await interaction.update({
