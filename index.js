@@ -26,6 +26,9 @@ const GUILD_ID = '1243470533316579361'; // Server ID
 const HELPER_ROLE_ID = 'YOUR_HELPER_ROLE_ID'; // Fallback Helper Role ID
 const DEFAULT_VERIFY_CHANNEL_ID = '1531294593780416743';
 
+// Direct Image URL for Header Banner
+const BANNER_IMAGE_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -173,6 +176,7 @@ async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
 // --- SAFE JSON COMPONENTS V2 BUILDERS ---
 function buildTicketHubPayload(options = {}) {
   const {
+    imageUrl = BANNER_IMAGE_URL,
     guideTitle = 'Tickets, rules and how to',
     guideDesc = "🔖 Before creating a ticket, read the guide for how they work.\nCheck it out by clicking on '**Ticket Guide**'",
     createTitle = 'Need help with one or more bosses?',
@@ -184,7 +188,7 @@ function buildTicketHubPayload(options = {}) {
     accent_color: 0x8b0000, // Dark Red Accent
     components: [
       {
-        type: 9, // Section 1: Ticket Stats
+        type: 9, // Section 1: Ticket Stats with Banner Accessory
         components: [
           {
             type: 10,
@@ -195,11 +199,10 @@ function buildTicketHubPayload(options = {}) {
           }
         ],
         accessory: {
-          type: 2,
-          style: 2, // Secondary / Grey
-          custom_id: 'btn_refresh_stats',
-          label: 'Refresh',
-          emoji: { name: '🔄' }
+          type: 11, // Thumbnail accessory inside component tree
+          media: {
+            url: imageUrl
+          }
         }
       },
       {
@@ -493,13 +496,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return await interaction.reply({
         content: '🎫 **Select the ticket category you need assistance with:**',
         components: [row],
-        ephemeral: true
-      });
-    }
-
-    if (interaction.isButton() && interaction.customId === 'btn_refresh_stats') {
-      return await interaction.reply({
-        content: `🔄 **Stats Refreshed:** Total completed tickets: **${globalStats.totalTicketsCompleted}**`,
         ephemeral: true
       });
     }
@@ -951,6 +947,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         try {
           const channel = options.getChannel('channel');
+          const customBanner = options.getString('banner_url');
           const guideTitle = options.getString('guide_title') || undefined;
           const guideDesc = options.getString('guide_desc') || undefined;
           const createTitle = options.getString('create_title') || undefined;
@@ -964,6 +961,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           guildSettings.set(interaction.guild.id, cfg);
 
           const payload = buildTicketHubPayload({
+            imageUrl: customBanner || BANNER_IMAGE_URL,
             guideTitle,
             guideDesc,
             createTitle,
