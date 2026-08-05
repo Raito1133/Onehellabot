@@ -59,7 +59,6 @@ const TICKET_PRESETS = {
     label: 'Farming Assistance', 
     max: 6, 
     points: 3, 
-    emoji: '<:queststart:1531490481991843862>', 
     roleIds: ['1529499059596038285'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x8b0000 
@@ -68,7 +67,6 @@ const TICKET_PRESETS = {
     label: 'Ultra Weeklies', 
     max: 3, 
     points: 8, 
-    emoji: '<:aqwDecay:1533349135460335668>', 
     roleIds: ['1529499021884919858'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x9b59b6 
@@ -77,7 +75,6 @@ const TICKET_PRESETS = {
     label: '7-Man Dailies', 
     max: 6, 
     points: 5, 
-    emoji: '<:aqwGauntlet:1531490394146078820>', 
     roleIds: ['1529499059596038285', '1529499021884919858'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0xe67e22 
@@ -86,7 +83,6 @@ const TICKET_PRESETS = {
     label: 'Ultra Dailies', 
     max: 3, 
     points: 5, 
-    emoji: '<:wolfblade:1533348197223632956>', 
     roleIds: ['1529499021884919858'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x3498db 
@@ -95,7 +91,6 @@ const TICKET_PRESETS = {
     label: 'Server Ticket / Support', 
     max: 2, 
     points: 0, 
-    emoji: '<:Ticket:1533348464908435526>', 
     roleIds: ['1529498802149392614'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x2ecc71 
@@ -104,7 +99,6 @@ const TICKET_PRESETS = {
     label: 'General Boss Help', 
     max: 6, 
     points: 2, 
-    emoji: '<:AQW_sword:1531490097768304714>', 
     roleIds: ['1529499059596038285'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0xe74c3c 
@@ -113,7 +107,6 @@ const TICKET_PRESETS = {
     label: 'Other Requests', 
     max: 6, 
     points: 1, 
-    emoji: '<:aqwScroll:1533349936438181908>', 
     roleIds: ['1529499059596038285'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x95a5a6 
@@ -215,8 +208,7 @@ function buildTicketHubPayload(options = {}) {
           type: 2,
           style: 5,
           url: guideUrl,
-          label: 'Guide',
-          emoji: { id: '1533348464908435526', name: 'Ticket' }
+          label: 'Guide'
         }
       },
       { type: 14 },
@@ -232,8 +224,7 @@ function buildTicketHubPayload(options = {}) {
           type: 2,
           style: 2,
           custom_id: 'btn_open_ticket_menu',
-          label: 'Create',
-          emoji: { id: '1533348464908435526', name: 'Ticket' }
+          label: 'Create'
         }
       }
     ]
@@ -245,7 +236,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- FULLY RESTORED TICKET PANEL CONTROL (BUTTONS AND INFORMATION) ---
+// --- TICKET PANEL CONTROL (EMOJIS COMPLETELY REMOVED FOR ERROR PREVENTION) ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -282,44 +273,16 @@ function buildTicketControlPayload(ticketData, userMention) {
   };
 
   const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('btn_change_server')
-      .setLabel('Server')
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji('<:arrow:1534553693884514404>'),
-    new ButtonBuilder()
-      .setCustomId('btn_claim')
-      .setLabel('Claim')
-      .setStyle(ButtonStyle.Success)
-      .setEmoji('<:greendot:1534558039183458526>'),
-    new ButtonBuilder()
-      .setCustomId('btn_change_bosses')
-      .setLabel('Change Mobs')
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji('chuckles'),
-    new ButtonBuilder()
-      .setCustomId('btn_pinghelpers')
-      .setLabel('Ping')
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji('<:1369announce:1534551074550190110>')
+    new ButtonBuilder().setCustomId('btn_change_server').setLabel('Server').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('btn_claim').setLabel('Claim').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('btn_change_bosses').setLabel('Change Mobs').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('btn_pinghelpers').setLabel('Ping').setStyle(ButtonStyle.Secondary)
   );
 
   const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('btn_location')
-      .setLabel('Room Details')
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji('<:AttentionAnimated:1534547674164887622>'),
-    new ButtonBuilder()
-      .setCustomId('btn_complete')
-      .setLabel('Complete')
-      .setStyle(ButtonStyle.Success)
-      .setEmoji('<:bluedot:1534558091801006142>'),
-    new ButtonBuilder()
-      .setCustomId('btn_cancel')
-      .setLabel('Cancel')
-      .setStyle(ButtonStyle.Danger)
-      .setEmoji('<:reddot:1534558064261206076>')
+    new ButtonBuilder().setCustomId('btn_location').setLabel('Room Details').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('btn_complete').setLabel('Complete').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('btn_cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger)
   );
 
   return {
@@ -359,21 +322,9 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
   };
 
   const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('btn_pinghelpers')
-      .setLabel('Ping Staff')
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji('<:1369announce:1534551074550190110>'),
-    new ButtonBuilder()
-      .setCustomId('btn_complete')
-      .setLabel('Complete')
-      .setStyle(ButtonStyle.Success)
-      .setEmoji('<:bluedot:1534558091801006142>'),
-    new ButtonBuilder()
-      .setCustomId('btn_cancel')
-      .setLabel('Cancel')
-      .setStyle(ButtonStyle.Danger)
-      .setEmoji('<:reddot:1534558064261206076>')
+    new ButtonBuilder().setCustomId('btn_pinghelpers').setLabel('Ping Staff').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('btn_complete').setLabel('Complete').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('btn_cancel').setLabel('Cancel').setStyle(ButtonStyle.Danger)
   );
 
   return {
@@ -529,7 +480,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
             new StringSelectMenuOptionBuilder()
               .setLabel(item.label)
               .setValue(key)
-              .setEmoji(item.emoji)
           )
         );
 
@@ -558,12 +508,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setMinValues(1)
           .setMaxValues(6)
           .addOptions(
-            new StringSelectMenuOptionBuilder().setLabel('Champion Drakath').setValue('Champion Drakath').setEmoji({ id: '1534544989009477754', name: 'drakath' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Dage').setValue('Ultra Dage').setEmoji({ id: '1534544956713209877', name: 'dage' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Darkon').setValue('Ultra Darkon').setEmoji({ id: '1534545103350272131', name: 'darkon' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Drago').setValue('Ultra Drago').setEmoji({ id: '1534545063915290694', name: 'drago' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Gramiel').setValue('Ultra Gramiel').setEmoji({ id: '1534545007468613662', name: 'gramiel' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Speaker').setValue('Ultra Speaker').setEmoji({ id: '1534545145016352778', name: 'malgor' })
+            new StringSelectMenuOptionBuilder().setLabel('Champion Drakath').setValue('Champion Drakath'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Dage').setValue('Ultra Dage'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Darkon').setValue('Ultra Darkon'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Drago').setValue('Ultra Drago'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Gramiel').setValue('Ultra Gramiel'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Speaker').setValue('Ultra Speaker')
           );
 
         return await interaction.update({
@@ -579,12 +529,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setMinValues(1)
           .setMaxValues(6)
           .addOptions(
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Ezrajal').setValue('Ultra Ezrajal').setEmoji('<:AQW_sword:1531490097768304714>'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Warden').setValue('Ultra Warden').setEmoji('<:AQW_sword:1531490097768304714>'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Engineer').setValue('Ultra Engineer').setEmoji('<:AQW_sword:1531490097768304714>'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Tyndarius').setValue('Ultra Tyndarius').setEmoji('<:AQW_sword:1531490097768304714>'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Kala').setValue('Ultra Kala').setEmoji('<:AQW_sword:1531490097768304714>'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Iara').setValue('Ultra Iara').setEmoji('<:AQW_sword:1531490097768304714>')
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Ezrajal').setValue('Ultra Ezrajal'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Warden').setValue('Ultra Warden'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Engineer').setValue('Ultra Engineer'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Tyndarius').setValue('Ultra Tyndarius'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Kala').setValue('Ultra Kala'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Iara').setValue('Ultra Iara')
           );
 
         return await interaction.update({
@@ -600,10 +550,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setMinValues(1)
           .setMaxValues(4)
           .addOptions(
-            new StringSelectMenuOptionBuilder().setLabel('Kathool Depths').setValue('Kathool Depths').setEmoji('<:AQW_sword:1531490097768304714>'),
-            new StringSelectMenuOptionBuilder().setLabel('Originul').setValue('Originul').setEmoji('<:AQW_sword:1531490097768304714>'),
-            new StringSelectMenuOptionBuilder().setLabel('Astral Shrine').setValue('Astral Shrine').setEmoji('<:AQW_sword:1531490097768304714>'),
-            new StringSelectMenuOptionBuilder().setLabel('Lavarock Shore').setValue('Lavarock Shore').setEmoji('<:AQW_sword:1531490097768304714>')
+            new StringSelectMenuOptionBuilder().setLabel('Kathool Depths').setValue('Kathool Depths'),
+            new StringSelectMenuOptionBuilder().setLabel('Originul').setValue('Originul'),
+            new StringSelectMenuOptionBuilder().setLabel('Astral Shrine').setValue('Astral Shrine'),
+            new StringSelectMenuOptionBuilder().setLabel('Lavarock Shore').setValue('Lavarock Shore')
           );
 
         return await interaction.update({
