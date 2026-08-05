@@ -24,7 +24,8 @@ const GUILD_ID = '1243470533316579361'; // Server ID
 const HELPER_ROLE_ID = 'YOUR_HELPER_ROLE_ID'; // Fallback Helper Role ID
 const TICKET_GUIDE_URL = 'https://discord.com'; // Replace with actual Guide URL or Channel Link
 
-const DEFAULT_BANNER_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
+// Your standard header banner
+const STANDARD_BANNER_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
 
 const client = new Client({
   intents: [
@@ -65,7 +66,7 @@ const AQW_CLASSES = {
   lc: { label: 'LightCaster', short: 'LC', emoji: '✨' }
 };
 
-// --- ⚙️ CUSTOM TICKET PRESETS & CATEGORY BANNERS ⚙️ ---
+// --- ⚙️ CUSTOM TICKET PRESETS ⚙️ ---
 const TICKET_PRESETS = {
   farming: { 
     label: 'Farming Assistance', 
@@ -73,7 +74,7 @@ const TICKET_PRESETS = {
     points: 3, 
     emoji: '<:queststart:1531490481991843862>', 
     roleIds: ['1529499059596038285'],
-    bannerUrl: DEFAULT_BANNER_URL
+    bannerUrl: STANDARD_BANNER_URL
   },
   ultra_weeklies: { 
     label: 'Ultra Weeklies', 
@@ -81,7 +82,7 @@ const TICKET_PRESETS = {
     points: 8, 
     emoji: '<:aqwDecay:1533349135460335668>', 
     roleIds: ['1529499021884919858'],
-    bannerUrl: DEFAULT_BANNER_URL
+    bannerUrl: STANDARD_BANNER_URL
   },
   seven_man_dailies: { 
     label: '7-Man Dailies', 
@@ -89,7 +90,7 @@ const TICKET_PRESETS = {
     points: 5, 
     emoji: '<:aqwGauntlet:1531490394146078820>', 
     roleIds: ['1529499059596038285', '1529499021884919858'],
-    bannerUrl: DEFAULT_BANNER_URL
+    bannerUrl: STANDARD_BANNER_URL
   },
   ultra_dailies: { 
     label: 'Ultra Dailies', 
@@ -97,7 +98,7 @@ const TICKET_PRESETS = {
     points: 5, 
     emoji: '<:wolfblade:1533348197223632956>', 
     roleIds: ['1529499021884919858'],
-    bannerUrl: DEFAULT_BANNER_URL
+    bannerUrl: STANDARD_BANNER_URL
   },
   server_ticket: { 
     label: 'Server Ticket / Support', 
@@ -105,7 +106,7 @@ const TICKET_PRESETS = {
     points: 0, 
     emoji: '<:Ticket:1533348464908435526>', 
     roleIds: ['1529498802149392614'],
-    bannerUrl: DEFAULT_BANNER_URL
+    bannerUrl: STANDARD_BANNER_URL
   },
   boss_help: { 
     label: 'General Boss Help', 
@@ -113,7 +114,7 @@ const TICKET_PRESETS = {
     points: 2, 
     emoji: '<:AQW_sword:1531490097768304714>', 
     roleIds: ['1529499059596038285'],
-    bannerUrl: DEFAULT_BANNER_URL
+    bannerUrl: STANDARD_BANNER_URL
   },
   other_help: { 
     label: 'Other Requests', 
@@ -121,7 +122,7 @@ const TICKET_PRESETS = {
     points: 1, 
     emoji: '<:aqwScroll:1533349936438181908>', 
     roleIds: ['1529499059596038285'],
-    bannerUrl: DEFAULT_BANNER_URL
+    bannerUrl: STANDARD_BANNER_URL
   }
 };
 
@@ -191,10 +192,10 @@ async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
   }
 }
 
-// --- SAFE JSON COMPONENTS V2 BUILDERS ---
+// --- SAFE JSON COMPONENTS V2 BUILDERS (TICKET STATS REMOVED) ---
 function buildTicketHubPayload(options = {}) {
   const {
-    imageUrl = DEFAULT_BANNER_URL,
+    imageUrl = STANDARD_BANNER_URL,
     guideDesc = "Read through the ticket rules and guidelines before requesting assistance.",
     guideUrl = TICKET_GUIDE_URL,
     createDesc = "Select a category from the menu to open a new ticket. Our helpers will join shortly!"
@@ -209,26 +210,7 @@ function buildTicketHubPayload(options = {}) {
         items: [{ media: { url: imageUrl } }]
       },
       {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `📊 **TICKET STATS**\n\n` +
-                     `• Completed: \`${globalStats.totalTicketsCompleted}\`\n` +
-                     `• Points: \`${globalStats.totalPointsGiven}\`\n` +
-                     `• Slain: \`${globalStats.totalBossesSlain}\``
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_refresh_stats',
-          label: 'Refresh',
-          emoji: { name: '🔄' }
-        }
-      },
-      {
-        type: 9,
+        type: 9, // Section 1: Ticket Guide
         components: [
           {
             type: 10,
@@ -244,7 +226,7 @@ function buildTicketHubPayload(options = {}) {
         }
       },
       {
-        type: 9,
+        type: 9, // Section 2: Make a Ticket
         components: [
           {
             type: 10,
@@ -268,11 +250,11 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- MATCHING REFERENCE DESIGN PANEL BUILDER ---
+// --- IN-TICKET PANEL BUILDER ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
-  const ticketBanner = categoryPreset.bannerUrl || DEFAULT_BANNER_URL;
+  const ticketBanner = categoryPreset.bannerUrl || STANDARD_BANNER_URL;
 
   const reqClass = AQW_CLASSES[ticketData.requesterClass] || { label: 'DPS', emoji: '⚔️' };
   const requesterTag = `<@${ticketData.requesterId}> (${ticketData.ign})`;
@@ -280,7 +262,7 @@ function buildTicketControlPayload(ticketData, userMention) {
   const helpersFormatted = ticketData.helpers.length > 0
     ? ticketData.helpers.map(h => {
         const cls = AQW_CLASSES[h.classKey] || { label: 'DPS', emoji: '⚔️' };
-        return `• ${cls.emoji} **${cls.label}:** <@${h.id}>`;
+        return `• ${cls.emoji}**${cls.label}:** <@${h.id}>`;
       }).join('\n')
     : '• None';
 
@@ -294,7 +276,7 @@ function buildTicketControlPayload(ticketData, userMention) {
       components: [
         {
           type: 10,
-          content: `🎯 **Points:**\n> **${ticketData.customPoints}**`
+          content: `🎖️ **Points:**\n> **${ticketData.customPoints}**`
         }
       ],
       accessory: {
@@ -310,7 +292,7 @@ function buildTicketControlPayload(ticketData, userMention) {
       components: [
         {
           type: 10,
-          content: `👤 **Requester ${reqClass.emoji}${reqClass.label}:** ${requesterTag}\n\n` +
+          content: `👤 **Requester ⚔️${reqClass.label}:** ${requesterTag}\n\n` +
                    `**Selected server:**\n> **${ticketData.server}**`
         }
       ],
@@ -359,28 +341,32 @@ function buildTicketControlPayload(ticketData, userMention) {
       components: [
         {
           type: 10,
-          content: `Finished with the ticket?`
+          content: `Finished with the ticket? Click **Complete** or **Cancel**!`
         }
-      ]
+      ],
+      accessory: {
+        type: 2,
+        style: 3,
+        custom_id: 'btn_complete',
+        label: 'Complete ticket',
+        emoji: { name: '🎟️' }
+      }
     },
     {
-      type: 1, // Action Row for Finish Controls
+      type: 9,
       components: [
         {
-          type: 2,
-          style: 3, // Green
-          custom_id: 'btn_complete',
-          label: 'Complete ticket',
-          emoji: { name: '🎟️' }
-        },
-        {
-          type: 2,
-          style: 4, // Red
-          custom_id: 'btn_cancel',
-          label: 'Cancel ticket',
-          emoji: { name: '🎟️' }
+          type: 10,
+          content: `Need to cancel this request?`
         }
-      ]
+      ],
+      accessory: {
+        type: 2,
+        style: 4,
+        custom_id: 'btn_cancel',
+        label: 'Cancel ticket',
+        emoji: { name: '🎟️' }
+      }
     },
     {
       type: 9,
@@ -424,7 +410,7 @@ function buildTicketControlPayload(ticketData, userMention) {
       ],
       accessory: {
         type: 2,
-        style: 3, // Green
+        style: 3,
         custom_id: 'btn_claim',
         label: 'Claim ticket',
         emoji: { name: '🤝' }
@@ -594,13 +580,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    if (interaction.isButton() && interaction.customId === 'btn_refresh_stats') {
-      return await interaction.reply({
-        content: `🔄 **Stats Refreshed:** Total completed tickets: **${globalStats.totalTicketsCompleted}**`,
-        ephemeral: true
-      });
-    }
-
     if (interaction.isButton() && interaction.customId === 'btn_all_helpers') {
       return await interaction.reply({
         content: '🔒 **Helpers Status:** Showing active assigned squad members for this ticket.',
@@ -724,7 +703,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return await interaction.showModal(modal);
     }
 
-    // 3. CHANGE ROLE SELECT MENU HANDLER (10 CLASSES)
+    // 3. CHANGE ROLE SELECT MENU HANDLER
     if (interaction.isStringSelectMenu() && interaction.customId === 'select_change_class') {
       const ticketData = activeTickets.get(interaction.channel.id);
       if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
@@ -747,7 +726,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       activeTickets.set(interaction.channel.id, ticketData);
 
-      // Simple status update bar inside ticket channel
       await interaction.channel.send({
         content: `🟢 **${interaction.user.username}** changed class to **${cls.label} (${cls.short})**`
       });
@@ -845,7 +823,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const newTicketData = {
           requesterId: interaction.user.id,
-          requesterClass: 'lr', // Default Class
+          requesterClass: 'lr',
           type: ticketType,
           ign,
           server: serverName,
@@ -898,7 +876,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return interaction.reply({ content: '❌ Claim the ticket first to change your class!', ephemeral: true });
         }
 
-        // Dropdown menu featuring 10 top classes
         const classMenu = new StringSelectMenuBuilder()
           .setCustomId('select_change_class')
           .setPlaceholder('Select your AQW class role...')
@@ -988,7 +965,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return interaction.reply({ content: `⚠️ Helper spots are full (${maxAllowed}/${maxAllowed})!`, ephemeral: true });
         }
 
-        // Default new helpers to Legion Revenant
         ticketData.helpers.push({ id: interaction.user.id, classKey: 'lr' });
         activeTickets.set(interaction.channel.id, ticketData);
 
@@ -1126,7 +1102,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           guildSettings.set(interaction.guild.id, cfg);
 
           const payload = buildTicketHubPayload({
-            imageUrl: customBanner || DEFAULT_BANNER_URL,
+            imageUrl: customBanner || STANDARD_BANNER_URL,
             guideTitle,
             guideDesc,
             guideUrl,
