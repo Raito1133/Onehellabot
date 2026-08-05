@@ -173,7 +173,7 @@ async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
   }
 }
 
-// --- SAFE JSON COMPONENTS V2 BUILDERS ---
+// --- STRICT COMPONENTS V2 HUB PAYLOAD ---
 function buildTicketHubPayload(options = {}) {
   const {
     imageUrl = BANNER_IMAGE_URL,
@@ -187,6 +187,16 @@ function buildTicketHubPayload(options = {}) {
     type: 17, // Container
     accent_color: 0x8b0000, // Dark Red Accent
     components: [
+      {
+        type: 12, // Media Gallery Component (Renders full width banner natively in V2)
+        items: [
+          {
+            media: {
+              url: imageUrl
+            }
+          }
+        ]
+      },
       {
         type: 9, // Section 1: Ticket Stats
         components: [
@@ -218,7 +228,7 @@ function buildTicketHubPayload(options = {}) {
           type: 2,
           style: 2,
           custom_id: 'btn_ticket_guide',
-          label: 'BRO GUIDE',
+          label: 'Ticket Guide',
           emoji: { name: '🎫' }
         }
       },
@@ -241,12 +251,7 @@ function buildTicketHubPayload(options = {}) {
     ]
   };
 
-  const bannerEmbed = new EmbedBuilder()
-    .setImage(imageUrl)
-    .setColor('#8b0000');
-
   return {
-    embeds: [bannerEmbed],
     components: [containerComponent],
     flags: MessageFlags.IsComponentsV2
   };
@@ -258,9 +263,6 @@ function buildTicketControlPayload(ticketData, userMention, rolePing) {
     ? ticketData.helpers.map(id => `• <@${id}>`).join('\n')
     : 'None';
 
-  let sections = [];
-
-  // Top section with ping text cleanly integrated into the V2 container
   const headerSection = {
     type: 9,
     components: [
@@ -270,6 +272,8 @@ function buildTicketControlPayload(ticketData, userMention, rolePing) {
       }
     ]
   };
+
+  let sections = [];
 
   if (ticketData.type === 'server_ticket') {
     sections = [
@@ -720,7 +724,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
           ? pingRoleIds.map(id => `<@&${id}>`).join(' ') 
           : '@Helper';
         
-        // Build payload and route ping directly inside component tree to maintain strict V2 rules
         const payload = buildTicketControlPayload(newTicketData, `${interaction.user}`, helperRolePing);
         const mainMsg = await ticketChannel.send({ 
           components: payload.components,
@@ -999,7 +1002,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
           });
 
           await channel.send({
-            embeds: payload.embeds,
             components: payload.components,
             flags: payload.flags
           });
