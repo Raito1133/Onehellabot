@@ -170,7 +170,7 @@ async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
   }
 }
 
-// --- FIXED JSON COMPONENTS V2 BUILDER ---
+// --- SAFE JSON COMPONENTS V2 BUILDERS ---
 function buildTicketHubPayload(options = {}) {
   const {
     bannerUrl = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif',
@@ -183,10 +183,10 @@ function buildTicketHubPayload(options = {}) {
 
   const containerComponent = {
     type: 17, // Container
-    accent_color: 0x8b0000, // Matching dark red accents
+    accent_color: 0x8b0000, // Dark Red accent
     components: [
       {
-        type: 11, // Media Gallery placed directly in Container
+        type: 13, // Media Gallery Component (Type 13 allowed inside Container)
         items: [
           {
             media: {
@@ -208,7 +208,7 @@ function buildTicketHubPayload(options = {}) {
         ]
       },
       {
-        type: 9, // Section 2: Guide Section
+        type: 9, // Section 2: Guide
         components: [
           {
             type: 10,
@@ -217,14 +217,14 @@ function buildTicketHubPayload(options = {}) {
         ],
         accessory: {
           type: 2,
-          style: 2, // Secondary / Grey button
+          style: 2, // Secondary / Grey
           label: 'Ticket Guide',
           url: guideUrl,
           emoji: { name: '🎫' }
         }
       },
       {
-        type: 9, // Section 3: Create Ticket Section
+        type: 9, // Section 3: Create Ticket
         components: [
           {
             type: 10,
@@ -233,7 +233,7 @@ function buildTicketHubPayload(options = {}) {
         ],
         accessory: {
           type: 2,
-          style: 2, // Secondary / Grey button
+          style: 2, // Secondary / Grey
           custom_id: 'btn_open_ticket_menu',
           label: 'Create Ticket',
           emoji: { name: '🤝' }
