@@ -59,7 +59,7 @@ const TICKET_PRESETS = {
     label: 'Farming Assistance', 
     max: 6, 
     points: 3, 
-    emoji: { id: '1531490481991843862', name: 'queststart' }, 
+    emoji: '<:queststart:1531490481991843862>', 
     roleIds: ['1529499059596038285'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x8b0000 
@@ -68,7 +68,7 @@ const TICKET_PRESETS = {
     label: 'Ultra Weeklies', 
     max: 3, 
     points: 8, 
-    emoji: { id: '1533349135460335668', name: 'aqwDecay' }, 
+    emoji: '<:aqwDecay:1533349135460335668>', 
     roleIds: ['1529499021884919858'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x9b59b6 
@@ -77,7 +77,7 @@ const TICKET_PRESETS = {
     label: '7-Man Dailies', 
     max: 6, 
     points: 5, 
-    emoji: { id: '1531490394146078820', name: 'aqwGauntlet' }, 
+    emoji: '<:aqwGauntlet:1531490394146078820>', 
     roleIds: ['1529499059596038285', '1529499021884919858'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0xe67e22 
@@ -86,7 +86,7 @@ const TICKET_PRESETS = {
     label: 'Ultra Dailies', 
     max: 3, 
     points: 5, 
-    emoji: { id: '1533348197223632956', name: 'wolfblade' }, 
+    emoji: '<:wolfblade:1533348197223632956>', 
     roleIds: ['1529499021884919858'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x3498db 
@@ -95,7 +95,7 @@ const TICKET_PRESETS = {
     label: 'Server Ticket / Support', 
     max: 2, 
     points: 0, 
-    emoji: { id: '1533348464908435526', name: 'Ticket' }, 
+    emoji: '<:Ticket:1533348464908435526>', 
     roleIds: ['1529498802149392614'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x2ecc71 
@@ -104,7 +104,7 @@ const TICKET_PRESETS = {
     label: 'General Boss Help', 
     max: 6, 
     points: 2, 
-    emoji: { id: '1531490097768304714', name: 'AQW_sword' }, 
+    emoji: '<:AQW_sword:1531490097768304714>', 
     roleIds: ['1529499059596038285'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0xe74c3c 
@@ -113,7 +113,7 @@ const TICKET_PRESETS = {
     label: 'Other Requests', 
     max: 6, 
     points: 1, 
-    emoji: { id: '1533349936438181908', name: 'aqwScroll' }, 
+    emoji: '<:aqwScroll:1533349936438181908>', 
     roleIds: ['1529499059596038285'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x95a5a6 
@@ -216,7 +216,7 @@ function buildTicketHubPayload(options = {}) {
           style: 5,
           url: guideUrl,
           label: 'Guide',
-          emoji: { id: '1533348464908435526', name: 'Ticket', animated: false }
+          emoji: { id: '1533348464908435526', name: 'Ticket' }
         }
       },
       { type: 14 },
@@ -233,7 +233,7 @@ function buildTicketHubPayload(options = {}) {
           style: 2,
           custom_id: 'btn_open_ticket_menu',
           label: 'Create',
-          emoji: { id: '1533348464908435526', name: 'Ticket', animated: false }
+          emoji: { id: '1533348464908435526', name: 'Ticket' }
         }
       }
     ]
@@ -245,7 +245,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- STABLE TICKET PANEL CONTROL (USING STANDARD ACTION ROWS FOR BUTTONS) ---
+// --- FULLY RESTORED TICKET PANEL CONTROL (BUTTONS AND INFORMATION) ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -257,7 +257,6 @@ function buildTicketControlPayload(ticketData, userMention) {
     ? ticketData.helpers.map(h => `• <@${h.id}>`).join('\n')
     : '• None';
 
-  // Container to display info cleanly
   const containerComponent = {
     type: 17,
     accent_color: accentColor,
@@ -282,18 +281,17 @@ function buildTicketControlPayload(ticketData, userMention) {
     ]
   };
 
-  // Button Action Rows with your requested custom animated emojis and names
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('btn_change_server')
       .setLabel('Server')
       .setStyle(ButtonStyle.Secondary)
-      .setEmoji({ id: '1534553693884514404', name: 'arrow', animated: true }),
+      .setEmoji('<:arrow:1534553693884514404>'),
     new ButtonBuilder()
       .setCustomId('btn_claim')
       .setLabel('Claim')
       .setStyle(ButtonStyle.Success)
-      .setEmoji({ id: '1534558039183458526', name: 'greendot', animated: true }),
+      .setEmoji('<:greendot:1534558039183458526>'),
     new ButtonBuilder()
       .setCustomId('btn_change_bosses')
       .setLabel('Change Mobs')
@@ -303,7 +301,7 @@ function buildTicketControlPayload(ticketData, userMention) {
       .setCustomId('btn_pinghelpers')
       .setLabel('Ping')
       .setStyle(ButtonStyle.Secondary)
-      .setEmoji({ id: '1534551074550190110', name: '1369announce', animated: true })
+      .setEmoji('<:1369announce:1534551074550190110>')
   );
 
   const row2 = new ActionRowBuilder().addComponents(
@@ -311,17 +309,17 @@ function buildTicketControlPayload(ticketData, userMention) {
       .setCustomId('btn_location')
       .setLabel('Room Details')
       .setStyle(ButtonStyle.Secondary)
-      .setEmoji({ id: '1534547674164887622', name: 'AttentionAnimated', animated: true }),
+      .setEmoji('<:AttentionAnimated:1534547674164887622>'),
     new ButtonBuilder()
       .setCustomId('btn_complete')
       .setLabel('Complete')
       .setStyle(ButtonStyle.Success)
-      .setEmoji({ id: '1534558091801006142', name: 'bluedot', animated: true }),
+      .setEmoji('<:bluedot:1534558091801006142>'),
     new ButtonBuilder()
       .setCustomId('btn_cancel')
       .setLabel('Cancel')
       .setStyle(ButtonStyle.Danger)
-      .setEmoji({ id: '1534558064261206076', name: 'reddot', animated: true })
+      .setEmoji('<:reddot:1534558064261206076>')
   );
 
   return {
@@ -365,17 +363,17 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
       .setCustomId('btn_pinghelpers')
       .setLabel('Ping Staff')
       .setStyle(ButtonStyle.Secondary)
-      .setEmoji({ id: '1534551074550190110', name: '1369announce', animated: true }),
+      .setEmoji('<:1369announce:1534551074550190110>'),
     new ButtonBuilder()
       .setCustomId('btn_complete')
       .setLabel('Complete')
       .setStyle(ButtonStyle.Success)
-      .setEmoji({ id: '1534558091801006142', name: 'bluedot', animated: true }),
+      .setEmoji('<:bluedot:1534558091801006142>'),
     new ButtonBuilder()
       .setCustomId('btn_cancel')
       .setLabel('Cancel')
       .setStyle(ButtonStyle.Danger)
-      .setEmoji({ id: '1534558064261206076', name: 'reddot', animated: true })
+      .setEmoji('<:reddot:1534558064261206076>')
   );
 
   return {
