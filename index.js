@@ -5,6 +5,8 @@ const {
   Events,
   EmbedBuilder,
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   ModalBuilder,
@@ -14,8 +16,7 @@ const {
   REST,
   Routes,
   SlashCommandBuilder,
-  ChannelType,
-  MessageFlags
+  ChannelType
 } = require('discord.js');
 const http = require('http');
 
@@ -185,56 +186,33 @@ function buildTicketHubPayload(options = {}) {
     createDesc = "Select a category from the menu to open a new ticket. Our helpers will join shortly!"
   } = options;
 
-  const containerComponent = {
-    type: 17,
-    accent_color: 0x8b0000,
-    components: [
-      {
-        type: 12,
-        items: [{ media: { url: imageUrl } }]
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `🔖 **TICKET GUIDE**\n\n${guideDesc.replace(/\\n/g, '\n')}`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 5,
-          url: guideUrl,
-          label: 'Guide',
-          emoji: { id: '1533348464908435526', name: 'Ticket', animated: false }
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `🤝 **MAKE A TICKET**\n\n${createDesc.replace(/\\n/g, '\n')}`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_open_ticket_menu',
-          label: 'Create',
-          emoji: { id: '1533348464908435526', name: 'Ticket', animated: false }
-        }
-      }
-    ]
-  };
+  const embed = new EmbedBuilder()
+    .setTitle('🎫 Ticket Hub')
+    .setDescription(`**TICKET GUIDE**\n\n${guideDesc.replace(/\\n/g, '\n')}\n\n**MAKE A TICKET**\n\n${createDesc.replace(/\\n/g, '\n')}`)
+    .setImage(imageUrl)
+    .setColor(0x8b0000)
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setStyle(ButtonStyle.Link)
+      .setURL(guideUrl)
+      .setLabel('Guide')
+      .setEmoji({ id: '1533348464908435526', name: 'Ticket', animated: false }),
+    new ButtonBuilder()
+      .setCustomId('btn_open_ticket_menu')
+      .setStyle(ButtonStyle.Primary)
+      .setLabel('Create')
+      .setEmoji({ id: '1533348464908435526', name: 'Ticket', animated: false })
+  );
 
   return {
-    components: [containerComponent],
-    flags: MessageFlags.IsComponentsV2
+    embeds: [embed],
+    components: [row]
   };
 }
 
-// --- TICKET CONTROL PANEL WITH PROPERLY FORMATTED CUSTOM ANIMATED EMOJIS ---
+// --- 100% STABLE TICKET PANEL CONTROL WITH CUSTOM ANIMATED EMOJIS ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -246,149 +224,62 @@ function buildTicketControlPayload(ticketData, userMention) {
     ? ticketData.helpers.map(h => `• <@${h.id}>`).join('\n')
     : '• None';
 
-  const containerComponent = {
-    type: 17,
-    accent_color: accentColor,
-    components: [
-      {
-        type: 12,
-        items: [{ media: { url: ticketBanner } }]
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `🖐️ **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_helpers_list',
-          label: 'Helpers',
-          emoji: { id: '1326878430284742707', name: 'n_nox_y', animated: false }
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `👤 **Requester:** ${requesterTag}\n\n` +
-                     `**Selected server:**\n-# > **${ticketData.server}**`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_change_server',
-          label: 'Server',
-          emoji: { id: '1534553693884514404', name: 'arrow', animated: true }
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Claim the ticket to assist!`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 3,
-          custom_id: 'btn_claim',
-          label: 'Claim',
-          emoji: { id: '1534558039183458526', name: 'greendot', animated: true }
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `**Bosses / Mobs:**\n-# > **${ticketData.description}**`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_change_bosses',
-          label: 'Change Mobs',
-          emoji: { name: 'chuckles' }
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Need assistance? **Ping helpers!**`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_pinghelpers',
-          label: 'Ping',
-          emoji: { id: '1534551074550190110', name: '1369announce', animated: true }
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `View room codes and location details!`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_location',
-          label: 'Room Details',
-          emoji: { id: '1534547674164887622', name: 'AttentionAnimated', animated: true }
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Finished with the ticket?`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 3,
-          custom_id: 'btn_complete',
-          label: 'Complete',
-          emoji: { id: '1534558091801006142', name: 'bluedot', animated: true }
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Cancel this ticket request?`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 4,
-          custom_id: 'btn_cancel',
-          label: 'Cancel',
-          emoji: { id: '1534558064261206076', name: 'reddot', animated: true }
-        }
-      }
-    ]
-  };
+  const embed = new EmbedBuilder()
+    .setTitle('🎫 Ticket Control Panel')
+    .setDescription(
+      `🖐️ **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}\n\n` +
+      `👤 **Requester:** ${requesterTag}\n\n` +
+      `🖥️ **Selected Server:** \`${ticketData.server}\`\n\n` +
+      `💀 **Bosses / Mobs:** \`${ticketData.description}\``
+    )
+    .setImage(ticketBanner)
+    .setColor(accentColor)
+    .setTimestamp();
+
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('btn_change_server')
+      .setLabel('Server')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji({ id: '1534553693884514404', name: 'arrow', animated: true }),
+    new ButtonBuilder()
+      .setCustomId('btn_claim')
+      .setLabel('Claim')
+      .setStyle(ButtonStyle.Success)
+      .setEmoji({ id: '1534558039183458526', name: 'greendot', animated: true }),
+    new ButtonBuilder()
+      .setCustomId('btn_change_bosses')
+      .setLabel('Change Mobs')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji({ name: 'chuckles' }),
+    new ButtonBuilder()
+      .setCustomId('btn_pinghelpers')
+      .setLabel('Ping')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji({ id: '1534551074550190110', name: '1369announce', animated: true })
+  );
+
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('btn_location')
+      .setLabel('Room Details')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji({ id: '1534547674164887622', name: 'AttentionAnimated', animated: true }),
+    new ButtonBuilder()
+      .setCustomId('btn_complete')
+      .setLabel('Complete')
+      .setStyle(ButtonStyle.Success)
+      .setEmoji({ id: '1534558091801006142', name: 'bluedot', animated: true }),
+    new ButtonBuilder()
+      .setCustomId('btn_cancel')
+      .setLabel('Cancel')
+      .setStyle(ButtonStyle.Danger)
+      .setEmoji({ id: '1534558064261206076', name: 'reddot', animated: true })
+  );
 
   return {
-    components: [containerComponent],
-    flags: MessageFlags.IsComponentsV2
+    embeds: [embed],
+    components: [row1, row2]
   };
 }
 
@@ -399,101 +290,38 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
 
   const requesterTag = `<@${ticketData.requesterId}> (${ticketData.ign})`;
 
-  const containerComponent = {
-    type: 17,
-    accent_color: accentColor,
-    components: [
-      {
-        type: 12,
-        items: [{ media: { url: ticketBanner } }]
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `👤 **User:** ${requesterTag}\n\n` +
-                     `**Subject / Concern:**\n-# > **${ticketData.subject}**`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_support_info',
-          label: 'Support',
-          emoji: { id: '1534553693884514404', name: 'arrow', animated: true }
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `**Details / Report:**\n-# > **${ticketData.description}**`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_support_details',
-          label: 'Details',
-          emoji: { name: 'chuckles' }
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Need staff attention? **Ping staff!**`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_pinghelpers',
-          label: 'Ping',
-          emoji: { id: '1534551074550190110', name: '1369announce', animated: true }
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Issue resolved? Click **Complete** or **Cancel**!`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 3,
-          custom_id: 'btn_complete',
-          label: 'Complete',
-          emoji: { id: '1534558091801006142', name: 'bluedot', animated: true }
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Need to close or cancel this support request?`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 4,
-          custom_id: 'btn_cancel',
-          label: 'Cancel',
-          emoji: { id: '1534558064261206076', name: 'reddot', animated: true }
-        }
-      }
-    ]
-  };
+  const embed = new EmbedBuilder()
+    .setTitle('🛠️ Support Ticket Panel')
+    .setDescription(
+      `👤 **User:** ${requesterTag}\n\n` +
+      `**Subject / Concern:** \`${ticketData.subject}\`\n\n` +
+      `**Details / Report:** \`${ticketData.description}\``
+    )
+    .setImage(ticketBanner)
+    .setColor(accentColor)
+    .setTimestamp();
+
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('btn_pinghelpers')
+      .setLabel('Ping Staff')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji({ id: '1534551074550190110', name: '1369announce', animated: true }),
+    new ButtonBuilder()
+      .setCustomId('btn_complete')
+      .setLabel('Complete')
+      .setStyle(ButtonStyle.Success)
+      .setEmoji({ id: '1534558091801006142', name: 'bluedot', animated: true }),
+    new ButtonBuilder()
+      .setCustomId('btn_cancel')
+      .setLabel('Cancel')
+      .setStyle(ButtonStyle.Danger)
+      .setEmoji({ id: '1534558064261206076', name: 'reddot', animated: true })
+  );
 
   return {
-    components: [containerComponent],
-    flags: MessageFlags.IsComponentsV2
+    embeds: [embed],
+    components: [row1]
   };
 }
 
@@ -884,7 +712,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           ? buildSupportTicketControlPayload(newTicketData, `${interaction.user}`)
           : buildTicketControlPayload(newTicketData, `${interaction.user}`);
 
-        const mainMsg = await ticketChannel.send({ components: payload.components, flags: payload.flags });
+        const mainMsg = await ticketChannel.send({ embeds: payload.embeds, components: payload.components });
 
         await mainMsg.pin().catch(() => {});
 
@@ -1150,8 +978,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
           });
 
           await channel.send({
-            components: payload.components,
-            flags: payload.flags
+            embeds: payload.embeds,
+            components: payload.components
           });
 
           return await interaction.editReply(`✅ Ticket Hub Panel successfully posted to ${channel}!`);
