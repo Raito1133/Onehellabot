@@ -24,7 +24,7 @@ const GUILD_ID = '1243470533316579361'; // Server ID
 const HELPER_ROLE_ID = 'YOUR_HELPER_ROLE_ID'; // Fallback Helper Role ID
 const TICKET_GUIDE_URL = 'https://discord.com'; // Replace with actual Guide URL or Channel Link
 
-// Your standard header banner
+// Standard header banner
 const STANDARD_BANNER_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
 
 const client = new Client({
@@ -192,7 +192,7 @@ async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
   }
 }
 
-// --- SAFE JSON COMPONENTS V2 BUILDERS (TICKET STATS REMOVED) ---
+// --- SAFE JSON COMPONENTS V2 BUILDERS ---
 function buildTicketHubPayload(options = {}) {
   const {
     imageUrl = STANDARD_BANNER_URL,
@@ -209,6 +209,7 @@ function buildTicketHubPayload(options = {}) {
         type: 12,
         items: [{ media: { url: imageUrl } }]
       },
+      { type: 14 }, // Divider Line
       {
         type: 9, // Section 1: Ticket Guide
         components: [
@@ -221,10 +222,11 @@ function buildTicketHubPayload(options = {}) {
           type: 2,
           style: 5,
           url: guideUrl,
-          label: 'Ticket Guide',
+          label: 'Guide',
           emoji: { name: '🎫' }
         }
       },
+      { type: 14 }, // Divider Line
       {
         type: 9, // Section 2: Make a Ticket
         components: [
@@ -237,7 +239,7 @@ function buildTicketHubPayload(options = {}) {
           type: 2,
           style: 2,
           custom_id: 'btn_open_ticket_menu',
-          label: 'Create Ticket',
+          label: 'Create',
           emoji: { name: '🤝' }
         }
       }
@@ -250,7 +252,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- IN-TICKET PANEL BUILDER ---
+// --- IN-TICKET PANEL BUILDER (SMALL QUOTE FONT, DIVIDER LINES, SINGLE-WORD BUTTONS) ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -271,55 +273,59 @@ function buildTicketControlPayload(ticketData, userMention) {
       type: 12,
       items: [{ media: { url: ticketBanner } }]
     },
+    { type: 14 }, // Divider Line
     {
       type: 9,
       components: [
         {
           type: 10,
-          content: `🎖️ **Points:**\n> **${ticketData.customPoints}**`
+          content: `🎖️ **Points:**\n-# > **${ticketData.customPoints}**`
         }
       ],
       accessory: {
         type: 2,
         style: 2,
         custom_id: 'btn_all_helpers',
-        label: 'All helpers',
+        label: 'Helpers',
         emoji: { name: '🔒' }
       }
     },
+    { type: 14 }, // Divider Line
     {
       type: 9,
       components: [
         {
           type: 10,
           content: `👤 **Requester ⚔️${reqClass.label}:** ${requesterTag}\n\n` +
-                   `**Selected server:**\n> **${ticketData.server}**`
+                   `**Selected server:**\n-# > **${ticketData.server}**`
         }
       ],
       accessory: {
         type: 2,
         style: 2,
         custom_id: 'btn_change_server',
-        label: 'Change server',
+        label: 'Server',
         emoji: { name: '🖥️' }
       }
     },
+    { type: 14 }, // Divider Line
     {
       type: 9,
       components: [
         {
           type: 10,
-          content: `**Bosses:**\n> **${ticketData.description}**`
+          content: `**Bosses:**\n-# > **${ticketData.description}**`
         }
       ],
       accessory: {
         type: 2,
         style: 2,
         custom_id: 'btn_change_bosses',
-        label: 'Change bosses',
+        label: 'Edit',
         emoji: { name: '💀' }
       }
     },
+    { type: 14 }, // Divider Line
     {
       type: 9,
       components: [
@@ -332,10 +338,11 @@ function buildTicketControlPayload(ticketData, userMention) {
         type: 2,
         style: 2,
         custom_id: 'btn_pinghelpers',
-        label: 'Ping helpers',
+        label: 'Ping',
         emoji: { name: '🔔' }
       }
     },
+    { type: 14 }, // Divider Line
     {
       type: 9,
       components: [
@@ -348,10 +355,11 @@ function buildTicketControlPayload(ticketData, userMention) {
         type: 2,
         style: 3,
         custom_id: 'btn_complete',
-        label: 'Complete ticket',
+        label: 'Complete',
         emoji: { name: '🎟️' }
       }
     },
+    { type: 14 }, // Divider Line
     {
       type: 9,
       components: [
@@ -364,10 +372,11 @@ function buildTicketControlPayload(ticketData, userMention) {
         type: 2,
         style: 4,
         custom_id: 'btn_cancel',
-        label: 'Cancel ticket',
+        label: 'Cancel',
         emoji: { name: '🎟️' }
       }
     },
+    { type: 14 }, // Divider Line
     {
       type: 9,
       components: [
@@ -380,26 +389,28 @@ function buildTicketControlPayload(ticketData, userMention) {
         type: 2,
         style: 2,
         custom_id: 'btn_change_role',
-        label: 'Change role',
+        label: 'Role',
         emoji: { name: '👏' }
       }
     },
+    { type: 14 }, // Divider Line
     {
       type: 9,
       components: [
         {
           type: 10,
-          content: `Forgot room codes? Click **Room codes**!`
+          content: `Forgot room codes? Click **Codes**!`
         }
       ],
       accessory: {
         type: 2,
         style: 2,
         custom_id: 'btn_location',
-        label: 'Room codes',
+        label: 'Codes',
         emoji: { name: '📜' }
       }
     },
+    { type: 14 }, // Divider Line
     {
       type: 9,
       components: [
@@ -412,7 +423,7 @@ function buildTicketControlPayload(ticketData, userMention) {
         type: 2,
         style: 3,
         custom_id: 'btn_claim',
-        label: 'Claim ticket',
+        label: 'Claim',
         emoji: { name: '🤝' }
       }
     }
@@ -935,7 +946,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels);
 
         if (!isRequester && !isHelper && !isAdmin) {
-          return interaction.reply({ content: '🔒 **Access Denied:** Click **Claim ticket** first to view room codes.', ephemeral: true });
+          return interaction.reply({ content: '🔒 **Access Denied:** Click **Claim** first to view room codes.', ephemeral: true });
         }
 
         return interaction.reply({
