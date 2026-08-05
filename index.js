@@ -7,8 +7,6 @@ const {
   ActionRowBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
@@ -24,10 +22,10 @@ const http = require('http');
 // --- ⚠️ CONFIGURATION ⚠️ ---
 const GUILD_ID = '1243470533316579361'; // Server ID
 const HELPER_ROLE_ID = 'YOUR_HELPER_ROLE_ID'; // Fallback Helper Role ID
-const DEFAULT_VERIFY_CHANNEL_ID = '1531294593780416743';
+const TICKET_GUIDE_URL = 'https://discord.com'; // Replace with your actual Guide URL or Channel Link
 
 // Direct Image URL for Header Banner
-const BANNER_IMAGE_URL = 'https://i.pinimg.com/736x/57/89/c2/5789c210d525774e5d8c5d40e4508a2e.jpgf';
+const BANNER_IMAGE_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
 
 const client = new Client({
   intents: [
@@ -46,12 +44,11 @@ const userRequestCounts = new Map();
 const guildSettings = new Map();
 const roleRewards = new Map();
 
-// Global Stats Store
+// Reset Global Stats (Minimalist)
 const globalStats = {
-  totalTicketsCompleted: 4857,
-  totalPointsGiven: 92354,
-  totalBossesSlain: 13089,
-  startDate: "Feb. '26"
+  totalTicketsCompleted: 0,
+  totalPointsGiven: 0,
+  totalBossesSlain: 0
 };
 
 // --- ⚙️ CUSTOM TICKET PRESETS ⚙️ ---
@@ -179,6 +176,7 @@ function buildTicketHubPayload(options = {}) {
     imageUrl = BANNER_IMAGE_URL,
     guideTitle = 'Tickets, rules and how to',
     guideDesc = "🔖 Before creating a ticket, read the guide for how they work.\nCheck it out by clicking on '**Ticket Guide**'",
+    guideUrl = TICKET_GUIDE_URL,
     createTitle = 'Need help with one or more bosses?',
     createDesc = "✨ Create a ticket by clicking the '**Create Ticket**' button!\nHelpers will be with you shortly to help you ❤️"
   } = options;
@@ -188,7 +186,7 @@ function buildTicketHubPayload(options = {}) {
     accent_color: 0x8b0000, // Dark Red Accent
     components: [
       {
-        type: 12, // Media Gallery Component (Native V2 Banner)
+        type: 12, // Media Gallery Header Banner
         items: [
           {
             media: {
@@ -198,14 +196,14 @@ function buildTicketHubPayload(options = {}) {
         ]
       },
       {
-        type: 9, // Section 1: Ticket Stats
+        type: 9, // Section 1: Minimalist Stats Counter
         components: [
           {
             type: 10,
-            content: `🔖 **Ticket Stats** (Since ${globalStats.startDate})\n\n` +
-                     `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed\n` +
-                     `🏅 **\`${globalStats.totalPointsGiven}\`** points awarded\n` +
-                     `⚔️ **\`${globalStats.totalBossesSlain}\`** bosses slain`
+            content: `📊 **System Stats**\n\n` +
+                     `• Completed: \`${globalStats.totalTicketsCompleted}\`\n` +
+                     `• Points: \`${globalStats.totalPointsGiven}\`\n` +
+                     `• Slain: \`${globalStats.totalBossesSlain}\``
           }
         ],
         accessory: {
@@ -217,7 +215,7 @@ function buildTicketHubPayload(options = {}) {
         }
       },
       {
-        type: 9, // Section 2: Guide
+        type: 9, // Section 2: Guide Link
         components: [
           {
             type: 10,
@@ -226,8 +224,8 @@ function buildTicketHubPayload(options = {}) {
         ],
         accessory: {
           type: 2,
-          style: 2,
-          custom_id: 'btn_ticket_guide',
+          style: 5, // URL Link Button Style
+          url: guideUrl,
           label: 'Ticket Guide',
           emoji: { name: '🎫' }
         }
@@ -263,6 +261,17 @@ function buildTicketControlPayload(ticketData, userMention, rolePing) {
     ? ticketData.helpers.map(id => `• <@${id}>`).join('\n')
     : 'None';
 
+  const bannerSection = {
+    type: 12, // In-Ticket Banner
+    items: [
+      {
+        media: {
+          url: BANNER_IMAGE_URL
+        }
+      }
+    ]
+  };
+
   const headerSection = {
     type: 9,
     components: [
@@ -284,6 +293,7 @@ function buildTicketControlPayload(ticketData, userMention, rolePing) {
 
   if (ticketData.type === 'server_ticket') {
     sections = [
+      bannerSection,
       headerSection,
       {
         type: 9,
@@ -309,6 +319,7 @@ function buildTicketControlPayload(ticketData, userMention, rolePing) {
     ];
   } else {
     sections = [
+      bannerSection,
       headerSection,
       {
         type: 9,
@@ -537,13 +548,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isButton() && interaction.customId === 'btn_refresh_stats') {
       return await interaction.reply({
         content: `🔄 **Stats Refreshed:** Total completed tickets: **${globalStats.totalTicketsCompleted}**`,
-        ephemeral: true
-      });
-    }
-
-    if (interaction.isButton() && interaction.customId === 'btn_ticket_guide') {
-      return await interaction.reply({
-        content: '📖 **Ticket Guide:** Read through the channel rules or ping an active staff member if you need assistance submitting requests.',
         ephemeral: true
       });
     }
@@ -810,6 +814,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
           ? pingRoleIds.map(id => `<@&${id}>`).join(' ') 
           : '@Helper';
         
+        // Send a dedicated ping message so the role gets notified
+        await ticketChannel.send({
+          content: `${helperRolePing} New ticket requested by ${interaction.user}!`
+        });
+
+        // Send main V2 control panel with banner inside
         const payload = buildTicketControlPayload(newTicketData, `${interaction.user}`, helperRolePing);
         const mainMsg = await ticketChannel.send({ 
           components: payload.components,
@@ -1069,6 +1079,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           const customBanner = options.getString('banner_url');
           const guideTitle = options.getString('guide_title') || undefined;
           const guideDesc = options.getString('guide_desc') || undefined;
+          const guideUrl = options.getString('guide_url') || undefined;
           const createTitle = options.getString('create_title') || undefined;
           const createDesc = options.getString('create_desc') || undefined;
           const category = options.getChannel('category');
@@ -1083,6 +1094,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             imageUrl: customBanner || BANNER_IMAGE_URL,
             guideTitle,
             guideDesc,
+            guideUrl,
             createTitle,
             createDesc
           });
@@ -1104,7 +1116,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const defaultFooterMessage = "A huge thank you to each and every one of you who made this possible! ❤️";
 
         const statsEmbed = new EmbedBuilder()
-          .setTitle(`Ticket stats since January 26th, 2026`)
+          .setTitle(`Ticket stats`)
           .setDescription(
             `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed.\n` +
             `🏅 **\`${globalStats.totalPointsGiven}\`** points given out.\n\n` +
