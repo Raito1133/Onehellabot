@@ -1018,6 +1018,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return await interaction.showModal(modal);
       }
 
+      // --- UPDATED CODES BUTTON WITH EPHEMERAL EMBED ---
       if (customId === 'btn_location') {
         if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
 
@@ -1029,8 +1030,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return interaction.reply({ content: '🔒 **Access Denied:** Click **Claim** first to view room codes.', ephemeral: true });
         }
 
-        return interaction.reply({
-          content: `📍 **Room Details:**\n• **IGN:** \`${ticketData.ign}\`\n• **Server:** \`${ticketData.server}\`\n• **Command:** \`${ticketData.room}\``,
+        const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
+        const accentColor = categoryPreset.accentColor || 0x3498db;
+
+        const codesEmbed = new EmbedBuilder()
+          .setTitle('📍 Room Details')
+          .setColor(accentColor)
+          .addFields(
+            { name: '👤 IGN', value: `\`${ticketData.ign}\``, inline: true },
+            { name: '🖥️ Server', value: `\`${ticketData.server}\``, inline: true },
+            { name: '📜 Command', value: `\`${ticketData.room}\``, inline: false }
+          )
+          .setFooter({ text: 'AQW Ticket System' })
+          .setTimestamp();
+
+        return await interaction.reply({
+          embeds: [codesEmbed],
           ephemeral: true
         });
       }
@@ -1105,55 +1120,68 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
+      // --- DEBUGGED & FIXED COMPLETION BUTTON HANDLER ---
       if (customId === 'btn_complete') {
         if (ticketData && interaction.user.id !== ticketData.requesterId && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
           return interaction.reply({ content: '❌ Only requester or staff can complete.', ephemeral: true });
         }
 
+        // Acknowledge immediately to prevent hanging
         await interaction.deferReply();
 
-        await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: false });
+        try {
+          // Lock channel permissions safely
+          await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: false }).catch(() => {});
 
-        if (ticketData) {
-          const currentReqs = userRequestCounts.get(ticketData.requesterId) || 0;
-          userRequestCounts.set(ticketData.requesterId, currentReqs + 1);
-        }
-
-        let pointsToAward = 0;
-        if (ticketData && ticketData.helpers.length > 0 && ticketData.type !== 'server_ticket') {
-          pointsToAward = getPointsForTicket(ticketData);
-
-          for (const hObj of ticketData.helpers) {
-            const current = helperPoints.get(hObj.id) || 0;
-            const updated = current + pointsToAward;
-            helperPoints.set(hObj.id, updated);
-
-            await checkAndAssignHelperRoles(interaction.guild, hObj.id, updated);
+          if (ticketData) {
+            const currentReqs = userRequestCounts.get(ticketData.requesterId) || 0;
+            userRequestCounts.set(ticketData.requesterId, currentReqs + 1);
           }
 
-          globalStats.totalTicketsCompleted += 1;
-          globalStats.totalPointsGiven += pointsToAward;
-          globalStats.totalBossesSlain += 1;
+          let pointsToAward = 0;
+          if (ticketData && ticketData.helpers.length > 0 && ticketData.type !== 'server_ticket') {
+            pointsToAward = getPointsForTicket(ticketData);
+
+            for (const hObj of ticketData.helpers) {
+              const current = helperPoints.get(hObj.id) || 0;
+              const updated = current + pointsToAward;
+              helperPoints.set(hObj.id, updated);
+
+              // Non-blocking role check
+              checkAndAssignHelperRoles(interaction.guild, hObj.id, updated).catch(console.error);
+            }
+
+            globalStats.totalTicketsCompleted += 1;
+            globalStats.totalPointsGiven += pointsToAward;
+            globalStats.totalBossesSlain += 1;
+          }
+
+          const helperMentionsLog = ticketData && ticketData.helpers.length > 0
+            ? ticketData.helpers.map(h => `<@${h.id}>`).join(', ')
+            : 'None';
+
+          sendTicketLog(
+            interaction.guild,
+            '✅ Ticket Completed',
+            `**Requester:** <@${ticketData.requesterId}>\n**Helpers:** ${helperMentionsLog}\n**Points Awarded:** \`${pointsToAward}\`\n**Channel:** \`#${interaction.channel.name}\``,
+            '#2ecc71'
+          ).catch(() => {});
+
+          const completionPayload = buildCompletionPayload(ticketData, pointsToAward);
+          await interaction.editReply(completionPayload);
+
+          activeTickets.delete(interaction.channel.id);
+          setTimeout(() => {
+            interaction.channel.delete().catch(() => {});
+          }, 5000);
+
+        } catch (err) {
+          console.error('Error during ticket completion:', err);
+          await interaction.editReply({ content: '❌ Failed to complete ticket properly. Channel deleting shortly.' }).catch(() => {});
+          setTimeout(() => {
+            interaction.channel.delete().catch(() => {});
+          }, 3000);
         }
-
-        const helperMentionsLog = ticketData && ticketData.helpers.length > 0
-          ? ticketData.helpers.map(h => `<@${h.id}>`).join(', ')
-          : 'None';
-
-        await sendTicketLog(
-          interaction.guild,
-          '✅ Ticket Completed',
-          `**Requester:** <@${ticketData.requesterId}>\n**Helpers:** ${helperMentionsLog}\n**Points Awarded:** \`${pointsToAward}\`\n**Channel:** \`#${interaction.channel.name}\``,
-          '#2ecc71'
-        );
-
-        const completionPayload = buildCompletionPayload(ticketData, pointsToAward);
-        await interaction.editReply(completionPayload);
-
-        activeTickets.delete(interaction.channel.id);
-        setTimeout(() => {
-          interaction.channel.delete().catch(() => {});
-        }, 5000);
 
         return;
       }
