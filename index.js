@@ -48,9 +48,9 @@ const roleRewards = new Map();
 
 // Global Stats Store
 const globalStats = {
-  totalTicketsCompleted: 4857,
-  totalPointsGiven: 92354,
-  totalBossesSlain: 13089,
+  totalTicketsCompleted: 0,
+  totalPointsGiven: 0,
+  totalBossesSlain: 0,
   startDate: "Feb. '26"
 };
 
