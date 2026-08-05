@@ -45,10 +45,10 @@ const roleRewards = new Map();
 
 // Global Stats Store
 const globalStats = {
-  totalTicketsCompleted: 0,
-  totalPointsGiven: 0,
-  totalBossesSlain: 0,
-  startDate: 'Feb. \'26'
+  totalTicketsCompleted: 4857,
+  totalPointsGiven: 92354,
+  totalBossesSlain: 13089,
+  startDate: "Feb. '26"
 };
 
 // --- ⚙️ CUSTOM TICKET PRESETS ⚙️ ---
@@ -170,32 +170,33 @@ async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
   }
 }
 
-// --- SAFE JSON COMPONENTS V2 BUILDERS ---
-function buildTicketHubPayload(bannerUrl = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif', customMessage = null) {
-  const defaultMessage = `🔖 **Need help with one or more bosses?**\n\n` +
-                         `• Create a ticket by clicking the '**Create Ticket**' button!\nHelpers will be with you shortly to help you ❤️`;
+// --- FIXED JSON COMPONENTS V2 BUILDER ---
+function buildTicketHubPayload(options = {}) {
+  const {
+    bannerUrl = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif',
+    guideTitle = 'Tickets, rules and how to',
+    guideDesc = "🔖 Before creating a ticket, read the guide for how they work.\nCheck it out by clicking on '**Ticket Guide**'",
+    guideUrl = 'https://discord.com',
+    createTitle = 'Need help with one or more bosses?',
+    createDesc = "✨ Create a ticket by clicking the '**Create Ticket**' button!\nHelpers will be with you shortly to help you ❤️"
+  } = options;
 
   const containerComponent = {
     type: 17, // Container
-    accent_color: 0x3498db,
+    accent_color: 0x8b0000, // Matching dark red accents
     components: [
       {
-        type: 9, // Section wrapper for Media Gallery to comply with Container types
-        components: [
+        type: 11, // Media Gallery placed directly in Container
+        items: [
           {
-            type: 11,
-            items: [
-              {
-                media: {
-                  url: bannerUrl
-                }
-              }
-            ]
+            media: {
+              url: bannerUrl
+            }
           }
         ]
       },
       {
-        type: 9, // Section: Ticket Stats
+        type: 9, // Section 1: Ticket Stats
         components: [
           {
             type: 10,
@@ -204,26 +205,35 @@ function buildTicketHubPayload(bannerUrl = 'https://i.pinimg.com/originals/5d/d8
                      `🏅 **\`${globalStats.totalPointsGiven}\`** points awarded\n` +
                      `⚔️ **\`${globalStats.totalBossesSlain}\`** bosses slain`
           }
-        ],
-        accessory: {
-          type: 2,
-          style: 5,
-          label: 'Ticket Guide',
-          url: 'https://discord.com',
-          emoji: { name: '🎫' }
-        }
+        ]
       },
       {
-        type: 9, // Section: Create Ticket
+        type: 9, // Section 2: Guide Section
         components: [
           {
             type: 10,
-            content: customMessage ? customMessage.replace(/\\n/g, '\n') : defaultMessage
+            content: `🔖 **${guideTitle}**\n\n${guideDesc.replace(/\\n/g, '\n')}`
           }
         ],
         accessory: {
           type: 2,
-          style: 1,
+          style: 2, // Secondary / Grey button
+          label: 'Ticket Guide',
+          url: guideUrl,
+          emoji: { name: '🎫' }
+        }
+      },
+      {
+        type: 9, // Section 3: Create Ticket Section
+        components: [
+          {
+            type: 10,
+            content: `🔖 **${createTitle}**\n\n${createDesc.replace(/\\n/g, '\n')}`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 2, // Secondary / Grey button
           custom_id: 'btn_open_ticket_menu',
           label: 'Create Ticket',
           emoji: { name: '🤝' }
@@ -358,7 +368,11 @@ const commands = [
     .setDescription('Post the unified ticket panel hub')
     .addChannelOption(opt => opt.setName('channel').setDescription('Channel to post panel').setRequired(true))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Header banner image URL').setRequired(false))
-    .addStringOption(opt => opt.setName('custom_message').setDescription('Custom ticket panel description').setRequired(false))
+    .addStringOption(opt => opt.setName('guide_title').setDescription('Custom guide section title').setRequired(false))
+    .addStringOption(opt => opt.setName('guide_desc').setDescription('Custom guide section description').setRequired(false))
+    .addStringOption(opt => opt.setName('guide_url').setDescription('Custom ticket guide link URL').setRequired(false))
+    .addStringOption(opt => opt.setName('create_title').setDescription('Custom create ticket section title').setRequired(false))
+    .addStringOption(opt => opt.setName('create_desc').setDescription('Custom create ticket section description').setRequired(false))
     .addChannelOption(opt => opt.setName('category').setDescription('Ticket Channel Category').setRequired(false))
     .addChannelOption(opt => opt.setName('log_channel').setDescription('Channel for Ticket Logs').setRequired(false)),
 
@@ -928,8 +942,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         try {
           const channel = options.getChannel('channel');
-          const bannerUrl = options.getString('banner_url') || 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
-          const customMessage = options.getString('custom_message');
+          const bannerUrl = options.getString('banner_url') || undefined;
+          const guideTitle = options.getString('guide_title') || undefined;
+          const guideDesc = options.getString('guide_desc') || undefined;
+          const guideUrl = options.getString('guide_url') || undefined;
+          const createTitle = options.getString('create_title') || undefined;
+          const createDesc = options.getString('create_desc') || undefined;
           const category = options.getChannel('category');
           const logChannel = options.getChannel('log_channel');
 
@@ -938,7 +956,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
           if (logChannel) cfg.logChannelId = logChannel.id;
           guildSettings.set(interaction.guild.id, cfg);
 
-          const payload = buildTicketHubPayload(bannerUrl, customMessage);
+          const payload = buildTicketHubPayload({
+            bannerUrl,
+            guideTitle,
+            guideDesc,
+            guideUrl,
+            createTitle,
+            createDesc
+          });
 
           await channel.send({
             components: payload.components,
