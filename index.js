@@ -22,7 +22,7 @@ const http = require('http');
 // --- ⚠️ CONFIGURATION ⚠️ ---
 const GUILD_ID = '1243470533316579361'; // Server ID
 const HELPER_ROLE_ID = 'YOUR_HELPER_ROLE_ID'; // Fallback Helper Role ID
-const TICKET_GUIDE_URL = 'https://discord.com'; // Replace with your actual Guide URL or Channel Link
+const TICKET_GUIDE_URL = 'https://discord.com'; // Replace with actual Guide URL or Channel Link
 
 // Direct Image URL for Header Banner
 const BANNER_IMAGE_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
@@ -44,7 +44,10 @@ const userRequestCounts = new Map();
 const guildSettings = new Map();
 const roleRewards = new Map();
 
-// Reset Global Stats (Minimalist)
+// Incremental Ticket Counter
+let ticketCounter = 0;
+
+// Reset Global Stats
 const globalStats = {
   totalTicketsCompleted: 0,
   totalPointsGiven: 0,
@@ -175,15 +178,15 @@ function buildTicketHubPayload(options = {}) {
   const {
     imageUrl = BANNER_IMAGE_URL,
     guideTitle = 'Tickets, rules and how to',
-    guideDesc = "🔖 Before creating a ticket, read the guide for how they work.\nCheck it out by clicking on '**Ticket Guide**'",
+    guideDesc = "🔖 Before creating a ticket, read the guide for how they work.\n\nCheck it out by clicking on '**Ticket Guide**'",
     guideUrl = TICKET_GUIDE_URL,
     createTitle = 'Need help with one or more bosses?',
-    createDesc = "✨ Create a ticket by clicking the '**Create Ticket**' button!\nHelpers will be with you shortly to help you ❤️"
+    createDesc = "✨ Create a ticket by clicking the '**Create Ticket**' button!\n\nHelpers will be with you shortly to help you ❤️"
   } = options;
 
   const containerComponent = {
     type: 17, // Container
-    accent_color: 0x8b0000, // Dark Red Accent
+    accent_color: 0x8b0000,
     components: [
       {
         type: 12, // Media Gallery Header Banner
@@ -196,13 +199,13 @@ function buildTicketHubPayload(options = {}) {
         ]
       },
       {
-        type: 9, // Section 1: Minimalist Stats Counter
+        type: 9, // Section 1: Minimalist Stats Counter with double spacing
         components: [
           {
             type: 10,
-            content: `📊 **System Stats**\n\n` +
-                     `• Completed: \`${globalStats.totalTicketsCompleted}\`\n` +
-                     `• Points: \`${globalStats.totalPointsGiven}\`\n` +
+            content: `📊 **TICKET STATS**\n\n\n` +
+                     `• Completed: \`${globalStats.totalTicketsCompleted}\`\n\n` +
+                     `• Points: \`${globalStats.totalPointsGiven}\`\n\n` +
                      `• Slain: \`${globalStats.totalBossesSlain}\``
           }
         ],
@@ -215,27 +218,27 @@ function buildTicketHubPayload(options = {}) {
         }
       },
       {
-        type: 9, // Section 2: Guide Link
+        type: 9, // Section 2: Ticket Guide with double spacing
         components: [
           {
             type: 10,
-            content: `🔖 **${guideTitle}**\n\n${guideDesc.replace(/\\n/g, '\n')}`
+            content: `🔖 **TICKET GUIDE**\n\n\n${guideTitle}\n\n\n${guideDesc.replace(/\\n/g, '\n')}`
           }
         ],
         accessory: {
           type: 2,
-          style: 5, // URL Link Button Style
+          style: 5,
           url: guideUrl,
           label: 'Ticket Guide',
           emoji: { name: '🎫' }
         }
       },
       {
-        type: 9, // Section 3: Create Ticket
+        type: 9, // Section 3: Make a Ticket with double spacing
         components: [
           {
             type: 10,
-            content: `🔖 **${createTitle}**\n\n${createDesc.replace(/\\n/g, '\n')}`
+            content: `🤝 **MAKE A TICKET**\n\n\n${createTitle}\n\n\n${createDesc.replace(/\\n/g, '\n')}`
           }
         ],
         accessory: {
@@ -262,7 +265,7 @@ function buildTicketControlPayload(ticketData, userMention, rolePing) {
     : 'None';
 
   const bannerSection = {
-    type: 12, // In-Ticket Banner
+    type: 12,
     items: [
       {
         media: {
@@ -417,7 +420,12 @@ const commands = [
     .addStringOption(opt => opt.setName('guide_url').setDescription('Custom ticket guide link URL').setRequired(false))
     .addStringOption(opt => opt.setName('create_title').setDescription('Custom create ticket section title').setRequired(false))
     .addStringOption(opt => opt.setName('create_desc').setDescription('Custom create ticket section description').setRequired(false))
-    .addChannelOption(opt => opt.setName('category').setDescription('Ticket Channel Category').setRequired(false))
+    .addChannelOption(opt => 
+      opt.setName('category')
+        .setDescription('Ticket Channel Category')
+        .addChannelTypes(ChannelType.GuildCategory)
+        .setRequired(false)
+    )
     .addChannelOption(opt => opt.setName('log_channel').setDescription('Channel for Ticket Logs').setRequired(false)),
 
   new SlashCommandBuilder()
@@ -509,7 +517,7 @@ client.once(Events.ClientReady, async () => {
   client.user.setPresence({
     status: 'idle',
     activities: [{
-      name: 'Im weird',
+      name: 'SANA ITO NA',
       type: 5
     }]
   });
@@ -564,11 +572,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const selectedKey = interaction.values[0];
       const preset = TICKET_PRESETS[selectedKey] || { label: 'Ticket', max: 6, points: 1, roleIds: [HELPER_ROLE_ID] };
 
-      // Special dropdown workflow for Ultra Weeklies
+      // Ultra Weeklies Dropdown
       if (selectedKey === 'ultra_weeklies') {
-        const weeklyMenu = new StringSelectMenuBuilder()
-          .setCustomId('select_ultra_bosses')
-          .setPlaceholder('Select the Ultra Bosses you need...')
+        const menu = new StringSelectMenuBuilder()
+          .setCustomId('select_bosses_ultra_weeklies')
+          .setPlaceholder('Select Ultra Weeklies bosses...')
           .setMinValues(1)
           .setMaxValues(6)
           .addOptions(
@@ -580,11 +588,51 @@ client.on(Events.InteractionCreate, async (interaction) => {
             new StringSelectMenuOptionBuilder().setLabel('Ultra Speaker').setValue('Ultra Speaker').setEmoji('⚔️')
           );
 
-        const row = new ActionRowBuilder().addComponents(weeklyMenu);
+        return await interaction.update({
+          content: '⚔️ **Select all Ultra Weeklies bosses you need help with:**',
+          components: [new ActionRowBuilder().addComponents(menu)]
+        });
+      }
+
+      // Ultra Dailies Dropdown
+      if (selectedKey === 'ultra_dailies') {
+        const menu = new StringSelectMenuBuilder()
+          .setCustomId('select_bosses_ultra_dailies')
+          .setPlaceholder('Select Ultra Dailies bosses...')
+          .setMinValues(1)
+          .setMaxValues(6)
+          .addOptions(
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Ezrajal').setValue('Ultra Ezrajal').setEmoji('⚔️'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Warden').setValue('Ultra Warden').setEmoji('⚔️'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Engineer').setValue('Ultra Engineer').setEmoji('⚔️'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Tyndarius').setValue('Ultra Tyndarius').setEmoji('⚔️'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Kala').setValue('Ultra Kala').setEmoji('⚔️'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Iara').setValue('Ultra Iara').setEmoji('⚔️')
+          );
 
         return await interaction.update({
-          content: '⚔️ **Select all the Ultra Weeklies bosses you need help with:**',
-          components: [row]
+          content: '⚔️ **Select all Ultra Dailies bosses you need help with:**',
+          components: [new ActionRowBuilder().addComponents(menu)]
+        });
+      }
+
+      // 7-Man Dailies Dropdown
+      if (selectedKey === 'seven_man_dailies') {
+        const menu = new StringSelectMenuBuilder()
+          .setCustomId('select_bosses_seven_man_dailies')
+          .setPlaceholder('Select 7-Man Dailies bosses...')
+          .setMinValues(1)
+          .setMaxValues(4)
+          .addOptions(
+            new StringSelectMenuOptionBuilder().setLabel('Kathool Depths').setValue('Kathool Depths').setEmoji('⚔️'),
+            new StringSelectMenuOptionBuilder().setLabel('Originul').setValue('Originul').setEmoji('⚔️'),
+            new StringSelectMenuOptionBuilder().setLabel('Astral Shrine').setValue('Astral Shrine').setEmoji('⚔️'),
+            new StringSelectMenuOptionBuilder().setLabel('Lavarock Shore').setValue('Lavarock Shore').setEmoji('⚔️')
+          );
+
+        return await interaction.update({
+          content: '⚔️ **Select all 7-Man Dailies bosses you need help with:**',
+          components: [new ActionRowBuilder().addComponents(menu)]
         });
       }
 
@@ -653,14 +701,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return await interaction.showModal(modal);
     }
 
-    // 2b. ULTRA WEEKLIES BOSS SELECTION -> OPEN FINAL MODAL
-    if (interaction.isStringSelectMenu() && interaction.customId === 'select_ultra_bosses') {
+    // 2b. MULTI-SELECT BOSS DROPDOWNS -> OPEN FINAL MODAL
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_bosses_')) {
+      const categoryKey = interaction.customId.replace('select_bosses_', '');
       const selectedBosses = interaction.values.join(', ');
-      const preset = TICKET_PRESETS['ultra_weeklies'];
+      const preset = TICKET_PRESETS[categoryKey] || { max: 6, points: 1 };
 
       const modal = new ModalBuilder()
-        .setCustomId(`ticket_form_${preset.max}_${preset.points}_ultra_weeklies`)
-        .setTitle('Ticket: Ultra Weeklies');
+        .setCustomId(`ticket_form_${preset.max}_${preset.points}_${categoryKey}`)
+        .setTitle(`Ticket: ${preset.label || 'Help Request'}`);
 
       const ignInput = new TextInputBuilder()
         .setCustomId('ign')
@@ -755,7 +804,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         const cfg = guildSettings.get(interaction.guild.id) || {};
-        const chName = `ticket-${ticketType}-${interaction.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g, '');
+        
+        // Incremental Ticket Number Channel Name
+        ticketCounter += 1;
+        const formattedNum = String(ticketCounter).padStart(4, '0');
+        const chName = `ticket-${formattedNum}`;
+
+        let parentCategoryId = cfg.ticketCategory || null;
+        if (parentCategoryId) {
+          const fetchedCategory = interaction.guild.channels.cache.get(parentCategoryId);
+          if (!fetchedCategory || fetchedCategory.type !== ChannelType.GuildCategory) {
+            parentCategoryId = null; // Prevent parent_id type mismatches
+          }
+        }
 
         const isServerTicket = ticketType === 'server_ticket';
         const permissionOverwrites = [
@@ -790,7 +851,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const ticketChannel = await interaction.guild.channels.create({
           name: chName,
           type: ChannelType.GuildText,
-          parent: cfg.ticketCategory || null,
+          parent: parentCategoryId,
           permissionOverwrites
         });
 
@@ -814,12 +875,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
           ? pingRoleIds.map(id => `<@&${id}>`).join(' ') 
           : '@Helper';
         
-        // Send a dedicated ping message so the role gets notified
         await ticketChannel.send({
           content: `${helperRolePing} New ticket requested by ${interaction.user}!`
         });
 
-        // Send main V2 control panel with banner inside
         const payload = buildTicketControlPayload(newTicketData, `${interaction.user}`, helperRolePing);
         const mainMsg = await ticketChannel.send({ 
           components: payload.components,
