@@ -243,7 +243,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- TICKET PANEL CONTROL (WITH REQUESTED CUSTOM EMOJIS & LINES) ---
+// --- TICKET PANEL CONTROL ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -1264,7 +1264,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const sub = options.getSubcommand();
         const targetUser = options.getUser('user');
 
-        Id (sub === 'add') {
+        if (sub === 'add') {
           const amount = options.getInteger('amount');
           const current = helperPoints.get(targetUser.id) || 0;
           const updated = current + amount;
@@ -1289,9 +1289,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
           } else {
             helperPoints.clear();
             return await interaction.reply({ content: '✅ Reset all helper points!', ephemeral: true });
-          }
         }
       }
+    }
 
       if (commandName === 'helper-roles') {
         const sub = options.getSubcommand();
@@ -1325,6 +1325,6 @@ client.login(process.env.DISCORD_TOKEN);
 
 // --- HTTP SERVER FOR KEEP-ALIVE ---
 http.createServer((req, res) => {
-  res.write("bot is alive!");
+  res.write("Bot is alive!");
   res.end();
 }).listen(process.env.PORT || 3000);
