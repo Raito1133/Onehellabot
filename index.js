@@ -243,7 +243,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- TICKET PANEL CONTROL (WITH VALIDATED ANIMATED EMOJI OBJECTS) ---
+// --- TICKET PANEL CONTROL ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -275,7 +275,7 @@ function buildTicketControlPayload(ticketData, userMention) {
         style: 2,
         custom_id: 'btn_helpers_list',
         label: 'Helpers',
-        emoji: { id: '1326878430284742707', name: 'n_nox_y' }
+        emoji: { id: '1326878430284742707', name: 'n_nox_y', animated: false }
       }
     },
     { type: 14 },
