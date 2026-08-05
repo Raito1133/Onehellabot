@@ -171,18 +171,26 @@ async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
 }
 
 // --- SAFE JSON COMPONENTS V2 BUILDERS ---
-function buildTicketHubPayload(bannerUrl = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif') {
+function buildTicketHubPayload(bannerUrl = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif', customMessage = null) {
+  const defaultMessage = `🔖 **Need help with one or more bosses?**\n\n` +
+                         `• Create a ticket by clicking the '**Create Ticket**' button!\nHelpers will be with you shortly to help you ❤️`;
+
   const containerComponent = {
     type: 17, // Container
     accent_color: 0x3498db,
     components: [
       {
-        type: 11, // Media Gallery Component (Renders actual GIF/Image)
-        items: [
+        type: 9, // Section wrapper for Media Gallery to comply with Container types
+        components: [
           {
-            media: {
-              url: bannerUrl
-            }
+            type: 11,
+            items: [
+              {
+                media: {
+                  url: bannerUrl
+                }
+              }
+            ]
           }
         ]
       },
@@ -210,8 +218,7 @@ function buildTicketHubPayload(bannerUrl = 'https://i.pinimg.com/originals/5d/d8
         components: [
           {
             type: 10,
-            content: `🔖 **Need help with one or more bosses?**\n\n` +
-                     `• Create a ticket by clicking the '**Create Ticket**' button!\nHelpers will be with you shortly to help you ❤️`
+            content: customMessage ? customMessage.replace(/\\n/g, '\n') : defaultMessage
           }
         ],
         accessory: {
@@ -351,12 +358,14 @@ const commands = [
     .setDescription('Post the unified ticket panel hub')
     .addChannelOption(opt => opt.setName('channel').setDescription('Channel to post panel').setRequired(true))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Header banner image URL').setRequired(false))
+    .addStringOption(opt => opt.setName('custom_message').setDescription('Custom ticket panel description').setRequired(false))
     .addChannelOption(opt => opt.setName('category').setDescription('Ticket Channel Category').setRequired(false))
     .addChannelOption(opt => opt.setName('log_channel').setDescription('Channel for Ticket Logs').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('stats')
-    .setDescription('Display global ticket stats counter'),
+    .setDescription('Display global ticket stats counter')
+    .addStringOption(opt => opt.setName('custom_message').setDescription('Custom message below stats').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('embed')
@@ -920,6 +929,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         try {
           const channel = options.getChannel('channel');
           const bannerUrl = options.getString('banner_url') || 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
+          const customMessage = options.getString('custom_message');
           const category = options.getChannel('category');
           const logChannel = options.getChannel('log_channel');
 
@@ -928,7 +938,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           if (logChannel) cfg.logChannelId = logChannel.id;
           guildSettings.set(interaction.guild.id, cfg);
 
-          const payload = buildTicketHubPayload(bannerUrl);
+          const payload = buildTicketHubPayload(bannerUrl, customMessage);
 
           await channel.send({
             components: payload.components,
@@ -943,12 +953,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       if (commandName === 'stats') {
+        const customMessage = options.getString('custom_message');
+        const defaultFooterMessage = "A huge thank you to each and every one of you who made this possible! ❤️";
+
         const statsEmbed = new EmbedBuilder()
           .setTitle(`Ticket stats since January 26th, 2026`)
           .setDescription(
             `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed.\n` +
             `🏅 **\`${globalStats.totalPointsGiven}\`** points given out.\n\n` +
-            `A huge thank you to each and every one of you who made this possible! ❤️`
+            (customMessage ? customMessage.replace(/\\n/g, '\n') : defaultFooterMessage)
           )
           .setColor('#3498db')
           .setTimestamp();
