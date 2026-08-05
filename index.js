@@ -193,7 +193,14 @@ function buildTicketHubPayload(options = {}) {
                      `🏅 **\`${globalStats.totalPointsGiven}\`** points awarded\n` +
                      `⚔️ **\`${globalStats.totalBossesSlain}\`** bosses slain`
           }
-        ]
+        ],
+        accessory: {
+          type: 2,
+          style: 2, // Secondary / Grey
+          custom_id: 'btn_refresh_stats',
+          label: 'Refresh',
+          emoji: { name: '🔄' }
+        }
       },
       {
         type: 9, // Section 2: Guide
@@ -486,6 +493,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return await interaction.reply({
         content: '🎫 **Select the ticket category you need assistance with:**',
         components: [row],
+        ephemeral: true
+      });
+    }
+
+    if (interaction.isButton() && interaction.customId === 'btn_refresh_stats') {
+      return await interaction.reply({
+        content: `🔄 **Stats Refreshed:** Total completed tickets: **${globalStats.totalTicketsCompleted}**`,
         ephemeral: true
       });
     }
