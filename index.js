@@ -236,7 +236,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- TICKET PANEL CONTROL ---
+// --- FIXED TICKET PANEL CONTROL (AVOIDING CONTAINER ACCESSORY ERRORS) ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -256,7 +256,6 @@ function buildTicketControlPayload(ticketData, userMention) {
         type: 12,
         items: [{ media: { url: ticketBanner } }]
       },
-      { type: 14 },
       {
         type: 9,
         components: [
@@ -306,7 +305,6 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
         type: 12,
         items: [{ media: { url: ticketBanner } }]
       },
-      { type: 14 },
       {
         type: 9,
         components: [
