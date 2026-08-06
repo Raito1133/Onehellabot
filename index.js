@@ -422,9 +422,14 @@ const commands = [
 // --- STARTUP ---
 client.once(Events.ClientReady, async () => {
   console.log(`Logged in as ${client.user.tag}`);
-  client.user.setActivity('syntry send dih', { type: ActivityType.Listening });
-  const rest = new REST().setToken(client.token);
   
+  // Set bot presence to online with activity
+  client.user.setPresence({
+    status: 'online',
+    activities: [{ name: 'syntry send dih', type: ActivityType.Listening }]
+  });
+
+  const rest = new REST().setToken(client.token);
   try {
     if (GUILD_ID === 'PASTE_YOUR_SERVER_ID_HERE') {
       console.log('⚠️ ERROR: YOU FORGOT TO PASTE YOUR SERVER ID AT THE TOP!');
