@@ -28,6 +28,12 @@ const TICKET_GUIDE_URL = 'https://discord.com';
 
 const STANDARD_BANNER_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
 
+const AQW_SERVERS = [
+  'Twilly', 'Twig', 'Artix', 'Gravelyn', 'Sir Ver', 
+  'Galanoth', 'Yorumi', 'Espada', 'Sepulchure', 
+  'Safiria', 'Swordhaven (EU)', 'Alteon', 'Yokai (SEA)'
+];
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -44,6 +50,7 @@ const helperPoints = new Map();
 const userRequestCounts = new Map();
 const guildSettings = new Map();
 const roleRewards = new Map();
+const tempTicketCache = new Map(); // Stores temporary state for server/boss selection
 
 let ticketCounter = 0;
 
@@ -153,10 +160,10 @@ function getPointsForTicket(ticketData) {
   const desc = (ticketData.description || '').toLowerCase();
   const bossCount = desc ? desc.split(',').length : 1;
 
-  if (normalized.includes('ultra_dailies') || normalized.includes('ultra dailies')) {
-    return 5 * bossCount; // 5 points per ultra daily boss
+  if (normalized.includes('ultra')) {
+    return 5 * bossCount; // 5 points per ultra boss/monster
   }
-  if (normalized.includes('weekly') || normalized.includes('ultraweekly') || normalized.includes('ultra weeklies')) {
+  if (normalized.includes('weekly')) {
     return 8;
   }
   if (normalized.includes('daily')) {
@@ -240,7 +247,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- ERROR-FREE SCREENSHOT LAYOUT (COMPONENTS V2) ---
+// --- ACTIVE TICKET CONTROL PANEL (COMPONENTS V2) ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -290,14 +297,14 @@ function buildTicketControlPayload(ticketData, userMention) {
         components: [
           {
             type: 10,
-            content: `Bosses:\n-# > **${ticketData.description}**`
+            content: `Monsters:\n-# > **${ticketData.description}**`
           }
         ],
         accessory: {
           type: 2,
           style: 2,
           custom_id: 'btn_change_bosses',
-          label: 'Change Mobs'
+          label: 'Change Monsters'
         }
       },
       {
@@ -326,13 +333,13 @@ function buildTicketControlPayload(ticketData, userMention) {
             type: 2,
             style: 3,
             custom_id: 'btn_complete',
-            label: 'Complete ticket'
+            label: 'Complete'
           },
           {
             type: 2,
             style: 4,
             custom_id: 'btn_cancel',
-            label: 'Cancel ticket'
+            label: 'Cancel'
           }
         ]
       },
@@ -345,14 +352,14 @@ function buildTicketControlPayload(ticketData, userMention) {
         components: [
           {
             type: 10,
-            content: `Forgot room codes? Click **Room codes!**`
+            content: `Forgot room details? Click **Room details!**`
           }
         ],
         accessory: {
           type: 2,
           style: 2,
           custom_id: 'btn_location',
-          label: 'Room codes'
+          label: 'Room details'
         }
       },
       {
@@ -360,14 +367,14 @@ function buildTicketControlPayload(ticketData, userMention) {
         components: [
           {
             type: 10,
-            content: `Claim the ticket, and get room codes!`
+            content: `Claim the ticket, and get room details!`
           }
         ],
         accessory: {
           type: 2,
           style: 3,
           custom_id: 'btn_claim',
-          label: 'Claim ticket'
+          label: 'Claim'
         }
       }
     ]
@@ -424,13 +431,13 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
             type: 2,
             style: 3,
             custom_id: 'btn_complete',
-            label: 'Complete ticket'
+            label: 'Complete'
           },
           {
             type: 2,
             style: 4,
             custom_id: 'btn_cancel',
-            label: 'Cancel ticket'
+            label: 'Cancel'
           }
         ]
       }
@@ -607,6 +614,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
+    // STEP 1: Category Selected -> Prompt Server Dropdown (or Boss Menu if Ultra Weeklies)
     if (interaction.isStringSelectMenu() && interaction.customId === 'select_ticket_cat') {
       const selectedKey = interaction.values[0];
       const preset = TICKET_PRESETS[selectedKey] || { label: 'Ticket', max: 6, points: 1, roleIds: [HELPER_ROLE_ID] };
@@ -672,8 +680,58 @@ client.on(Events.InteractionCreate, async (interaction) => {
         });
       }
 
+      // For other categories, prompt Server Dropdown next
+      const serverMenu = new StringSelectMenuBuilder()
+        .setCustomId(`select_server_form_${selectedKey}`)
+        .setPlaceholder('Select your AQW server...')
+        .addOptions(
+          AQW_SERVERS.map(srv => new StringSelectMenuOptionBuilder().setLabel(srv).setValue(srv))
+        );
+
+      return await interaction.update({
+        content: `🌐 **Select your AQW server for ${preset.label}:**`,
+        components: [new ActionRowBuilder().addComponents(serverMenu)]
+      });
+    }
+
+    // Boss selection finished -> Prompt Server Dropdown
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_bosses_')) {
+      const categoryKey = interaction.customId.replace('select_bosses_', '');
+      const selectedBosses = interaction.values.join(', ');
+      
+      tempTicketCache.set(interaction.user.id, { categoryKey, bosses: selectedBosses });
+
+      const serverMenu = new StringSelectMenuBuilder()
+        .setCustomId('select_server_form_boss')
+        .setPlaceholder('Select your AQW server...')
+        .addOptions(
+          AQW_SERVERS.map(srv => new StringSelectMenuOptionBuilder().setLabel(srv).setValue(srv))
+        );
+
+      return await interaction.update({
+        content: '🌐 **Select your AQW server:**',
+        components: [new ActionRowBuilder().addComponents(serverMenu)]
+      });
+    }
+
+    // Server selected from dropdown -> Show Final Modal
+    if (interaction.isStringSelectMenu() && (interaction.customId.startsWith('select_server_form_'))) {
+      const selectedServer = interaction.values[0];
+      let categoryKey, bossesVal = '';
+
+      if (interaction.customId === 'select_server_form_boss') {
+        const cached = tempTicketCache.get(interaction.user.id) || {};
+        categoryKey = cached.categoryKey;
+        bossesVal = cached.bosses;
+      } else {
+        categoryKey = interaction.customId.replace('select_server_form_', '');
+      }
+
+      const preset = TICKET_PRESETS[categoryKey] || { max: 6, points: 1, label: 'Ticket' };
+      tempTicketCache.set(interaction.user.id, { categoryKey, server: selectedServer, bosses: bossesVal });
+
       const modal = new ModalBuilder()
-        .setCustomId(`ticket_form_${preset.max}_${preset.points}_${selectedKey}`)
+        .setCustomId(`ticket_form_final_${preset.max}_${preset.points}_${categoryKey}`)
         .setTitle(`Ticket: ${preset.label}`);
 
       const ignInput = new TextInputBuilder()
@@ -683,53 +741,50 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setStyle(TextInputStyle.Short)
         .setRequired(true);
 
-      if (selectedKey === 'server_ticket') {
-        const subjectInput = new TextInputBuilder().setCustomId('subject').setLabel('Subject / Concern').setPlaceholder('e.g., Report, Misconduct, General Question').setStyle(TextInputStyle.Short).setRequired(true);
-        const descInput = new TextInputBuilder().setCustomId('description').setLabel('Details / Report').setPlaceholder('Describe your concern or report in detail...').setStyle(TextInputStyle.Paragraph).setRequired(true);
+      if (categoryKey === 'server_ticket') {
+        const subjectInput = new TextInputBuilder().setCustomId('subject').setLabel('Subject / Concern').setPlaceholder('Report, Question, etc.').setStyle(TextInputStyle.Short).setRequired(true);
+        const descInput = new TextInputBuilder().setCustomId('description').setLabel('Details / Report').setPlaceholder('Describe your concern...').setStyle(TextInputStyle.Paragraph).setRequired(true);
         modal.addComponents(new ActionRowBuilder().addComponents(ignInput), new ActionRowBuilder().addComponents(subjectInput), new ActionRowBuilder().addComponents(descInput));
       } else {
-        const serverInput = new TextInputBuilder().setCustomId('server').setLabel('Server').setPlaceholder('Artix, Safiria, etc.').setStyle(TextInputStyle.Short).setRequired(true);
         const mapInput = new TextInputBuilder().setCustomId('map_name').setLabel('Map Name / Room').setPlaceholder('ultraezrajal, ultrakala, etc.').setStyle(TextInputStyle.Short).setRequired(true);
-        const descInput = new TextInputBuilder().setCustomId('description').setLabel('Details / Bosses').setPlaceholder('List bosses...').setStyle(TextInputStyle.Paragraph).setRequired(true);
-        modal.addComponents(new ActionRowBuilder().addComponents(ignInput), new ActionRowBuilder().addComponents(serverInput), new ActionRowBuilder().addComponents(mapInput), new ActionRowBuilder().addComponents(descInput));
+        const descInput = new TextInputBuilder().setCustomId('description').setLabel('Monsters / Details').setValue(bossVal).setPlaceholder('List monsters...').setStyle(TextInputStyle.Paragraph).setRequired(true);
+        modal.addComponents(new ActionRowBuilder().addComponents(ignInput), new ActionRowBuilder().addComponents(mapInput), new ActionRowBuilder().addComponents(descInput));
       }
 
       return await interaction.showModal(modal);
     }
 
-    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_bosses_')) {
-      const categoryKey = interaction.customId.replace('select_bosses_', '');
-      const selectedBosses = interaction.values.join(', ');
-      const preset = TICKET_PRESETS[categoryKey] || { max: 6, points: 1 };
-
-      const modal = new ModalBuilder()
-        .setCustomId(`ticket_form_${preset.max}_${preset.points}_${categoryKey}`)
-        .setTitle(`Ticket: ${preset.label || 'Help Request'}`);
-
-      const ignInput = new TextInputBuilder().setCustomId('ign').setLabel('AQW IGN').setPlaceholder('Enter IGN...').setStyle(TextInputStyle.Short).setRequired(true);
-      const serverInput = new TextInputBuilder().setCustomId('server').setLabel('Server').setPlaceholder('Artix, Safiria, etc.').setStyle(TextInputStyle.Short).setRequired(true);
-      const mapInput = new TextInputBuilder().setCustomId('map_name').setLabel('Map Name / Room').setPlaceholder('ultraezrajal, ultrakala, etc.').setStyle(TextInputStyle.Short).setRequired(true);
-      const descInput = new TextInputBuilder().setCustomId('description').setLabel('Selected Bosses / Details').setValue(selectedBosses).setStyle(TextInputStyle.Paragraph).setRequired(true);
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(ignInput),
-        new ActionRowBuilder().addComponents(serverInput),
-        new ActionRowBuilder().addComponents(mapInput),
-        new ActionRowBuilder().addComponents(descInput)
-      );
-
-      return await interaction.showModal(modal);
-    }
-
-    if (interaction.isModalSubmit() && interaction.customId === 'modal_edit_server') {
+    // Changing server inside active ticket via Dropdown menu
+    if (interaction.isButton() && interaction.customId === 'btn_change_server') {
       const ticketData = activeTickets.get(interaction.channel.id);
       if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
+      if (interaction.user.id !== ticketData.requesterId && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+        return interaction.reply({ content: '❌ Only the requester can change the server.', ephemeral: true });
+      }
 
-      const newServer = interaction.fields.getTextInputValue('new_server');
+      const serverDropdown = new StringSelectMenuBuilder()
+        .setCustomId('active_change_server_menu')
+        .setPlaceholder('Select new AQW server...')
+        .addOptions(
+          AQW_SERVERS.map(srv => new StringSelectMenuOptionBuilder().setLabel(srv).setValue(srv))
+        );
+
+      return await interaction.reply({
+        content: '🌐 **Select a new server from the dropdown below:**',
+        components: [new ActionRowBuilder().addComponents(serverDropdown)],
+        ephemeral: true
+      });
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId === 'active_change_server_menu') {
+      const ticketData = activeTickets.get(interaction.channel.id);
+      if (!ticketData) return interaction.update({ content: '❌ Ticket not found.', components: [] });
+
+      const newServer = interaction.values[0];
       ticketData.server = newServer;
       activeTickets.set(interaction.channel.id, ticketData);
 
-      await interaction.reply({ content: `✅ Updated server to **${newServer}**`, ephemeral: true });
+      await interaction.update({ content: `✅ Successfully updated server to **${newServer}**!`, components: [] });
       return updateTicketEmbed(interaction.channel, ticketData);
     }
 
@@ -741,18 +796,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
       ticketData.description = newDetails;
       activeTickets.set(interaction.channel.id, ticketData);
 
-      await interaction.reply({ content: `✅ Updated boss details!`, ephemeral: true });
+      await interaction.reply({ content: `✅ Updated monster details!`, ephemeral: true });
       return updateTicketEmbed(interaction.channel, ticketData);
     }
 
-    if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket_form_')) {
+    // Final Ticket Creation Submit
+    if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket_form_final_')) {
       await interaction.deferReply({ ephemeral: true });
 
       try {
-        const parts = interaction.customId.replace('ticket_form_', '').split('_');
+        const parts = interaction.customId.replace('ticket_form_final_', '').split('_');
         const maxHelpers = parseInt(parts[0]) || 3;
         const customPoints = parseInt(parts[1]) || 0;
         const ticketType = parts.slice(2).join('_');
+
+        const cached = tempTicketCache.get(interaction.user.id) || {};
+        const serverName = cached.server || 'Artix';
 
         const preset = TICKET_PRESETS[ticketType] || {};
         const pingRoleIds = preset.roleIds || [HELPER_ROLE_ID];
@@ -760,14 +819,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const ign = interaction.fields.getTextInputValue('ign');
         const description = interaction.fields.getTextInputValue('description');
 
-        let serverName = 'N/A';
         let room = 'N/A';
         let subject = 'N/A';
 
         if (ticketType === 'server_ticket') {
           subject = interaction.fields.getTextInputValue('subject');
         } else {
-          serverName = interaction.fields.getTextInputValue('server');
           const rawMap = interaction.fields.getTextInputValue('map_name').trim();
           const cleanMap = rawMap.toLowerCase().replace(/[^a-z0-9]/g, '') || 'room';
           room = `/join ${cleanMap}`;
@@ -821,6 +878,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         };
 
         activeTickets.set(ticketChannel.id, newTicketData);
+        tempTicketCache.delete(interaction.user.id);
 
         const helperRolePing = pingRoleIds.length > 0 ? pingRoleIds.map(id => `<@&${id}>`).join(' ') : '@Helper';
         
@@ -852,33 +910,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const ticketData = activeTickets.get(interaction.channel.id);
       const customId = interaction.customId;
 
-      if (customId === 'btn_change_server') {
-        if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
-        if (interaction.user.id !== ticketData.requesterId && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
-          return interaction.reply({ content: '❌ Only the requester can change the server.', ephemeral: true });
-        }
-
-        const modal = new ModalBuilder()
-          .setCustomId('modal_edit_server')
-          .setTitle('Change Server')
-          .addComponents(new ActionRowBuilder().addComponents(
-            new TextInputBuilder().setCustomId('new_server').setLabel('New Server Name').setValue(ticketData.server).setStyle(TextInputStyle.Short).setRequired(true)
-          ));
-
-        return await interaction.showModal(modal);
-      }
-
       if (customId === 'btn_change_bosses') {
         if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
         if (interaction.user.id !== ticketData.requesterId && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
-          return interaction.reply({ content: '❌ Only the requester can edit boss details.', ephemeral: true });
+          return interaction.reply({ content: '❌ Only the requester can edit monster details.', ephemeral: true });
         }
 
         const modal = new ModalBuilder()
           .setCustomId('modal_edit_bosses')
-          .setTitle('Change Bosses / Details')
+          .setTitle('Change Monsters / Details')
           .addComponents(new ActionRowBuilder().addComponents(
-            new TextInputBuilder().setCustomId('new_details').setLabel('New Bosses or Details').setValue(ticketData.description).setStyle(TextInputStyle.Paragraph).setRequired(true)
+            new TextInputBuilder().setCustomId('new_details').setLabel('New Monsters or Details').setValue(ticketData.description).setStyle(TextInputStyle.Paragraph).setRequired(true)
           ));
 
         return await interaction.showModal(modal);
@@ -892,7 +934,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels);
 
         if (!isRequester && !isHelper && !isAdmin) {
-          return interaction.reply({ content: '🔒 **Access Denied:** Click **Claim** first to view room codes.', ephemeral: true });
+          return interaction.reply({ content: '🔒 **Access Denied:** Click **Claim** first to view room details.', ephemeral: true });
         }
 
         const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -953,7 +995,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         );
 
         await interaction.reply({
-          content: `✅ **Claimed!** Room Code:\n📍 **Server:** \`${ticketData.server}\`\n📍 **Command:** \`${ticketData.room}\``,
+          content: `✅ **Claimed!** Room Details:\n📍 **Server:** \`${ticketData.server}\`\n📍 **Command:** \`${ticketData.room}\``,
           ephemeral: true
         });
 
