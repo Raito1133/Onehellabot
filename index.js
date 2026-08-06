@@ -16,7 +16,8 @@ const {
   REST,
   Routes,
   SlashCommandBuilder,
-  ChannelType
+  ChannelType,
+  MessageFlags
 } = require('discord.js');
 const http = require('http');
 
@@ -225,31 +226,54 @@ function buildTicketHubPayload(options = {}) {
     createDesc = "Select a category from the menu to open a new ticket. Our helpers will join shortly!"
   } = options;
 
-  const embed = new EmbedBuilder()
-    .setTitle('🎫 Ticket Hub')
-    .setDescription(`**TICKET GUIDE**\n\n${guideDesc.replace(/\\n/g, '\n')}\n\n**MAKE A TICKET**\n\n${createDesc.replace(/\\n/g, '\n')}`)
-    .setImage(imageUrl)
-    .setColor(0x8b0000)
-    .setTimestamp();
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setStyle(ButtonStyle.Link)
-      .setURL(guideUrl)
-      .setLabel('Guide'),
-    new ButtonBuilder()
-      .setCustomId('btn_open_ticket_menu')
-      .setStyle(ButtonStyle.Primary)
-      .setLabel('Create')
-  );
+  const containerComponent = {
+    type: 17,
+    accent_color: 0x8b0000,
+    components: [
+      {
+        type: 12,
+        items: [{ media: { url: imageUrl } }]
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `🔖 **TICKET GUIDE**\n\n${guideDesc.replace(/\\n/g, '\n')}`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 5,
+          url: guideUrl,
+          label: 'Guide'
+        }
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `🤝 **MAKE A TICKET**\n\n${createDesc.replace(/\\n/g, '\n')}`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 2,
+          custom_id: 'btn_open_ticket_menu',
+          label: 'Create'
+        }
+      }
+    ]
+  };
 
   return {
-    embeds: [embed],
-    components: [row]
+    components: [containerComponent],
+    flags: MessageFlags.IsComponentsV2
   };
 }
 
-// --- ACTIVE TICKET CONTROL PANEL WITH ALL 10 CUSTOM EMOJIS ---
+// --- COMPONENTS V2 LAYOUT WITH ALL 10 CUSTOM EMOJIS ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -263,67 +287,139 @@ function buildTicketControlPayload(ticketData, userMention) {
 
   const points = getPointsForTicket(ticketData);
 
-  const embed = new EmbedBuilder()
-    .setTitle('🎫 Ticket Control Panel')
-    .setDescription(
-      `<:pointsbt:1534950425080496189> **Points:** \`${points}\`\n\n` +
-      `<:requestbt:1534950441060798594> **Requester:** ${requesterTag}\n\n` +
-      `🌐 **Selected Server:** \`${ticketData.server}\`\n\n` +
-      `👹 **Monsters:** \`${ticketData.description}\`\n\n` +
-      `📝 **Details:** \`${ticketData.details || 'None provided'}\`\n\n` +
-      `<:helpersbt:1534950382109986876> **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}`
-    )
-    .setImage(ticketBanner)
-    .setColor(accentColor)
-    .setTimestamp();
-
-  const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('btn_change_server')
-      .setLabel('Change server')
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji({ id: '1534950290908909749', name: 'changeserverbt', animated: false }),
-    new ButtonBuilder()
-      .setCustomId('btn_change_bosses')
-      .setLabel('Change Monsters')
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji({ id: '1534950407003050185', name: 'monstersbt', animated: false }),
-    new ButtonBuilder()
-      .setCustomId('btn_pinghelpers')
-      .setLabel('Ping helpers')
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji({ id: '1534950337167884368', name: 'pinghelpersbt', animated: false })
-  );
-
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('btn_complete')
-      .setLabel('Complete')
-      .setStyle(ButtonStyle.Success)
-      .setEmoji({ id: '1534950268679094397', name: 'completebt', animated: false }),
-    new ButtonBuilder()
-      .setCustomId('btn_cancel')
-      .setLabel('Cancel')
-      .setStyle(ButtonStyle.Danger)
-      .setEmoji({ id: '1534950219517788170', name: 'cancelbt', animated: false })
-  );
-
-  const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('btn_location')
-      .setLabel('Room details')
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji({ id: '1534950471922483382', name: 'roomdeetsbt', animated: false }),
-    new ButtonBuilder()
-      .setCustomId('btn_claim')
-      .setLabel('Claim')
-      .setStyle(ButtonStyle.Success)
-      .setEmoji({ id: '1534950248831516806', name: 'claimbt', animated: false })
-  );
+  const containerComponent = {
+    type: 17,
+    accent_color: accentColor,
+    components: [
+      {
+        type: 12,
+        items: [{ media: { url: ticketBanner } }]
+      },
+      {
+        type: 10,
+        content: `<:pointsbt:1534950425080496189> **Points:**\n-# > **${points}**`
+      },
+      {
+        type: 10,
+        content: `<:requestbt:1534950441060798594> **Requester:** ${requesterTag}`
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `Selected server:\n-# > **${ticketData.server}**`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 2,
+          custom_id: 'btn_change_server',
+          label: 'Change server',
+          emoji: { id: '1534950290908909749', name: 'changeserverbt', animated: false }
+        }
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `Monsters:\n-# > **${ticketData.description}**`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 2,
+          custom_id: 'btn_change_bosses',
+          label: 'Change Monsters',
+          emoji: { id: '1534950407003050185', name: 'monstersbt', animated: false }
+        }
+      },
+      {
+        type: 10,
+        content: `Details:\n-# > **${ticketData.details || 'None provided'}**`
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `Still in need of help? **Ping helpers!**`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 2,
+          custom_id: 'btn_pinghelpers',
+          label: 'Ping helpers',
+          emoji: { id: '1534950337167884368', name: 'pinghelpersbt', animated: false }
+        }
+      },
+      {
+        type: 10,
+        content: `Finished with the ticket?`
+      },
+      {
+        type: 1,
+        components: [
+          {
+            type: 2,
+            style: 3,
+            custom_id: 'btn_complete',
+            label: 'Complete',
+            emoji: { id: '1534950268679094397', name: 'completebt', animated: false }
+          },
+          {
+            type: 2,
+            style: 4,
+            custom_id: 'btn_cancel',
+            label: 'Cancel',
+            emoji: { id: '1534950219517788170', name: 'cancelbt', animated: false }
+          }
+        ]
+      },
+      {
+        type: 10,
+        content: `<:helpersbt:1534950382109986876> **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}`
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `Forgot room details? Click **Room details!**`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 2,
+          custom_id: 'btn_location',
+          label: 'Room details',
+          emoji: { id: '1534950471922483382', name: 'roomdeetsbt', animated: false }
+        }
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `Claim the ticket, and get room details!`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 3,
+          custom_id: 'btn_claim',
+          label: 'Claim',
+          emoji: { id: '1534950248831516806', name: 'claimbt', animated: false }
+        }
+      }
+    ]
+  };
 
   return {
-    embeds: [embed],
-    components: [row1, row2, row3]
+    components: [containerComponent],
+    flags: MessageFlags.IsComponentsV2
   };
 }
 
@@ -334,38 +430,63 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
 
   const requesterTag = `<@${ticketData.requesterId}> (${ticketData.ign})`;
 
-  const embed = new EmbedBuilder()
-    .setTitle('🛠️ Support Ticket Panel')
-    .setDescription(
-      `<:requestbt:1534950441060798594> **User:** ${requesterTag}\n\n` +
-      `**Subject / Concern:** \`${ticketData.subject}\`\n\n` +
-      `**Details / Report:** \`${ticketData.description}\``
-    )
-    .setImage(ticketBanner)
-    .setColor(accentColor)
-    .setTimestamp();
-
-  const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('btn_pinghelpers')
-      .setLabel('Ping staff')
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji({ id: '1534950337167884368', name: 'pinghelpersbt', animated: false }),
-    new ButtonBuilder()
-      .setCustomId('btn_complete')
-      .setLabel('Complete')
-      .setStyle(ButtonStyle.Success)
-      .setEmoji({ id: '1534950268679094397', name: 'completebt', animated: false }),
-    new ButtonBuilder()
-      .setCustomId('btn_cancel')
-      .setLabel('Cancel')
-      .setStyle(ButtonStyle.Danger)
-      .setEmoji({ id: '1534950219517788170', name: 'cancelbt', animated: false })
-  );
+  const containerComponent = {
+    type: 17,
+    accent_color: accentColor,
+    components: [
+      {
+        type: 12,
+        items: [{ media: { url: ticketBanner } }]
+      },
+      {
+        type: 10,
+        content: `<:requestbt:1534950441060798594> **User:** ${requesterTag}\n\n**Subject / Concern:**\n-# > **${ticketData.subject}**`
+      },
+      {
+        type: 10,
+        content: `**Details / Report:**\n-# > **${ticketData.description}**`
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `Need staff attention? **Ping staff!**`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 2,
+          custom_id: 'btn_pinghelpers',
+          label: 'Ping staff',
+          emoji: { id: '1534950337167884368', name: 'pinghelpersbt', animated: false }
+        }
+      },
+      {
+        type: 1,
+        components: [
+          {
+            type: 2,
+            style: 3,
+            custom_id: 'btn_complete',
+            label: 'Complete',
+            emoji: { id: '1534950268679094397', name: 'completebt', animated: false }
+          },
+          {
+            type: 2,
+            style: 4,
+            custom_id: 'btn_cancel',
+            label: 'Cancel',
+            emoji: { id: '1534950219517788170', name: 'cancelbt', animated: false }
+          }
+        ]
+      }
+    ]
+  };
 
   return {
-    embeds: [embed],
-    components: [row1]
+    components: [containerComponent],
+    flags: MessageFlags.IsComponentsV2
   };
 }
 
@@ -494,7 +615,7 @@ client.once(Events.ClientReady, async () => {
   client.user.setPresence({
     status: 'idle',
     activities: [{
-      name: 'Im weird',
+      name: 'GUMANA KANA PLS',
       type: 5
     }]
   });
@@ -837,7 +958,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         activeTickets.set(ticketChannel.id, newTicketData);
         tempTicketCache.delete(interaction.user.id);
 
-        // Safely filter out placeholder IDs to prevent NUMBER_TYPE_COERCE errors
         const validRoleIds = pingRoleIds.filter(id => id && /^\d+$/.test(id));
         const helperRolePings = validRoleIds.length > 0 ? validRoleIds.map(id => `<@&${id}>`).join(' ') : '@Helper';
         
@@ -850,7 +970,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           ? buildSupportTicketControlPayload(newTicketData, `${interaction.user}`)
           : buildTicketControlPayload(newTicketData, `${interaction.user}`);
 
-        const mainMsg = await ticketChannel.send({ embeds: payload.embeds, components: payload.components });
+        const mainMsg = await ticketChannel.send({ components: payload.components, flags: payload.flags });
 
         await mainMsg.pin().catch(() => {});
 
@@ -1109,8 +1229,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
           });
 
           await channel.send({
-            embeds: payload.embeds,
-            components: payload.components
+            components: payload.components,
+            flags: payload.flags
           });
 
           return await interaction.editReply(`✅ Ticket Hub Panel successfully posted to ${channel}!`);
