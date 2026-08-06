@@ -26,6 +26,8 @@ const GUILD_ID = '1371775026264670228'; // Server ID
 const ULTRA_HELPER_ROLE_ID = '1529499021884919858'; // Ultra Helper Role ID
 const HELPER_ROLE_ID = '1529499059596038285'; // Standard Helper / Farming Role ID
 const SUPPORT_ROLE_ID = '1529498802149392614'; // Support Role ID
+const MEMBER_ROLE_ID = 'YOUR_MEMBER_ROLE_ID'; // <--- Paste your Member role ID here for verification
+const GUEST_ROLE_ID = 'YOUR_GUEST_ROLE_ID'; // <--- Paste your Guest role ID here for verification
 const TICKET_GUIDE_URL = 'https://discord.com'; 
 
 const STANDARD_BANNER_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
@@ -276,7 +278,93 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- COMPONENTS V2 LAYOUT WITH KICK HELPER & ALL CUSTOM EMOJIS ---
+// --- CUSTOM COMPONENTS V2 EMBED PAYLOAD ---
+function buildCustomEmbedPayload(options = {}) {
+  const {
+    imageUrl = STANDARD_BANNER_URL,
+    title = "EMBED TITLE",
+    description = "Embed description goes here...",
+    accentColor = 0x8b0000
+  } = options;
+
+  const containerComponent = {
+    type: 17,
+    accent_color: parseInt(accentColor.replace('#', ''), 16) || 0x8b0000,
+    components: [
+      {
+        type: 12,
+        items: [{ media: { url: imageUrl } }]
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `**${title.replace(/\\n/g, '\n')}**\n\n${description.replace(/\\n/g, '\n')}`
+          }
+        ]
+      }
+    ]
+  };
+
+  return {
+    components: [containerComponent],
+    flags: MessageFlags.IsComponentsV2
+  };
+}
+
+// --- VERIFICATION PANEL PAYLOAD ---
+function buildVerificationPayload(options = {}) {
+  const {
+    imageUrl = STANDARD_BANNER_URL,
+    title = "SERVER VERIFICATION",
+    description = "Please select your verification status below to access the rest of the server."
+  } = options;
+
+  const containerComponent = {
+    type: 17,
+    accent_color: 0x2ecc71,
+    components: [
+      {
+        type: 12,
+        items: [{ media: { url: imageUrl } }]
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `**${title.replace(/\\n/g, '\n')}**\n\n${description.replace(/\\n/g, '\n')}`
+          }
+        ]
+      },
+      {
+        type: 1,
+        components: [
+          {
+            type: 2,
+            style: 3,
+            custom_id: 'btn_verify_member',
+            label: 'Verify as Member'
+          },
+          {
+            type: 2,
+            style: 2,
+            custom_id: 'btn_verify_guest',
+            label: 'Verify as Guest'
+          }
+        ]
+      }
+    ]
+  };
+
+  return {
+    components: [containerComponent],
+    flags: MessageFlags.IsComponentsV2
+  };
+}
+
+// --- COMPONENTS V2 LAYOUT FOR ACTIVE TICKETS ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -541,22 +629,28 @@ const commands = [
     .addChannelOption(opt => opt.setName('log_channel').setDescription('Channel for Ticket Logs').setRequired(false)),
 
   new SlashCommandBuilder()
+    .setName('setup-verification')
+    .setDescription('Post the server verification panel')
+    .addChannelOption(opt => opt.setName('channel').setDescription('Channel to post verification panel').setRequired(true))
+    .addStringOption(opt => opt.setName('banner_url').setDescription('Header banner image URL').setRequired(false))
+    .addStringOption(opt => opt.setName('title').setDescription('Panel title').setRequired(false))
+    .addStringOption(opt => opt.setName('description').setDescription('Panel description').setRequired(false)),
+
+  new SlashCommandBuilder()
     .setName('stats')
     .setDescription('Display global ticket stats counter')
     .addStringOption(opt => opt.setName('custom_message').setDescription('Custom message below stats').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('embed')
-    .setDescription('Create and send a customized embed message')
+    .setDescription('Create and send a customized V2 banner embed message')
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
     .addChannelOption(opt => opt.setName('channel').setDescription('Target channel').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Embed Title').setRequired(true))
     .addStringOption(opt => opt.setName('description').setDescription('Embed Description').setRequired(true))
     .addStringOption(opt => opt.setName('outer_message').setDescription('Message outside embed').setRequired(false))
-    .addStringOption(opt => opt.setName('color').setDescription('Hex color code').setRequired(false))
-    .addStringOption(opt => opt.setName('image_url').setDescription('Banner image URL').setRequired(false))
-    .addStringOption(opt => opt.setName('thumbnail_url').setDescription('Thumbnail URL').setRequired(false))
-    .addStringOption(opt => opt.setName('footer').setDescription('Footer text').setRequired(false)),
+    .addStringOption(opt => opt.setName('color').setDescription('Hex color code (e.g. #8b0000)').setRequired(false))
+    .addStringOption(opt => opt.setName('image_url').setDescription('Banner image URL').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('setup-channels')
@@ -564,11 +658,40 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
     .addChannelOption(opt => opt.setName('log_channel').setDescription('Log channel').setRequired(false))
     .addChannelOption(opt => opt.setName('welcome_channel').setDescription('Welcome channel').setRequired(false))
+    .addStringOption(opt => opt.setName('welcome_message').setDescription('Welcome outer message (use <@USER> for mention)').setRequired(false))
     .addChannelOption(opt => opt.setName('boost_channel').setDescription('Boost channel').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('leaderboard')
     .setDescription('View top 20 helpers and top 20 requesters'),
+
+  new SlashCommandBuilder()
+    .setName('kick')
+    .setDescription('Kick a member from the server')
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.KickMembers)
+    .addUserOption(opt => opt.setName('user').setDescription('User to kick').setRequired(true))
+    .addStringOption(opt => opt.setName('reason').setDescription('Reason for kick').setRequired(false)),
+
+  new SlashCommandBuilder()
+    .setName('ban')
+    .setDescription('Ban a member from the server')
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.BanMembers)
+    .addUserOption(opt => opt.setName('user').setDescription('User to ban').setRequired(true))
+    .addStringOption(opt => opt.setName('reason').setDescription('Reason for ban').setRequired(false)),
+
+  new SlashCommandBuilder()
+    .setName('mute')
+    .setDescription('Timeout/mute a member')
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers)
+    .addUserOption(opt => opt.setName('user').setDescription('User to mute').setRequired(true))
+    .addIntegerOption(opt => opt.setName('minutes').setDescription('Duration in minutes').setRequired(true))
+    .addStringOption(opt => opt.setName('reason').setDescription('Reason for mute').setRequired(false)),
+
+  new SlashCommandBuilder()
+    .setName('unmute')
+    .setDescription('Remove timeout from a member')
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers)
+    .addUserOption(opt => opt.setName('user').setDescription('User to unmute').setRequired(true)),
 
   new SlashCommandBuilder()
     .setName('points')
@@ -637,11 +760,52 @@ client.once(Events.ClientReady, async () => {
   await registerCommands();
 });
 
+// --- MEMBER WELCOME LISTENER ---
+client.on(Events.GuildMemberAdd, async (member) => {
+  try {
+    const cfg = guildSettings.get(member.guild.id) || {};
+    const welcomeChannelId = cfg.welcomeChannelId;
+    if (!welcomeChannelId) return;
+
+    const welcomeChannel = member.guild.channels.cache.get(welcomeChannelId);
+    if (!welcomeChannel) return;
+
+    let welcomeMsg = cfg.welcomeMessage || 'Welcome to the server, <@USER>!';
+    const formattedMsg = welcomeMsg.replace(/<@USER>/g, `<@${member.id}>`);
+
+    await welcomeChannel.send({ content: formattedMsg });
+  } catch (err) {
+    console.error('Failed to send welcome message:', err);
+  }
+});
+
 // --- INTERACTION LISTENER ---
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.guild || interaction.guild.id !== GUILD_ID) return;
 
   try {
+    // Verification Button Handlers
+    if (interaction.isButton() && (interaction.customId === 'btn_verify_member' || interaction.customId === 'btn_verify_guest')) {
+      const isMember = interaction.customId === 'btn_verify_member';
+      const roleIdToAssign = isMember ? MEMBER_ROLE_ID : GUEST_ROLE_ID;
+
+      if (!roleIdToAssign || roleIdToAssign.startsWith('YOUR_')) {
+        return await interaction.reply({ content: '❌ Verification roles have not been configured by the admin yet.', ephemeral: true });
+      }
+
+      const role = interaction.guild.roles.cache.get(roleIdToAssign);
+      if (!role) {
+        return await interaction.reply({ content: '❌ Configured verification role could not be found in this server.', ephemeral: true });
+      }
+
+      if (interaction.member.roles.cache.has(roleIdToAssign)) {
+        return await interaction.reply({ content: `⚠️ You are already verified as **${role.name}**!`, ephemeral: true });
+      }
+
+      await interaction.member.roles.add(roleId).catch(console.error);
+      return await interaction.reply({ content: `✅ Successfully verified! You have been given the **${role.name}** role.`, ephemeral: true });
+    }
+
     if (interaction.isButton() && interaction.customId === 'btn_open_ticket_menu') {
       const selectMenu = new StringSelectMenuBuilder()
         .setCustomId('select_ticket_cat')
@@ -1035,7 +1199,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const isServerTicket = ticketType === 'server_ticket';
         
-        // Permission overwrites: Support tickets are private; all other tickets are public
         let permissionOverwrites = [
           { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages] },
           { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
@@ -1354,6 +1517,37 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
       }
 
+      if (commandName === 'setup-verification') {
+        await interaction.deferReply({ ephemeral: true });
+
+        try {
+          const channel = options.getChannel('channel');
+          if (!channel || !channel.isTextBased()) {
+            return await interaction.editReply('❌ Please select a valid text channel.');
+          }
+
+          const banner = options.getString('banner_url');
+          const title = options.getString('title');
+          const description = options.getString('description');
+
+          const payload = buildVerificationPayload({
+            imageUrl: banner || STANDARD_BANNER_URL,
+            title: title || undefined,
+            description: description || undefined
+          });
+
+          await channel.send({
+            components: payload.components,
+            flags: payload.flags
+          });
+
+          return await interaction.editReply(`✅ Verification panel successfully posted to ${channel}!`);
+        } catch (err) {
+          console.error('Error posting verification panel:', err);
+          return await interaction.editReply(`❌ Failed to post verification panel: ${err.message}`);
+        }
+      }
+
       if (commandName === 'stats') {
         const customMessage = options.getString('custom_message');
         const defaultFooterMessage = "A huge thank you to each and every one of you who made this possible! ❤️";
@@ -1382,24 +1576,30 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const title = options.getString('title');
         const desc = options.getString('description').replace(/\\n/g, '\n');
         const rawOuterMessage = options.getString('outer_message');
-        const color = options.getString('color') || '#3498db';
+        const color = options.getString('color') || '#8b0000';
         const image = options.getString('image_url');
-        const thumbnail = options.getString('thumbnail_url');
-        const footer = options.getString('footer');
 
         try {
-          const customEmbed = new EmbedBuilder().setTitle(title).setDescription(desc).setColor(color).setTimestamp();
-          if (image) customEmbed.setImage(image);
-          if (thumbnail) customEmbed.setThumbnail(thumbnail);
-          if (footer) customEmbed.setFooter({ text: footer });
+          const payload = buildCustomEmbedPayload({
+            imageUrl: image || STANDARD_BANNER_URL,
+            title: title,
+            description: desc,
+            accentColor: color
+          });
 
-          const messageOptions = { embeds: [customEmbed] };
-          if (rawOuterMessage) messageOptions.content = rawOuterMessage.replace(/\\n/g, '\n');
+          const messageOptions = {
+            components: payload.components,
+            flags: payload.flags
+          };
+
+          if (rawOuterMessage) {
+            messageOptions.content = rawOuterMessage.replace(/\\n/g, '\n');
+          }
 
           await channel.send(messageOptions);
-          return await interaction.editReply(`✅ Embed posted to ${channel}!`);
+          return await interaction.editReply(`✅ Custom V2 embed posted to ${channel}!`);
         } catch (err) {
-          console.error('Error posting embed:', err);
+          console.error('Error posting custom embed:', err);
           return await interaction.editReply(`❌ Failed: ${err.message}`);
         }
       }
@@ -1409,11 +1609,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const logChannel = options.getChannel('log_channel');
         const welcomeChannel = options.getChannel('welcome_channel');
+        const welcomeMessage = options.getString('welcome_message');
         const boostChannel = options.getChannel('boost_channel');
 
         const cfg = guildSettings.get(interaction.guild.id) || {};
         if (logChannel) cfg.logChannelId = logChannel.id;
         if (welcomeChannel) cfg.welcomeChannelId = welcomeChannel.id;
+        if (welcomeMessage) cfg.welcomeMessage = welcomeMessage;
         if (boostChannel) cfg.boostChannelId = boostChannel.id;
 
         guildSettings.set(interaction.guild.id, cfg);
@@ -1421,12 +1623,50 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const statusUpdates = [
           logChannel ? `• **Log Channel:** ${logChannel}` : null,
           welcomeChannel ? `• **Welcome Channel:** ${welcomeChannel}` : null,
+          welcomeMessage ? `• **Welcome Message:** "${welcomeMessage}"` : null,
           boostChannel ? `• **Boost Channel:** ${boostChannel}` : null,
         ].filter(Boolean);
 
         if (statusUpdates.length === 0) return await interaction.editReply('⚠️ No channels updated.');
 
         return await interaction.editReply(`✅ **Configured Channels:**\n${statusUpdates.join('\n')}`);
+      }
+
+      // Moderation Commands
+      if (['kick', 'ban', 'mute', 'unmute'].includes(commandName)) {
+        const targetUser = options.getUser('user');
+        const reason = options.getString('reason') || 'No reason provided';
+        const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+
+        if (!member) {
+          return await interaction.reply({ content: '❌ Could not find that user in the server.', ephemeral: true });
+        }
+
+        if (commandName === 'kick') {
+          if (!member.kickable) return await interaction.reply({ content: '❌ I do not have permission to kick this user.', ephemeral: true });
+          await member.kick(reason);
+          await interaction.reply({ content: `✅ Successfully kicked ${targetUser.tag}. Reason: ${reason}` });
+        }
+
+        if (commandName === 'ban') {
+          if (!member.bannable) return await interaction.reply({ content: '❌ I do not have permission to ban this user.', ephemeral: true });
+          await member.ban({ reason });
+          await interaction.reply({ content: `✅ Successfully banned ${targetUser.tag}. Reason: ${reason}` });
+        }
+
+        if (commandName === 'mute') {
+          const minutes = options.getInteger('minutes');
+          if (!member.moderatable) return await interaction.reply({ content: '❌ I do not have permission to timeout this user.', ephemeral: true });
+          await member.timeout(minutes * 60 * 1000, reason);
+          await interaction.reply({ content: `✅ Successfully muted ${targetUser.tag} for ${minutes} minutes. Reason: ${reason}` });
+        }
+
+        if (commandName === 'unmute') {
+          if (!member.moderatable) return await interaction.reply({ content: '❌ I do not have permission to remove timeout from this user.', ephemeral: true });
+          await member.timeout(null, reason);
+          await interaction.reply({ content: `✅ Successfully unmuted ${targetUser.tag}.` });
+        }
+        return;
       }
 
       if (commandName === 'leaderboard') {
