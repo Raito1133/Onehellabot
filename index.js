@@ -78,40 +78,40 @@ const TICKET_PRESETS = {
     max: 6, 
     points: 3, 
     roleIds: [1529499059596038285],
-    bannerUrl: https://media.discordapp.net/attachments/1258198097293611131/1534961239598432368/6.png?ex=6a76078d&is=6a74b60d&hm=8f0ef43ee15c9a77eb4db7a93f72a13ed220524e73fa9bd105894b9e47e40208&=&format=webp&quality=lossless&width=2048&height=1024,
-    accentColor: #FDE37C 
+    bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961239598432368/6.png?ex=6a76078d&is=6a74b60d&hm=8f0ef43ee15c9a77eb4db7a93f72a13ed220524e73fa9bd105894b9e47e40208&=&format=webp&quality=lossless&width=2048&height=1024',
+    accentColor: 0xFDE37C 
   },
   ultra_weeklies: { 
     label: 'Ultra Weeklies', 
     max: 3, 
     points: 3, 
     roleIds: [1529499021884919858],
-    bannerUrl: https://media.discordapp.net/attachments/1258198097293611131/1534961237132050705/1.png?ex=6a76078d&is=6a74b60d&hm=c653e9de44bf6517cf997847ec6dbc9987387aed4dea2ea0823059f54f83a956&=&format=webp&quality=lossless&width=2048&height=1024,
-    accentColor: #FCDD62 
+    bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961237132050705/1.png?ex=6a76078d&is=6a74b60d&hm=c653e9de44bf6517cf997847ec6dbc9987387aed4dea2ea0823059f54f83a956&=&format=webp&quality=lossless&width=2048&height=1024',
+    accentColor: 0xFCDD62 
   },
   seven_man_dailies: { 
     label: '7-Man Dailies', 
     max: 6, 
     points: 2, 
     roleIds: [1529499021884919858, 1529499059596038285],
-    bannerUrl: https://media.discordapp.net/attachments/1258198097293611131/1534961238180626622/3.png?ex=6a76078d&is=6a74b60d&hm=5060584863f037151aada431ad3fba73ab18e43cf5ed3782182f5d9615b7de3d&=&format=webp&quality=lossless&width=2048&height=1024,
-    accentColor: #FCD748 
+    bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961238180626622/3.png?ex=6a76078d&is=6a74b60d&hm=5060584863f037151aada431ad3fba73ab18e43cf5ed3782182f5d9615b7de3d&=&format=webp&quality=lossless&width=2048&height=1024',
+    accentColor: 0xFCD748 
   },
   ultra_dailies: { 
     label: 'Ultra Dailies', 
     max: 3, 
     points: 2, 
     roleIds: [1529499021884919858],
-    bannerUrl: https://media.discordapp.net/attachments/1258198097293611131/1534961237597753374/2.png?ex=6a76078d&is=6a74b60d&hm=647568baa92f754e4dc7e20d48763f641a55322a976cd0d8b678093beab79343&=&format=webp&quality=lossless&width=2048&height=1024,
-    accentColor: #FBD12D 
+    bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961237597753374/2.png?ex=6a76078d&is=6a74b60d&hm=647568baa92f754e4dc7e20d48763f641a55322a976cd0d8b678093beab79343&=&format=webp&quality=lossless&width=2048&height=1024',
+    accentColor: 0xFBD12D 
   },
   server_ticket: { 
     label: 'Server Ticket / Support', 
     max: 2, 
     points: 0, 
     roleIds: ['1529498802149392614'],
-    bannerUrl: https://media.discordapp.net/attachments/1258198097293611131/1534961238772154518/4.png?ex=6a76078d&is=6a74b60d&hm=93e443b70e802d77bfe911218676839568cfa0a0361724e865be80233fdd415c&=&format=webp&quality=lossless&width=2048&height=1024,
-    accentColor: #FBCC13 
+    bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961238772154518/4.png?ex=6a76078d&is=6a74b60d&hm=93e443b70e802d77bfe911218676839568cfa0a0361724e865be80233fdd415c&=&format=webp&quality=lossless&width=2048&height=1024',
+    accentColor: 0xFBCC13 
   },
   boss_help: { 
     label: 'General Boss Help', 
@@ -119,15 +119,15 @@ const TICKET_PRESETS = {
     points: 2, 
     roleIds: [1529499059596038285],
     bannerUrl: STANDARD_BANNER_URL,
-    accentColor: #856A02 
+    accentColor: 0x856A02 
   },
   spamming: { 
     label: 'Spamming', 
     max: 6, 
     points: 1, 
     roleIds: [1529499059596038285],
-    bannerUrl: https://media.discordapp.net/attachments/1258198097293611131/1534961239157899527/5.png?ex=6a76078d&is=6a74b60d&hm=b94b6cf605487010f0cd4f6f14a7e37603127fc8fdd6f333934947aab42f255f&=&format=webp&quality=lossless&width=2048&height=1024,
-    accentColor: #EFBF04 
+    bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961239157899527/5.png?ex=6a76078d&is=6a74b60d&hm=b94b6cf605487010f0cd4f6f14a7e37603127fc8fdd6f333934947aab42f255f&=&format=webp&quality=lossless&width=2048&height=1024',
+    accentColor: 0xEFBF04 
   }
 };
 
