@@ -249,7 +249,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- ACTIVE TICKET CONTROL PANEL WITH STABLE EMBEDS & ALL 10 CUSTOM EMOJIS ---
+// --- ACTIVE TICKET CONTROL PANEL WITH ALL 10 CUSTOM EMOJIS ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -277,7 +277,6 @@ function buildTicketControlPayload(ticketData, userMention) {
     .setColor(accentColor)
     .setTimestamp();
 
-  // Action Row 1: Server, Monsters, Ping Helpers
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('btn_change_server')
@@ -296,7 +295,6 @@ function buildTicketControlPayload(ticketData, userMention) {
       .setEmoji({ id: '1534950337167884368', name: 'pinghelpersbt', animated: false })
   );
 
-  // Action Row 2: Complete & Cancel
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('btn_complete')
@@ -310,7 +308,6 @@ function buildTicketControlPayload(ticketData, userMention) {
       .setEmoji({ id: '1534950219517788170', name: 'cancelbt', animated: false })
   );
 
-  // Action Row 3: Room Details & Claim
   const row3 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('btn_location')
@@ -840,11 +837,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
         activeTickets.set(ticketChannel.id, newTicketData);
         tempTicketCache.delete(interaction.user.id);
 
-        const helperRolePings = pingRoleIds.map(id => `<@&${id}>`).join(' ');
+        // Safely filter out placeholder IDs to prevent NUMBER_TYPE_COERCE errors
+        const validRoleIds = pingRoleIds.filter(id => id && /^\d+$/.test(id));
+        const helperRolePings = validRoleIds.length > 0 ? validRoleIds.map(id => `<@&${id}>`).join(' ') : '@Helper';
         
         await ticketChannel.send({ 
           content: `${helperRolePings} assistance requested!`,
-          allowedMentions: { roles: pingRoleIds }
+          allowedMentions: validRoleIds.length > 0 ? { roles: validRoleIds } : { parse: ['users', 'roles'] }
         });
 
         const payload = isServerTicket 
@@ -968,10 +967,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (customId === 'btn_pinghelpers') {
         const pingRoleIds = ticketData?.pingRoleIds || [ULTRA_HELPER_ROLE_ID];
-        const helperRolePings = pingRoleIds.map(id => `<@&${id}>`).join(' ');
+        const validRoleIds = pingRoleIds.filter(id => id && /^\d+$/.test(id));
+        const helperRolePings = validRoleIds.length > 0 ? validRoleIds.map(id => `<@&${id}>`).join(' ') : '@Helper';
         return interaction.reply({ 
           content: `🔔 ${helperRolePings} assistance requested!`,
-          allowedMentions: { roles: pingRoleIds }
+          allowedMentions: validRoleIds.length > 0 ? { roles: validRoleIds } : { parse: ['users', 'roles'] }
         });
       }
 
