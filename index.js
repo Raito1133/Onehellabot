@@ -222,8 +222,10 @@ async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
 function buildTicketHubPayload(options = {}) {
   const {
     imageUrl = STANDARD_BANNER_URL,
+    guideTitle = "TICKET GUIDE",
     guideDesc = "Read through the ticket rules and guidelines before requesting assistance.",
     guideUrl = TICKET_GUIDE_URL,
+    createTitle = "MAKE A TICKET",
     createDesc = "Select a category from the menu to open a new ticket. Our helpers will join shortly!"
   } = options;
 
@@ -240,7 +242,7 @@ function buildTicketHubPayload(options = {}) {
         components: [
           {
             type: 10,
-            content: `🔖 **TICKET GUIDE**\n\n${guideDesc.replace(/\\n/g, '\n')}`
+            content: `**${guideTitle.replace(/\\n/g, '\n')}**\n\n${guideDesc.replace(/\\n/g, '\n')}`
           }
         ],
         accessory: {
@@ -255,7 +257,7 @@ function buildTicketHubPayload(options = {}) {
         components: [
           {
             type: 10,
-            content: `🤝 **MAKE A TICKET**\n\n${createDesc.replace(/\\n/g, '\n')}`
+            content: `**${createTitle.replace(/\\n/g, '\n')}**\n\n${createDesc.replace(/\\n/g, '\n')}`
           }
         ],
         accessory: {
@@ -345,7 +347,7 @@ function buildTicketControlPayload(ticketData, userMention) {
         components: [
           {
             type: 10,
-            content: `Still in need of help? **Ping helpers!**`
+            content: `Need more help? **Ping helpers!**`
           }
         ],
         accessory: {
@@ -358,7 +360,7 @@ function buildTicketControlPayload(ticketData, userMention) {
       },
       {
         type: 10,
-        content: `Finished with the ticket?`
+        content: `Done with the ticket?`
       },
       {
         type: 1,
@@ -399,7 +401,7 @@ function buildTicketControlPayload(ticketData, userMention) {
         components: [
           {
             type: 10,
-            content: `Forgot room details? Click **Room details!**`
+            content: `Need the room information again? Click **Room details!**`
           }
         ],
         accessory: {
@@ -415,7 +417,7 @@ function buildTicketControlPayload(ticketData, userMention) {
         components: [
           {
             type: 10,
-            content: `Claim the ticket, and get room details!`
+            content: `Claim this ticket to view room details.`
           }
         ],
         accessory: {
