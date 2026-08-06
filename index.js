@@ -121,8 +121,8 @@ const TICKET_PRESETS = {
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0xe74c3c 
   },
-  other_help: { 
-    label: 'Other Requests', 
+  spamming: { 
+    label: 'Spamming', 
     max: 6, 
     points: 1, 
     roleIds: [HELPER_ROLE_ID],
@@ -273,7 +273,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- COMPONENTS V2 LAYOUT WITH ALL 10 CUSTOM EMOJIS ---
+// --- COMPONENTS V2 LAYOUT WITH KICK HELPER & ALL CUSTOM EMOJIS ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -379,8 +379,19 @@ function buildTicketControlPayload(ticketData, userMention) {
         ]
       },
       {
-        type: 10,
-        content: `<:helpersbt:1534950382109986876> **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}`
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `<:helpersbt:1534950382109986876> **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 4,
+          custom_id: 'btn_kick_helper',
+          label: 'Kick Helper'
+        }
       },
       {
         type: 9,
@@ -615,7 +626,7 @@ client.once(Events.ClientReady, async () => {
   client.user.setPresence({
     status: 'idle',
     activities: [{
-      name: 'GUMANA KANA PLS',
+      name: 'Im weird',
       type: 5
     }]
   });
@@ -853,6 +864,54 @@ client.on(Events.InteractionCreate, async (interaction) => {
       activeTickets.set(interaction.channel.id, ticketData);
 
       await interaction.editReply({ content: `✅ Successfully updated server to **${newServer}**!`, components: [] });
+      return updateTicketEmbed(interaction.channel, ticketData);
+    }
+
+    // Kick Helper Button Clicked
+    if (interaction.isButton() && interaction.customId === 'btn_kick_helper') {
+      const ticketData = activeTickets.get(interaction.channel.id);
+      if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
+
+      const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels);
+      const isRequester = interaction.user.id === ticketData.requesterId;
+      if (!isAdmin && !isRequester) {
+        return interaction.reply({ content: '❌ Only the requester or staff can kick helpers.', ephemeral: true });
+      }
+
+      if (!ticketData.helpers || ticketData.helpers.length === 0) {
+        return interaction.reply({ content: '⚠️ There are no helpers currently claimed in this ticket.', ephemeral: true });
+      }
+
+      const helperMenu = new StringSelectMenuBuilder()
+        .setCustomId('active_kick_helper_menu')
+        .setPlaceholder('Select helper to remove...')
+        .addOptions(
+          ticketData.helpers.map(h => 
+            new StringSelectMenuOptionBuilder()
+              .setLabel(`Helper ID: ${h.id}`)
+              .setValue(h.id)
+          )
+        );
+
+      return await interaction.reply({
+        content: '🔨 **Select the helper you want to remove from this ticket:**',
+        components: [new ActionRowBuilder().addComponents(helperMenu)],
+        ephemeral: true
+      });
+    }
+
+    // Process Kick Helper Selection
+    if (interaction.isStringSelectMenu() && interaction.customId === 'active_kick_helper_menu') {
+      await interaction.deferUpdate();
+      const ticketData = activeTickets.get(interaction.channel.id);
+      if (!ticketData) return;
+
+      const helperIdToRemove = interaction.values[0];
+      ticketData.helpers = ticketData.helpers.filter(h => h.id !== helperIdToRemove);
+      activeTickets.set(interaction.channel.id, ticketData);
+
+      await interaction.editReply({ content: `✅ Successfully removed <@${helperIdToRemove}> from the ticket!`, components: [] });
+      await interaction.channel.send({ content: `🔴 <@${helperIdToRemove}> has been removed from this ticket by ${interaction.user}.` });
       return updateTicketEmbed(interaction.channel, ticketData);
     }
 
