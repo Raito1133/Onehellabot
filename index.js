@@ -23,6 +23,7 @@ const http = require('http');
 
 // --- ⚠️ CONFIGURATION ⚠️ ---
 const GUILD_ID = '1371775026264670228'; // Server ID
+const ULTRA_HELPER_ROLE_ID = 'YOUR_ULTRA_HELPER_ROLE_ID'; // <--- Paste your Ultra Helper role ID here!
 const HELPER_ROLE_ID = 'YOUR_HELPER_ROLE_ID'; // Fallback Helper Role ID
 const TICKET_GUIDE_URL = 'https://discord.com'; 
 
@@ -76,7 +77,7 @@ const TICKET_PRESETS = {
     label: 'Farming Assistance', 
     max: 6, 
     points: 3, 
-    roleIds: ['1529499059596038285'],
+    roleIds: [HELPER_ROLE_ID],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x8b0000 
   },
@@ -84,7 +85,7 @@ const TICKET_PRESETS = {
     label: 'Ultra Weeklies', 
     max: 3, 
     points: 3, 
-    roleIds: ['1529499021884919858'],
+    roleIds: [ULTRA_HELPER_ROLE_ID],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x9b59b6 
   },
@@ -92,7 +93,7 @@ const TICKET_PRESETS = {
     label: '7-Man Dailies', 
     max: 6, 
     points: 2, 
-    roleIds: ['1529499059596038285', '1529499021884919858'],
+    roleIds: [ULTRA_HELPER_ROLE_ID, HELPER_ROLE_ID],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0xe67e22 
   },
@@ -100,7 +101,7 @@ const TICKET_PRESETS = {
     label: 'Ultra Dailies', 
     max: 3, 
     points: 2, 
-    roleIds: ['1529499021884919858'],
+    roleIds: [ULTRA_HELPER_ROLE_ID],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x3498db 
   },
@@ -116,7 +117,7 @@ const TICKET_PRESETS = {
     label: 'General Boss Help', 
     max: 6, 
     points: 2, 
-    roleIds: ['1529499059596038285'],
+    roleIds: [HELPER_ROLE_ID],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0xe74c3c 
   },
@@ -124,7 +125,7 @@ const TICKET_PRESETS = {
     label: 'Other Requests', 
     max: 6, 
     points: 1, 
-    roleIds: ['1529499059596038285'],
+    roleIds: [HELPER_ROLE_ID],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x95a5a6 
   }
@@ -272,7 +273,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- ACTIVE TICKET CONTROL PANEL (COMPONENTS V2) ---
+// --- ACTIVE TICKET CONTROL PANEL WITH YOUR 10 CUSTOM EMOJIS ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -296,11 +297,11 @@ function buildTicketControlPayload(ticketData, userMention) {
       },
       {
         type: 10,
-        content: `🏅 **Points:**\n-# > **${points}**`
+        content: `<:pointsbt:1534950425080496189> **Points:**\n-# > **${points}**`
       },
       {
         type: 10,
-        content: `👤 **Requester:** ${requesterTag}`
+        content: `<:requestbt:1534950441060798594> **Requester:** ${requesterTag}`
       },
       {
         type: 9,
@@ -314,7 +315,8 @@ function buildTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 2,
           custom_id: 'btn_change_server',
-          label: 'Change server'
+          label: 'Change server',
+          emoji: { id: '1534950290908909749', name: 'changeserverbt', animated: false }
         }
       },
       {
@@ -329,7 +331,8 @@ function buildTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 2,
           custom_id: 'btn_change_bosses',
-          label: 'Change Monsters'
+          label: 'Change Monsters',
+          emoji: { id: '1534950407003050185', name: 'monstersbt', animated: false }
         }
       },
       {
@@ -348,7 +351,8 @@ function buildTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 2,
           custom_id: 'btn_pinghelpers',
-          label: 'Ping helpers'
+          label: 'Ping helpers',
+          emoji: { id: '1534950337167884368', name: 'pinghelpersbt', animated: false }
         }
       },
       {
@@ -362,19 +366,21 @@ function buildTicketControlPayload(ticketData, userMention) {
             type: 2,
             style: 3,
             custom_id: 'btn_complete',
-            label: 'Complete'
+            label: 'Complete',
+            emoji: { id: '1534950268679094397', name: 'completebt', animated: false }
           },
           {
             type: 2,
             style: 4,
             custom_id: 'btn_cancel',
-            label: 'Cancel'
+            label: 'Cancel',
+            emoji: { id: '1534950219517788170', name: 'cancelbt', animated: false }
           }
         ]
       },
       {
         type: 10,
-        content: `🖐️ **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}`
+        content: `<:helpersbt:1534950382109986876> **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}`
       },
       {
         type: 9,
@@ -388,7 +394,8 @@ function buildTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 2,
           custom_id: 'btn_location',
-          label: 'Room details'
+          label: 'Room details',
+          emoji: { id: '1534950471922483382', name: 'roomdeetsbt', animated: false }
         }
       },
       {
@@ -403,7 +410,8 @@ function buildTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 3,
           custom_id: 'btn_claim',
-          label: 'Claim'
+          label: 'Claim',
+          emoji: { id: '1534950248831516806', name: 'claimbt', animated: false }
         }
       }
     ]
@@ -432,7 +440,7 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
       },
       {
         type: 10,
-        content: `👤 **User:** ${requesterTag}\n\n**Subject / Concern:**\n-# > **${ticketData.subject}**`
+        content: `<:requestbt:1534950441060798594> **User:** ${requesterTag}\n\n**Subject / Concern:**\n-# > **${ticketData.subject}**`
       },
       {
         type: 10,
@@ -450,7 +458,8 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 2,
           custom_id: 'btn_pinghelpers',
-          label: 'Ping staff'
+          label: 'Ping staff',
+          emoji: { id: '1534950337167884368', name: 'pinghelpersbt', animated: false }
         }
       },
       {
@@ -460,13 +469,15 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
             type: 2,
             style: 3,
             custom_id: 'btn_complete',
-            label: 'Complete'
+            label: 'Complete',
+            emoji: { id: '1534950268679094397', name: 'completebt', animated: false }
           },
           {
             type: 2,
             style: 4,
             custom_id: 'btn_cancel',
-            label: 'Cancel'
+            label: 'Cancel',
+            emoji: { id: '1534950219517788170', name: 'cancelbt', animated: false }
           }
         ]
       }
@@ -949,7 +960,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const helperRolePing = pingRoleIds.length > 0 ? pingRoleIds.map(id => `<@&${id}>`).join(' ') : '@Helper';
         
-        await ticketChannel.send({ content: `${helperRolePing} New ticket requested by ${interaction.user}!` });
+        await ticketChannel.send({ 
+          content: `${helperRolePing} assistance requested!`,
+          allowedMentions: { parse: ['users', 'roles'], roles: pingRoleIds }
+        });
 
         const payload = isServerTicket 
           ? buildSupportTicketControlPayload(newTicketData, `${interaction.user}`)
@@ -1071,9 +1085,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       if (customId === 'btn_pinghelpers') {
-        const pingRoleIds = ticketData?.pingRoleIds || [];
+        const pingRoleIds = ticketData?.pingRoleIds || [ULTRA_HELPER_ROLE_ID];
         const helperRolePing = pingRoleIds.length > 0 ? pingRoleIds.map(id => `<@&${id}>`).join(' ') : '@Helper';
-        return interaction.reply({ content: `🔔 ${helperRolePing} assistance requested!` });
+        return interaction.reply({ 
+          content: `🔔 ${helperRolePing} assistance requested!`,
+          allowedMentions: { parse: ['users', 'roles'], roles: pingRoleIds }
+        });
       }
 
       if (customId === 'btn_cancel') {
