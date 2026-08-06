@@ -23,8 +23,9 @@ const http = require('http');
 
 // --- ⚠️ CONFIGURATION ⚠️ ---
 const GUILD_ID = '1371775026264670228'; // Server ID
-const ULTRA_HELPER_ROLE_ID = 'YOUR_ULTRA_HELPER_ROLE_ID'; // <--- Paste your Ultra Helper role ID here!
-const HELPER_ROLE_ID = 'YOUR_HELPER_ROLE_ID'; // Fallback Helper Role ID
+const ULTRA_HELPER_ROLE_ID = '1529499021884919858'; // Ultra Helper Role ID
+const HELPER_ROLE_ID = '1529499059596038285'; // Standard Helper / Farming Role ID
+const SUPPORT_ROLE_ID = '1529498802149392614'; // Support Role ID
 const TICKET_GUIDE_URL = 'https://discord.com'; 
 
 const STANDARD_BANNER_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
@@ -77,7 +78,7 @@ const TICKET_PRESETS = {
     label: 'Farming Assistance', 
     max: 6, 
     points: 3, 
-    roleIds: [1529499059596038285],
+    roleIds: [HELPER_ROLE_ID],
     bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961239598432368/6.png?ex=6a76078d&is=6a74b60d&hm=8f0ef43ee15c9a77eb4db7a93f72a13ed220524e73fa9bd105894b9e47e40208&=&format=webp&quality=lossless&width=2048&height=1024',
     accentColor: 0xFDE37C 
   },
@@ -85,7 +86,7 @@ const TICKET_PRESETS = {
     label: 'Ultra Weeklies', 
     max: 3, 
     points: 3, 
-    roleIds: [1529499021884919858],
+    roleIds: [ULTRA_HELPER_ROLE_ID],
     bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961237132050705/1.png?ex=6a76078d&is=6a74b60d&hm=c653e9de44bf6517cf997847ec6dbc9987387aed4dea2ea0823059f54f83a956&=&format=webp&quality=lossless&width=2048&height=1024',
     accentColor: 0xFCDD62 
   },
@@ -93,7 +94,7 @@ const TICKET_PRESETS = {
     label: '7-Man Dailies', 
     max: 6, 
     points: 2, 
-    roleIds: [1529499021884919858, 1529499059596038285],
+    roleIds: [ULTRA_HELPER_ROLE_ID, HELPER_ROLE_ID],
     bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961238180626622/3.png?ex=6a76078d&is=6a74b60d&hm=5060584863f037151aada431ad3fba73ab18e43cf5ed3782182f5d9615b7de3d&=&format=webp&quality=lossless&width=2048&height=1024',
     accentColor: 0xFCD748 
   },
@@ -101,7 +102,7 @@ const TICKET_PRESETS = {
     label: 'Ultra Dailies', 
     max: 3, 
     points: 2, 
-    roleIds: [1529499021884919858],
+    roleIds: [ULTRA_HELPER_ROLE_ID],
     bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961237597753374/2.png?ex=6a76078d&is=6a74b60d&hm=647568baa92f754e4dc7e20d48763f641a55322a976cd0d8b678093beab79343&=&format=webp&quality=lossless&width=2048&height=1024',
     accentColor: 0xFBD12D 
   },
@@ -109,7 +110,7 @@ const TICKET_PRESETS = {
     label: 'Server Ticket / Support', 
     max: 2, 
     points: 0, 
-    roleIds: ['1529498802149392614'],
+    roleIds: [SUPPORT_ROLE_ID],
     bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961238772154518/4.png?ex=6a76078d&is=6a74b60d&hm=93e443b70e802d77bfe911218676839568cfa0a0361724e865be80233fdd415c&=&format=webp&quality=lossless&width=2048&height=1024',
     accentColor: 0xFBCC13 
   },
@@ -117,7 +118,7 @@ const TICKET_PRESETS = {
     label: 'General Boss Help', 
     max: 6, 
     points: 2, 
-    roleIds: [1529499059596038285],
+    roleIds: [HELPER_ROLE_ID],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x856A02 
   },
@@ -125,7 +126,7 @@ const TICKET_PRESETS = {
     label: 'Spamming', 
     max: 6, 
     points: 1, 
-    roleIds: [1529499059596038285],
+    roleIds: [HELPER_ROLE_ID],
     bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961239157899527/5.png?ex=6a76078d&is=6a74b60d&hm=b94b6cf605487010f0cd4f6f14a7e37603127fc8fdd6f333934947aab42f255f&=&format=webp&quality=lossless&width=2048&height=1024',
     accentColor: 0xEFBF04 
   }
@@ -731,6 +732,44 @@ client.on(Events.InteractionCreate, async (interaction) => {
         });
       }
 
+      // If Support Ticket, skip server dropdown and go straight to Modal Form
+      if (selectedKey === 'server_ticket') {
+        tempTicketCache.set(interaction.user.id, { categoryKey: 'server_ticket', server: 'N/A', bosses: '' });
+
+        const modal = new ModalBuilder()
+          .setCustomId('ticket_form_final_2_0_server_ticket')
+          .setTitle('Ticket: Server Ticket / Support');
+
+        const ignInput = new TextInputBuilder()
+          .setCustomId('ign')
+          .setLabel('Username / IGN')
+          .setPlaceholder('Enter your username...')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true);
+
+        const subjectInput = new TextInputBuilder()
+          .setCustomId('subject')
+          .setLabel('Subject / Concern')
+          .setPlaceholder('Report, Question, etc.')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true);
+
+        const descInput = new TextInputBuilder()
+          .setCustomId('description')
+          .setLabel('Details / Report')
+          .setPlaceholder('Describe your concern...')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true);
+
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(ignInput),
+          new ActionRowBuilder().addComponents(subjectInput),
+          new ActionRowBuilder().addComponents(descInput)
+        );
+
+        return await interaction.showModal(modal);
+      }
+
       // For other categories, prompt Server Dropdown next
       const serverMenu = new StringSelectMenuBuilder()
         .setCustomId(`select_server_form_${selectedKey}`)
@@ -802,27 +841,37 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setStyle(TextInputStyle.Short)
         .setRequired(true);
 
-      if (categoryKey === 'server_ticket') {
-        const subjectInput = new TextInputBuilder().setCustomId('subject').setLabel('Subject / Concern').setPlaceholder('Report, Question, etc.').setStyle(TextInputStyle.Short).setRequired(true);
-        const descInput = new TextInputBuilder().setCustomId('description').setLabel('Details / Report').setPlaceholder('Describe your concern...').setStyle(TextInputStyle.Paragraph).setRequired(true);
-        modal.addComponents(new ActionRowBuilder().addComponents(ignInput), new ActionRowBuilder().addComponents(subjectInput), new ActionRowBuilder().addComponents(descInput));
-      } else {
-        const mapInput = new TextInputBuilder().setCustomId('map_name').setLabel('Map Name / Room').setPlaceholder('ultraezrajal, ultrakala, etc.').setStyle(TextInputStyle.Short).setRequired(true);
-        const detailsInput = new TextInputBuilder().setCustomId('details').setLabel('Details').setPlaceholder('Add extra details (optional)...').setStyle(TextInputStyle.Paragraph).setRequired(false);
-        
-        const modalComps = [
-          new ActionRowBuilder().addComponents(ignInput), 
-          new ActionRowBuilder().addComponents(mapInput),
-          new ActionRowBuilder().addComponents(detailsInput)
-        ];
-        
-        if (!bossVal) {
-          const descInput = new TextInputBuilder().setCustomId('description').setLabel('Monsters / Details').setPlaceholder('List monsters...').setStyle(TextInputStyle.Paragraph).setRequired(true);
-          modalComps.push(new ActionRowBuilder().addComponents(descInput));
-        }
+      const mapInput = new TextInputBuilder()
+        .setCustomId('map_name')
+        .setLabel('Map Name / Room')
+        .setPlaceholder('ultraezrajal, ultrakala, etc.')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
 
-        modal.addComponents(modalComps);
+      const detailsInput = new TextInputBuilder()
+        .setCustomId('details')
+        .setLabel('Details')
+        .setPlaceholder('Add extra details (optional)...')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(false);
+      
+      const modalComps = [
+        new ActionRowBuilder().addComponents(ignInput), 
+        new ActionRowBuilder().addComponents(mapInput),
+        new ActionRowBuilder().addComponents(detailsInput)
+      ];
+      
+      if (!bossVal) {
+        const descInput = new TextInputBuilder()
+          .setCustomId('description')
+          .setLabel('Monsters / Details')
+          .setPlaceholder('List monsters...')
+          .setStyle(TextInputStyle.Paragraph)
+          .setRequired(true);
+        modalComps.push(new ActionRowBuilder().addComponents(descInput));
       }
+
+      modal.addComponents(modalComps);
 
       return await interaction.showModal(modal);
     }
@@ -945,7 +994,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const pingRoleIds = preset.roleIds || [HELPER_ROLE_ID];
 
         const ign = interaction.fields.getTextInputValue('ign');
-        const ticketDetails = interaction.fields.getTextInputValue('details') || 'None provided';
+        const ticketDetails = ticketType === 'server_ticket' 
+          ? interaction.fields.getTextInputValue('description') 
+          : (interaction.fields.getTextInputValue('details') || 'None provided');
 
         if (!description) {
           try {
@@ -981,16 +1032,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         const isServerTicket = ticketType === 'server_ticket';
+        
+        // Private support tickets: only bot, creator, and officers/moderators (ManageChannels permission holders) can view
         const permissionOverwrites = [
           { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages] },
-          { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
+          { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+          { id: interaction.guild.roles.everyone, deny: [PermissionsBitField.Flags.ViewChannel] }
         ];
-
-        if (isServerTicket) {
-          permissionOverwrites.push({ id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] });
-        } else {
-          permissionOverwrites.push({ id: interaction.guild.id, allow: [PermissionsBitField.Flags.ViewChannel], deny: [PermissionsBitField.Flags.SendMessages] });
-        }
 
         const ticketChannel = await interaction.guild.channels.create({
           name: chName,
@@ -1018,7 +1066,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         tempTicketCache.delete(interaction.user.id);
 
         const validRoleIds = pingRoleIds.filter(id => id && /^\d+$/.test(id));
-        const helperRolePings = validRoleIds.length > 0 ? validRoleIds.map(id => `<@&${id}>`).join(' ') : '@Helper';
+        const helperRolePings = validRoleIds.length > 0 ? validRoleIds.map(id => `<@&${id}>`).join(' ') : '@Staff';
         
         await ticketChannel.send({ 
           content: `${helperRolePings} assistance requested!`,
@@ -1145,9 +1193,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       if (customId === 'btn_pinghelpers') {
-        const pingRoleIds = ticketData?.pingRoleIds || [ULTRA_HELPER_ROLE_ID];
+        const pingRoleIds = ticketData?.pingRoleIds || [SUPPORT_ROLE_ID];
         const validRoleIds = pingRoleIds.filter(id => id && /^\d+$/.test(id));
-        const helperRolePings = validRoleIds.length > 0 ? validRoleIds.map(id => `<@&${id}>`).join(' ') : '@Helper';
+        const helperRolePings = validRoleIds.length > 0 ? validRoleIds.map(id => `<@&${id}>`).join(' ') : '@Staff';
         return interaction.reply({ 
           content: `🔔 ${helperRolePings} assistance requested!`,
           allowedMentions: validRoleIds.length > 0 ? { roles: validRoleIds } : { parse: ['users', 'roles'] }
