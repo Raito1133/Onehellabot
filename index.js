@@ -29,9 +29,19 @@ const TICKET_GUIDE_URL = 'https://discord.com';
 const STANDARD_BANNER_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
 
 const AQW_SERVERS = [
-  'Twilly', 'Twig', 'Artix', 'Gravelyn', 'Sir Ver', 
-  'Galanoth', 'Yorumi', 'Espada', 'Sepulchure', 
-  'Safiria', 'Swordhaven (EU)', 'Alteon', 'Yokai (SEA)'
+  { label: 'Twilly', emoji: { id: '1534938699190763542', name: 'sadtwilly' } },
+  { label: 'Twig', emoji: { id: '1534938798545305711', name: 'twighappy' } },
+  { label: 'Artix', emoji: { id: '1534938821974556854', name: 'artixkek' } },
+  { label: 'Gravelyn', emoji: '⚔️' },
+  { label: 'Sir Ver', emoji: '⚔️' },
+  { label: 'Galanoth', emoji: '⚔️' },
+  { label: 'Yorumi', emoji: '⚔️' },
+  { label: 'Espada', emoji: '⚔️' },
+  { label: 'Sepulchure', emoji: { id: '1534938847518130247', name: 'toocloseSeppy' } },
+  { label: 'Safiria', emoji: '⚔️' },
+  { label: 'Swordhaven (EU)', emoji: '⚔️' },
+  { label: 'Alteon', emoji: '⚔️' },
+  { label: 'Yokai (SEA)', emoji: '⚔️' }
 ];
 
 const client = new Client({
@@ -156,21 +166,24 @@ function getPointsForTicket(ticketData) {
   if (ticketData.customPoints !== undefined && ticketData.customPoints >= 0) {
     return ticketData.customPoints;
   }
-  const normalized = (ticketData.type || '').toLowerCase();
+  const type = (ticketData.type || '').toLowerCase();
   const desc = (ticketData.description || '').toLowerCase();
-  const bossCount = desc ? desc.split(',').length : 1;
+  const itemCount = desc ? desc.split(',').length : 1;
 
-  if (normalized.includes('ultra')) {
-    return 5 * bossCount; // 5 points per ultra monster
+  if (type === 'ultra_weeklies') {
+    return 3 * itemCount; // 3 points per Ultra Weekly monster
   }
-  if (normalized.includes('weekly')) {
+  if (type === 'ultra_dailies' || type === 'seven_man_dailies') {
+    return 2 * itemCount; // 2 points per Ultra Daily or 7-man Daily monster
+  }
+  if (type.includes('farm') || type.includes('farming')) {
+    return 3;
+  }
+  if (type.includes('weekly')) {
     return 8;
   }
-  if (normalized.includes('daily')) {
+  if (type.includes('daily')) {
     return 5;
-  }
-  if (normalized.includes('farm') || normalized.includes('farming')) {
-    return 3;
   }
   return 1;
 }
@@ -614,7 +627,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    // STEP 1: Category Selected -> Prompt Server Dropdown (or Boss Menu if Ultra Weeklies)
+    // STEP 1: Category Selected
     if (interaction.isStringSelectMenu() && interaction.customId === 'select_ticket_cat') {
       const selectedKey = interaction.values[0];
       const preset = TICKET_PRESETS[selectedKey] || { label: 'Ticket', max: 6, points: 1, roleIds: [HELPER_ROLE_ID] };
@@ -685,7 +698,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setCustomId(`select_server_form_${selectedKey}`)
         .setPlaceholder('Select your AQW server...')
         .addOptions(
-          AQW_SERVERS.map(srv => new StringSelectMenuOptionBuilder().setLabel(srv).setValue(srv))
+          AQW_SERVERS.map(srv => 
+            new StringSelectMenuOptionBuilder()
+              .setLabel(srv.label)
+              .setValue(srv.label)
+              .setEmoji(srv.emoji)
+          )
         );
 
       return await interaction.update({
@@ -705,7 +723,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setCustomId('select_server_form_boss')
         .setPlaceholder('Select your AQW server...')
         .addOptions(
-          AQW_SERVERS.map(srv => new StringSelectMenuOptionBuilder().setLabel(srv).setValue(srv))
+          AQW_SERVERS.map(srv => 
+            new StringSelectMenuOptionBuilder()
+              .setLabel(srv.label)
+              .setValue(srv.label)
+              .setEmoji(srv.emoji)
+          )
         );
 
       return await interaction.update({
@@ -714,7 +737,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    // Server selected from dropdown -> Show Final Modal (Server text box eliminated from form)
+    // Server selected from dropdown -> Show Final Modal (Server text box eliminated)
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_server_form_')) {
       const selectedServer = interaction.values[0];
       let categoryKey, bossVal = '';
@@ -747,8 +770,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
         modal.addComponents(new ActionRowBuilder().addComponents(ignInput), new ActionRowBuilder().addComponents(subjectInput), new ActionRowBuilder().addComponents(descInput));
       } else {
         const mapInput = new TextInputBuilder().setCustomId('map_name').setLabel('Map Name / Room').setPlaceholder('ultraezrajal, ultrakala, etc.').setStyle(TextInputStyle.Short).setRequired(true);
-        const descInput = new TextInputBuilder().setCustomId('description').setLabel('Monsters / Details').setValue(bossVal).setPlaceholder('List monsters...').setStyle(TextInputStyle.Paragraph).setRequired(true);
-        modal.addComponents(new ActionRowBuilder().addComponents(ignInput), new ActionRowBuilder().addComponents(mapInput), new ActionRowBuilder().addComponents(descInput));
+        
+        const modalComps = [new ActionRowBuilder().addComponents(ignInput), new ActionRowBuilder().addComponents(mapInput)];
+        
+        // If it's a category where bosses weren't picked via dropdown (like farming/other), include a text box for details
+        if (!bossVal) {
+          const descInput = new TextInputBuilder().setCustomId('description').setLabel('Monsters / Details').setPlaceholder('List monsters...').setStyle(TextInputStyle.Paragraph).setRequired(true);
+          modalComps.push(new ActionRowBuilder().addComponents(descInput));
+        }
+
+        modal.addComponents(modalComps);
       }
 
       return await interaction.showModal(modal);
@@ -766,7 +797,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setCustomId('active_change_server_menu')
         .setPlaceholder('Select new AQW server...')
         .addOptions(
-          AQW_SERVERS.map(srv => new StringSelectMenuOptionBuilder().setLabel(srv).setValue(srv))
+          AQW_SERVERS.map(srv => 
+            new StringSelectMenuOptionBuilder()
+              .setLabel(srv.label)
+              .setValue(srv.label)
+              .setEmoji(srv.emoji)
+          )
         );
 
       return await interaction.reply({
@@ -813,12 +849,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const cached = tempTicketCache.get(interaction.user.id) || {};
         const serverName = cached.server || 'Artix';
+        let description = cached.bosses || '';
 
         const preset = TICKET_PRESETS[ticketType] || {};
         const pingRoleIds = preset.roleIds || [HELPER_ROLE_ID];
 
         const ign = interaction.fields.getTextInputValue('ign');
-        const description = interaction.fields.getTextInputValue('description');
+        if (!description) {
+          try {
+            description = interaction.fields.getTextInputValue('description');
+          } catch {
+            description = 'General Assistance';
+          }
+        }
 
         let room = 'N/A';
         let subject = 'N/A';
