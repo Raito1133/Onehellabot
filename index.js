@@ -1035,12 +1035,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const isServerTicket = ticketType === 'server_ticket';
         
-        // Private support tickets: only bot, creator, and officers/moderators (ManageChannels permission holders) can view
-        const permissionOverwrites = [
+        // Permission overwrites: Support tickets are private; all other tickets are public
+        let permissionOverwrites = [
           { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages] },
-          { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-          { id: interaction.guild.roles.everyone, deny: [PermissionsBitField.Flags.ViewChannel] }
+          { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
         ];
+
+        if (isServerTicket) {
+          permissionOverwrites.push({ id: interaction.guild.roles.everyone, deny: [PermissionsBitField.Flags.ViewChannel] });
+        } else {
+          permissionOverwrites.push({ id: interaction.guild.roles.everyone, allow: [PermissionsBitField.Flags.ViewChannel] });
+        }
 
         const ticketChannel = await interaction.guild.channels.create({
           name: chName,
