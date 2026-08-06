@@ -150,10 +150,16 @@ function getPointsForTicket(ticketData) {
     return ticketData.customPoints;
   }
   const normalized = (ticketData.type || '').toLowerCase();
+  const desc = (ticketData.description || '').toLowerCase();
+  const bossCount = desc ? desc.split(',').length : 1;
+
+  if (normalized.includes('ultra_dailies') || normalized.includes('ultra dailies')) {
+    return 5 * bossCount; // 5 points per ultra daily boss
+  }
   if (normalized.includes('weekly') || normalized.includes('ultraweekly') || normalized.includes('ultra weeklies')) {
     return 8;
   }
-  if (normalized.includes('daily') || normalized.includes('ultradaily') || normalized.includes('ultra dailies')) {
+  if (normalized.includes('daily')) {
     return 5;
   }
   if (normalized.includes('farm') || normalized.includes('farming')) {
@@ -234,7 +240,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- RESTORED SCREENSHOT-EXACT TICKET LAYOUT (COMPONENTS V2) ---
+// --- ERROR-FREE SCREENSHOT LAYOUT (COMPONENTS V2) ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -257,22 +263,12 @@ function buildTicketControlPayload(ticketData, userMention) {
         items: [{ media: { url: ticketBanner } }]
       },
       {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `🏅 **Points:**\n-# > **${points}**`
-          }
-        ]
+        type: 10,
+        content: `🏅 **Points:**\n-# > **${points}**`
       },
       {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `👤 **Requester:** ${requesterTag}`
-          }
-        ]
+        type: 10,
+        content: `👤 **Requester:** ${requesterTag}`
       },
       {
         type: 9,
@@ -320,13 +316,8 @@ function buildTicketControlPayload(ticketData, userMention) {
         }
       },
       {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Finished with the ticket?`
-          }
-        ]
+        type: 10,
+        content: `Finished with the ticket?`
       },
       {
         type: 1,
@@ -346,13 +337,8 @@ function buildTicketControlPayload(ticketData, userMention) {
         ]
       },
       {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `🖐️ **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}`
-          }
-        ]
+        type: 10,
+        content: `🖐️ **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}`
       },
       {
         type: 9,
@@ -409,23 +395,12 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
         items: [{ media: { url: ticketBanner } }]
       },
       {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `👤 **User:** ${requesterTag}\n\n` +
-                     `**Subject / Concern:**\n-# > **${ticketData.subject}**`
-          }
-        ]
+        type: 10,
+        content: `👤 **User:** ${requesterTag}\n\n**Subject / Concern:**\n-# > **${ticketData.subject}**`
       },
       {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `**Details / Report:**\n-# > **${ticketData.description}**`
-          }
-        ]
+        type: 10,
+        content: `**Details / Report:**\n-# > **${ticketData.description}**`
       },
       {
         type: 9,
