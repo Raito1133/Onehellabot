@@ -29,15 +29,15 @@ const TICKET_GUIDE_URL = 'https://discord.com';
 const STANDARD_BANNER_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
 
 const AQW_SERVERS = [
-  { label: 'Twilly', emoji: { id: '1534938699190763542', name: 'sadtwilly' } },
-  { label: 'Twig', emoji: { id: '1534938798545305711', name: 'twighappy' } },
-  { label: 'Artix', emoji: { id: '1534938821974556854', name: 'artixkek' } },
+  { label: 'Twilly', emoji: { id: '1534938699190763542', name: 'sadtwilly', animated: false } },
+  { label: 'Twig', emoji: { id: '1534938798545305711', name: 'twighappy', animated: false } },
+  { label: 'Artix', emoji: { id: '1534938821974556854', name: 'artixkek', animated: false } },
   { label: 'Gravelyn', emoji: '⚔️' },
   { label: 'Sir Ver', emoji: '⚔️' },
   { label: 'Galanoth', emoji: '⚔️' },
   { label: 'Yorumi', emoji: '⚔️' },
   { label: 'Espada', emoji: '⚔️' },
-  { label: 'Sepulchure', emoji: { id: '1534938847518130247', name: 'toocloseSeppy' } },
+  { label: 'Sepulchure', emoji: { id: '1534938847518130247', name: 'toocloseSeppy', animated: false } },
   { label: 'Safiria', emoji: '⚔️' },
   { label: 'Swordhaven (EU)', emoji: '⚔️' },
   { label: 'Alteon', emoji: '⚔️' },
@@ -83,7 +83,7 @@ const TICKET_PRESETS = {
   ultra_weeklies: { 
     label: 'Ultra Weeklies', 
     max: 3, 
-    points: 8, 
+    points: 3, 
     roleIds: ['1529499021884919858'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x9b59b6 
@@ -91,7 +91,7 @@ const TICKET_PRESETS = {
   seven_man_dailies: { 
     label: '7-Man Dailies', 
     max: 6, 
-    points: 5, 
+    points: 2, 
     roleIds: ['1529499059596038285', '1529499021884919858'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0xe67e22 
@@ -99,7 +99,7 @@ const TICKET_PRESETS = {
   ultra_dailies: { 
     label: 'Ultra Dailies', 
     max: 3, 
-    points: 5, 
+    points: 2, 
     roleIds: ['1529499021884919858'],
     bannerUrl: STANDARD_BANNER_URL,
     accentColor: 0x3498db 
@@ -163,19 +163,31 @@ function isHelperInActiveTicket(userId) {
 }
 
 function getPointsForTicket(ticketData) {
+  const type = (ticketData.type || '').toLowerCase();
+  const desc = (ticketData.description || '').toLowerCase();
+  const items = desc ? desc.split(',').map(x => x.trim()).filter(x => x.length > 0) : [];
+  const itemCount = items.length > 0 ? items.length : 1;
+
+  if (type === 'ultra_weeklies') {
+    let totalPts = 0;
+    for (const item of items) {
+      if (item.toLowerCase().includes('speaker')) {
+        totalPts += 5; // Ultra Speaker is 5 points
+      } else {
+        totalPts += 3; // Other Ultra Weeklies bosses are 3 points
+      }
+    }
+    return totalPts > 0 ? totalPts : 3 * itemCount;
+  }
+
+  if (type === 'ultra_dailies' || type === 'seven_man_dailies') {
+    return 2 * itemCount; // 2 points per boss
+  }
+
   if (ticketData.customPoints !== undefined && ticketData.customPoints >= 0) {
     return ticketData.customPoints;
   }
-  const type = (ticketData.type || '').toLowerCase();
-  const desc = (ticketData.description || '').toLowerCase();
-  const itemCount = desc ? desc.split(',').length : 1;
 
-  if (type === 'ultra_weeklies') {
-    return 3 * itemCount; // 3 points per Ultra Weekly monster
-  }
-  if (type === 'ultra_dailies' || type === 'seven_man_dailies') {
-    return 2 * itemCount; // 2 points per Ultra Daily or 7-man Daily monster
-  }
   if (type.includes('farm') || type.includes('farming')) {
     return 3;
   }
@@ -319,6 +331,10 @@ function buildTicketControlPayload(ticketData, userMention) {
           custom_id: 'btn_change_bosses',
           label: 'Change Monsters'
         }
+      },
+      {
+        type: 10,
+        content: `Details:\n-# > **${ticketData.details || 'None provided'}**`
       },
       {
         type: 9,
@@ -737,7 +753,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    // Server selected from dropdown -> Show Final Modal (Server text box eliminated)
+    // Server selected from dropdown -> Show Final Modal
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_server_form_')) {
       const selectedServer = interaction.values[0];
       let categoryKey, bossVal = '';
@@ -770,10 +786,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
         modal.addComponents(new ActionRowBuilder().addComponents(ignInput), new ActionRowBuilder().addComponents(subjectInput), new ActionRowBuilder().addComponents(descInput));
       } else {
         const mapInput = new TextInputBuilder().setCustomId('map_name').setLabel('Map Name / Room').setPlaceholder('ultraezrajal, ultrakala, etc.').setStyle(TextInputStyle.Short).setRequired(true);
+        const detailsInput = new TextInputBuilder().setCustomId('details').setLabel('Details').setPlaceholder('Add extra details (optional)...').setStyle(TextInputStyle.Paragraph).setRequired(false);
         
-        const modalComps = [new ActionRowBuilder().addComponents(ignInput), new ActionRowBuilder().addComponents(mapInput)];
+        const modalComps = [
+          new ActionRowBuilder().addComponents(ignInput), 
+          new ActionRowBuilder().addComponents(mapInput),
+          new ActionRowBuilder().addComponents(detailsInput)
+        ];
         
-        // If it's a category where bosses weren't picked via dropdown (like farming/other), include a text box for details
         if (!bossVal) {
           const descInput = new TextInputBuilder().setCustomId('description').setLabel('Monsters / Details').setPlaceholder('List monsters...').setStyle(TextInputStyle.Paragraph).setRequired(true);
           modalComps.push(new ActionRowBuilder().addComponents(descInput));
@@ -855,6 +875,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const pingRoleIds = preset.roleIds || [HELPER_ROLE_ID];
 
         const ign = interaction.fields.getTextInputValue('ign');
+        const ticketDetails = interaction.fields.getTextInputValue('details') || 'None provided';
+
         if (!description) {
           try {
             description = interaction.fields.getTextInputValue('description');
@@ -915,6 +937,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           room,
           subject,
           description,
+          details: ticketDetails,
           maxHelpers,
           customPoints,
           pingRoleIds,
@@ -990,7 +1013,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .addFields(
             { name: '👤 IGN', value: `\`${ticketData.ign}\``, inline: true },
             { name: '🖥️ Server', value: `\`${ticketData.server}\``, inline: true },
-            { name: '📜 Command', value: `\`${ticketData.room}\``, inline: false }
+            { name: '📜 Command', value: `\`${ticketData.room}\``, inline: false },
+            { name: '📝 Details', value: `\`${ticketData.details || 'None provided'}\``, inline: false }
           )
           .setFooter({ text: 'AQW Ticket System' })
           .setTimestamp();
@@ -1039,7 +1063,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         );
 
         await interaction.reply({
-          content: `✅ **Claimed!** Room Details:\n📍 **Server:** \`${ticketData.server}\`\n📍 **Command:** \`${ticketData.room}\``,
+          content: `✅ **Claimed!** Room Details:\n📍 **Server:** \`${ticketData.server}\`\n📍 **Command:** \`${ticketData.room}\`\n📍 **Details:** \`${ticketData.details || 'None provided'}\``,
           ephemeral: true
         });
 
