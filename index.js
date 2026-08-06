@@ -5,6 +5,8 @@ const {
   Events,
   EmbedBuilder,
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   ModalBuilder,
@@ -205,8 +207,7 @@ function buildTicketHubPayload(options = {}) {
           type: 2,
           style: 5,
           url: guideUrl,
-          label: 'Guide',
-          emoji: { id: '1533348464908435526', name: 'Ticket', animated: false }
+          label: 'Guide'
         }
       },
       {
@@ -221,8 +222,7 @@ function buildTicketHubPayload(options = {}) {
           type: 2,
           style: 2,
           custom_id: 'btn_open_ticket_menu',
-          label: 'Create',
-          emoji: { id: '1533348464908435526', name: 'Ticket', animated: false }
+          label: 'Create'
         }
       }
     ]
@@ -234,7 +234,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- RESTORED COMPONENTS V2 LAYOUT WITH YOUR CUSTOM EMOJIS ---
+// --- RESTORED SCREENSHOT-EXACT TICKET LAYOUT (COMPONENTS V2) ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -245,6 +245,8 @@ function buildTicketControlPayload(ticketData, userMention) {
   const helpersFormatted = ticketData.helpers.length > 0
     ? ticketData.helpers.map(h => `• <@${h.id}>`).join('\n')
     : '• None';
+
+  const points = getPointsForTicket(ticketData);
 
   const containerComponent = {
     type: 17,
@@ -259,32 +261,32 @@ function buildTicketControlPayload(ticketData, userMention) {
         components: [
           {
             type: 10,
-            content: `🖐️ **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}`
+            content: `🏅 **Points:**\n-# > **${points}**`
           }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_helpers_list',
-          label: 'Helpers',
-          emoji: { id: '1326878430284742707', name: 'n_nox_y', animated: false }
-        }
+        ]
       },
       {
         type: 9,
         components: [
           {
             type: 10,
-            content: `👤 **Requester:** ${requesterTag}\n\n` +
-                     `**Selected server:**\n-# > **${ticketData.server}**`
+            content: `👤 **Requester:** ${requesterTag}`
+          }
+        ]
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `Selected server:\n-# > **${ticketData.server}**`
           }
         ],
         accessory: {
           type: 2,
           style: 2,
           custom_id: 'btn_change_server',
-          label: 'Server',
-          emoji: { id: '1534587149322686464', name: 'arrowgreen', animated: true }
+          label: 'Change server'
         }
       },
       {
@@ -292,31 +294,14 @@ function buildTicketControlPayload(ticketData, userMention) {
         components: [
           {
             type: 10,
-            content: `Claim the ticket to assist!`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 3,
-          custom_id: 'btn_claim',
-          label: 'Claim',
-          emoji: { id: '1534558039183458526', name: 'greendot', animated: true }
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `**Bosses / Mobs:**\n-# > **${ticketData.description}**`
+            content: `Bosses:\n-# > **${ticketData.description}**`
           }
         ],
         accessory: {
           type: 2,
           style: 2,
           custom_id: 'btn_change_bosses',
-          label: 'Change Mobs',
-          emoji: { name: 'chuckles' }
+          label: 'Change Mobs'
         }
       },
       {
@@ -324,31 +309,14 @@ function buildTicketControlPayload(ticketData, userMention) {
         components: [
           {
             type: 10,
-            content: `Need assistance? **Ping helpers!**`
+            content: `Still in need of help? **Ping helpers!**`
           }
         ],
         accessory: {
           type: 2,
           style: 2,
           custom_id: 'btn_pinghelpers',
-          label: 'Ping',
-          emoji: { id: '1534587116087017543', name: 'announce', animated: true }
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `View room codes and location details!`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_location',
-          label: 'Room Details',
-          emoji: { id: '1534587093051773000', name: 'attention', animated: true }
+          label: 'Ping helpers'
         }
       },
       {
@@ -358,13 +326,47 @@ function buildTicketControlPayload(ticketData, userMention) {
             type: 10,
             content: `Finished with the ticket?`
           }
+        ]
+      },
+      {
+        type: 1,
+        components: [
+          {
+            type: 2,
+            style: 3,
+            custom_id: 'btn_complete',
+            label: 'Complete ticket'
+          },
+          {
+            type: 2,
+            style: 4,
+            custom_id: 'btn_cancel',
+            label: 'Cancel ticket'
+          }
+        ]
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `🖐️ **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}`
+          }
+        ]
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `Forgot room codes? Click **Room codes!**`
+          }
         ],
         accessory: {
           type: 2,
-          style: 3,
-          custom_id: 'btn_complete',
-          label: 'Complete',
-          emoji: { id: '1534558091801006142', name: 'bluedot', animated: true }
+          style: 2,
+          custom_id: 'btn_location',
+          label: 'Room codes'
         }
       },
       {
@@ -372,15 +374,14 @@ function buildTicketControlPayload(ticketData, userMention) {
         components: [
           {
             type: 10,
-            content: `Cancel this ticket request?`
+            content: `Claim the ticket, and get room codes!`
           }
         ],
         accessory: {
           type: 2,
-          style: 4,
-          custom_id: 'btn_cancel',
-          label: 'Cancel',
-          emoji: { id: '1534558064261206076', name: 'reddot', animated: true }
+          style: 3,
+          custom_id: 'btn_claim',
+          label: 'Claim ticket'
         }
       }
     ]
@@ -415,14 +416,7 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
             content: `👤 **User:** ${requesterTag}\n\n` +
                      `**Subject / Concern:**\n-# > **${ticketData.subject}**`
           }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_support_info',
-          label: 'Support',
-          emoji: { id: '1534587149322686464', name: 'arrowgreen', animated: true }
-        }
+        ]
       },
       {
         type: 9,
@@ -431,14 +425,7 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
             type: 10,
             content: `**Details / Report:**\n-# > **${ticketData.description}**`
           }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_support_details',
-          label: 'Details',
-          emoji: { name: 'chuckles' }
-        }
+        ]
       },
       {
         type: 9,
@@ -452,41 +439,25 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
           type: 2,
           style: 2,
           custom_id: 'btn_pinghelpers',
-          label: 'Ping',
-          emoji: { id: '1534587116087017543', name: 'announce', animated: true }
+          label: 'Ping staff'
         }
       },
       {
-        type: 9,
+        type: 1,
         components: [
           {
-            type: 10,
-            content: `Issue resolved? Click **Complete** or **Cancel**!`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 3,
-          custom_id: 'btn_complete',
-          label: 'Complete',
-          emoji: { id: '1534558091801006142', name: 'bluedot', animated: true }
-        }
-      },
-      {
-        type: 9,
-        components: [
+            type: 2,
+            style: 3,
+            custom_id: 'btn_complete',
+            label: 'Complete ticket'
+          },
           {
-            type: 10,
-            content: `Need to close or cancel this support request?`
+            type: 2,
+            style: 4,
+            custom_id: 'btn_cancel',
+            label: 'Cancel ticket'
           }
-        ],
-        accessory: {
-          type: 2,
-          style: 4,
-          custom_id: 'btn_cancel',
-          label: 'Cancel',
-          emoji: { id: '1534558064261206076', name: 'reddot', animated: true }
-        }
+        ]
       }
     ]
   };
