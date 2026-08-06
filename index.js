@@ -50,7 +50,7 @@ const helperPoints = new Map();
 const userRequestCounts = new Map();
 const guildSettings = new Map();
 const roleRewards = new Map();
-const tempTicketCache = new Map(); // Stores temporary state for server/boss selection
+const tempTicketCache = new Map();
 
 let ticketCounter = 0;
 
@@ -161,7 +161,7 @@ function getPointsForTicket(ticketData) {
   const bossCount = desc ? desc.split(',').length : 1;
 
   if (normalized.includes('ultra')) {
-    return 5 * bossCount; // 5 points per ultra boss/monster
+    return 5 * bossCount; // 5 points per ultra monster
   }
   if (normalized.includes('weekly')) {
     return 8;
@@ -714,21 +714,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    // Server selected from dropdown -> Show Final Modal
-    if (interaction.isStringSelectMenu() && (interaction.customId.startsWith('select_server_form_'))) {
+    // Server selected from dropdown -> Show Final Modal (Server text box eliminated from form)
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_server_form_')) {
       const selectedServer = interaction.values[0];
-      let categoryKey, bossesVal = '';
+      let categoryKey, bossVal = '';
 
       if (interaction.customId === 'select_server_form_boss') {
         const cached = tempTicketCache.get(interaction.user.id) || {};
         categoryKey = cached.categoryKey;
-        bossesVal = cached.bosses;
+        bossVal = cached.bosses;
       } else {
         categoryKey = interaction.customId.replace('select_server_form_', '');
       }
 
       const preset = TICKET_PRESETS[categoryKey] || { max: 6, points: 1, label: 'Ticket' };
-      tempTicketCache.set(interaction.user.id, { categoryKey, server: selectedServer, bosses: bossesVal });
+      tempTicketCache.set(interaction.user.id, { categoryKey, server: selectedServer, bosses: bossVal });
 
       const modal = new ModalBuilder()
         .setCustomId(`ticket_form_final_${preset.max}_${preset.points}_${categoryKey}`)
@@ -777,14 +777,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (interaction.isStringSelectMenu() && interaction.customId === 'active_change_server_menu') {
+      await interaction.deferUpdate();
       const ticketData = activeTickets.get(interaction.channel.id);
-      if (!ticketData) return interaction.update({ content: '❌ Ticket not found.', components: [] });
+      if (!ticketData) return;
 
       const newServer = interaction.values[0];
       ticketData.server = newServer;
       activeTickets.set(interaction.channel.id, ticketData);
 
-      await interaction.update({ content: `✅ Successfully updated server to **${newServer}**!`, components: [] });
+      await interaction.editReply({ content: `✅ Successfully updated server to **${newServer}**!`, components: [] });
       return updateTicketEmbed(interaction.channel, ticketData);
     }
 
