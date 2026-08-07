@@ -571,7 +571,7 @@ async function updateTicketEmbed(channel, ticketData) {
   }
 }
 
-// --- SLASH COMMANDS REGISTRATION ---
+// --- SLASH COMMANDS REGISTRATION (Optimized to stay under Discord's 25 option limit) ---
 const commands = [
   new SlashCommandBuilder()
     .setName('setup-ticket-hub')
@@ -613,7 +613,7 @@ const commands = [
     .addStringOption(opt => opt.setName('color').setDescription('Hex color code (e.g. #8b0000)').setRequired(false))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Header banner image URL').setRequired(false)),
 
-  // --- COMPONENTS V2 /REACTIONROLE COMMAND (Up to 7 buttons styled like the photo) ---
+  // --- COMPONENTS V2 /REACTIONROLE COMMAND (Up to 7 buttons styled like your photo) ---
   new SlashCommandBuilder()
     .setName('reactionrole')
     .setDescription('Create a Components V2 reaction role panel with up to 7 buttons')
@@ -624,48 +624,32 @@ const commands = [
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false))
     // Role 1
     .addRoleOption(opt => opt.setName('role1').setDescription('Role 1').setRequired(true))
-    .addStringOption(opt => opt.setName('name1').setDescription('Role Name Display 1 (e.g. @Verdant)').setRequired(true))
     .addStringOption(opt => opt.setName('desc1').setDescription('Description for Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('emoji1').setDescription('Emoji for Button 1').setRequired(false))
     // Role 2
     .addRoleOption(opt => opt.setName('role2').setDescription('Role 2').setRequired(false))
-    .addStringOption(opt => opt.setName('name2').setDescription('Role Name Display 2').setRequired(false))
     .addStringOption(opt => opt.setName('desc2').setDescription('Description for Role 2').setRequired(false))
     .addStringOption(opt => opt.setName('emoji2').setDescription('Emoji for Button 2').setRequired(false))
     // Role 3
     .addRoleOption(opt => opt.setName('role3').setDescription('Role 3').setRequired(false))
-    .addStringOption(opt => opt.setName('name3').setDescription('Role Name Display 3').setRequired(false))
     .addStringOption(opt => opt.setName('desc3').setDescription('Description for Role 3').setRequired(false))
     .addStringOption(opt => opt.setName('emoji3').setDescription('Emoji for Button 3').setRequired(false))
     // Role 4
     .addRoleOption(opt => opt.setName('role4').setDescription('Role 4').setRequired(false))
-    .addStringOption(opt => opt.setName('name4').setDescription('Role Name Display 4').setRequired(false))
     .addStringOption(opt => opt.setName('desc4').setDescription('Description for Role 4').setRequired(false))
     .addStringOption(opt => opt.setName('emoji4').setDescription('Emoji for Button 4').setRequired(false))
     // Role 5
     .addRoleOption(opt => opt.setName('role5').setDescription('Role 5').setRequired(false))
-    .addStringOption(opt => opt.setName('name5').setDescription('Role Name Display 5').setRequired(false))
     .addStringOption(opt => opt.setName('desc5').setDescription('Description for Role 5').setRequired(false))
     .addStringOption(opt => opt.setName('emoji5').setDescription('Emoji for Button 5').setRequired(false))
     // Role 6
     .addRoleOption(opt => opt.setName('role6').setDescription('Role 6').setRequired(false))
-    .addStringOption(opt => opt.setName('name6').setDescription('Role Name Display 6').setRequired(false))
     .addStringOption(opt => opt.setName('desc6').setDescription('Description for Role 6').setRequired(false))
     .addStringOption(opt => opt.setName('emoji6').setDescription('Emoji for Button 6').setRequired(false))
     // Role 7
     .addRoleOption(opt => opt.setName('role7').setDescription('Role 7').setRequired(false))
-    .addStringOption(opt => opt.setName('name7').setDescription('Role Name Display 7').setRequired(false))
     .addStringOption(opt => opt.setName('desc7').setDescription('Description for Role 7').setRequired(false))
     .addStringOption(opt => opt.setName('emoji7').setDescription('Emoji for Button 7').setRequired(false)),
-
-  new SlashCommandBuilder()
-    .setName('createrole')
-    .setDescription('Create a new role in the server')
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
-    .addStringOption(opt => opt.setName('name').setDescription('Name of the new role').setRequired(true))
-    .addStringOption(opt => opt.setName('color').setDescription('Hex color code (e.g. #FF0000)').setRequired(false))
-    .addBooleanOption(opt => opt.setName('hoist').setDescription('Display role separately in member list').setRequired(false))
-    .addBooleanOption(opt => opt.setName('mentionable').setDescription('Allow anyone to mention this role').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('setup-channels')
@@ -1674,7 +1658,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
       }
 
-      // --- COMPONENTS V2 /REACTIONROLE COMMAND (Up to 7 buttons styled like the photo) ---
+      // --- COMPONENTS V2 /REACTIONROLE COMMAND (Up to 7 buttons styled like your photo) ---
       if (commandName === 'reactionrole') {
         await interaction.deferReply({ ephemeral: true });
 
@@ -1690,10 +1674,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const sections = [];
         for (let i = 1; i <= 7; i++) {
           const role = options.getRole(`role${i}`);
-          const name = options.getString(`name${i}`);
           const desc = options.getString(`desc${i}`);
           
-          if (role && name && desc) {
+          if (role && desc) {
             const rawEmoji = options.getString(`emoji${i}`);
             let emojiObj = undefined;
             if (rawEmoji) {
@@ -1710,7 +1693,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
               components: [
                 {
                   type: 10,
-                  content: `${name}\n-# > ${desc}`
+                  content: `@${role.name}\n-# > ${desc}`
                 }
               ],
               accessory: {
@@ -1725,7 +1708,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         if (sections.length === 0) {
-          return await interaction.editReply('❌ You must provide at least one valid role, name display, and description.');
+          return await interaction.editReply('❌ You must provide at least one valid role and description.');
         }
 
         const containerComponent = {
@@ -1758,39 +1741,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         } catch (err) {
           console.error('Error posting reaction role panel:', err);
           return await interaction.editReply(`❌ Failed to post panel: ${err.message}`);
-        }
-      }
-
-      // --- /CREATEROLE COMMAND ---
-      if (commandName === 'createrole') {
-        await interaction.deferReply({ ephemeral: true });
-
-        const name = options.getString('name');
-        const colorInput = options.getString('color');
-        const hoist = options.getBoolean('hoist') ?? false;
-        const mentionable = options.getBoolean('mentionable') ?? false;
-
-        let roleColor = 0x95a5a6; 
-        if (colorInput) {
-          roleColor = parseInt(colorInput.replace('#', ''), 16);
-          if (isNaN(roleColor)) {
-            return await interaction.editReply('❌ Invalid hex color code provided (e.g., `#FF0000`).');
-          }
-        }
-
-        try {
-          const newRole = await interaction.guild.roles.create({
-            name: name,
-            color: roleColor,
-            hoist: hoist,
-            mentionable: mentionable,
-            reason: `Created via /createrole by ${interaction.user.tag}`
-          });
-
-          return await interaction.editReply(`✅ Successfully created role ${newRole} (\`${name}\`)!`);
-        } catch (err) {
-          console.error('Error creating role:', err);
-          return await interaction.editReply(`❌ Failed to create role: ${err.message}. Check bot role hierarchy permissions.`);
         }
       }
 
