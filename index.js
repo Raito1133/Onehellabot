@@ -571,7 +571,7 @@ async function updateTicketEmbed(channel, ticketData) {
   }
 }
 
-// --- SLASH COMMANDS REGISTRATION (No createrole) ---
+// --- SLASH COMMANDS REGISTRATION (Strictly ordered: required options first) ---
 const commands = [
   new SlashCommandBuilder()
     .setName('setup-ticket-hub')
@@ -613,7 +613,7 @@ const commands = [
     .addStringOption(opt => opt.setName('color').setDescription('Hex color code (e.g. #8b0000)').setRequired(false))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Header banner image URL').setRequired(false)),
 
-  // --- COMPONENTS V2 /REACTIONROLE COMMAND (Up to 7 buttons styled like your photo) ---
+  // --- COMPONENTS V2 /REACTIONROLE COMMAND (Up to 7 buttons, properly ordered required options first) ---
   new SlashCommandBuilder()
     .setName('reactionrole')
     .setDescription('Create a Components V2 reaction role panel with up to 7 buttons')
@@ -621,10 +621,11 @@ const commands = [
     .addChannelOption(opt => opt.setName('channel').setDescription('Where to post the panel').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Panel title').setRequired(true))
     .addStringOption(opt => opt.setName('description').setDescription('Panel description').setRequired(true))
-    .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false))
-    // Role 1
+    // Role 1 (Required)
     .addRoleOption(opt => opt.setName('role1').setDescription('Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('desc1').setDescription('Description for Role 1').setRequired(true))
+    // Optional options follow after all required options
+    .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false))
     .addStringOption(opt => opt.setName('emoji1').setDescription('Emoji for Button 1').setRequired(false))
     // Role 2
     .addRoleOption(opt => opt.setName('role2').setDescription('Role 2').setRequired(false))
@@ -722,7 +723,7 @@ client.once(Events.ClientReady, async () => {
   client.user.setPresence({
     status: 'idle',
     activities: [{
-      name: 'UNTA MAO NANI',
+      name: 'Im weird',
       type: 5
     }]
   });
@@ -1904,8 +1905,8 @@ async function executeTicketCompletion(interaction, ticketData, completedBosses)
 
     activeTickets.delete(interaction.channel.id);
     setTimeout(() => {
-      interaction.channel.delete().catch(() => {});
-    }, 5000);
+      interaction.channel.delete().catch(() => {}), 5000;
+    });
   } catch (err) {
     console.error('Error during ticket completion execution:', err);
     await interaction.editReply({ content: '❌ Failed to complete ticket properly.', components: [] }).catch(() => {});
