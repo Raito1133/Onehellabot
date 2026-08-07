@@ -611,6 +611,7 @@ const commands = [
     .addChannelOption(opt => opt.setName('channel').setDescription('Target channel to post verification panel').setRequired(true))
     .addRoleOption(opt => opt.setName('guest_role').setDescription('Guest Role to give upon approval').setRequired(true))
     .addRoleOption(opt => opt.setName('member_role').setDescription('Member Role to give upon approval').setRequired(true))
+    .addStringOption(opt => opt.setName('panel_title').setDescription('Main Title for the Verification Panel').setRequired(true))
     .addStringOption(opt => opt.setName('guest_title').setDescription('Title for Guest Section').setRequired(true))
     .addStringOption(opt => opt.setName('guest_desc').setDescription('Description for Guest Section').setRequired(true))
     .addStringOption(opt => opt.setName('member_title').setDescription('Title for Member Section').setRequired(true))
@@ -2207,6 +2208,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const channel = options.getChannel('channel');
         const guestRole = options.getRole('guest_role');
         const memberRole = options.getRole('member_role');
+        const panelTitle = options.getString('panel_title'); // Main Title
         const guestTitle = options.getString('guest_title');
         const guestDesc = options.getString('guest_desc').replace(/\\n/g, '\n');
         const memberTitle = options.getString('member_title');
@@ -2225,6 +2227,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
           {
             type: 12,
             items: [{ media: { url: bannerUrl } }]
+          },
+          {
+            type: 10,
+            content: `# ${panelTitle}`
           },
           {
             type: 9,
