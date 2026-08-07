@@ -1624,13 +1624,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
               items: [{ media: { url: bannerUrl } }]
             },
             {
-              type: 9,
-              components: [
-                {
-                  type: 10,
-                  content: `**${title}**\n\n${description}`
-                }
-              ]
+              type: 10,
+              content: `**${title}**\n\n${description}`
             }
           ]
         };
@@ -1653,7 +1648,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
       }
 
-      // --- COMPONENTS V2 /REACTIONROLE COMMAND (Fully Flexible up to 7 buttons) ---
+      // --- COMPONENTS V2 /REACTIONROLE COMMAND (Fully Flexible & Error-Free) ---
       if (commandName === 'reactionrole') {
         await interaction.deferReply({ ephemeral: true });
 
@@ -1688,7 +1683,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
               }
             }
 
-            // Gamitin ang tamang V2 section structure nang walang blangkong fields
             sections.push({
               type: 9,
               components: [
@@ -1721,13 +1715,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
               items: [{ media: { url: bannerUrl } }]
             },
             {
-              type: 9,
-              components: [
-                {
-                  type: 10,
-                  content: `**${title}**\n\n${description}`
-                }
-              ]
+              type: 10, // Ginamit ang type 10 para sa header text para maiwasan ang accessory error sa index 1
+              content: `**${title}**\n\n${description}`
             },
             ...sections
           ]
