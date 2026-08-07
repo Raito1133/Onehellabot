@@ -65,6 +65,7 @@ const guildSettings = new Map();
 const roleRewards = new Map();
 const tempTicketCache = new Map();
 const pendingVerifications = new Map();
+const userRejectionReasons = new Map();
 const activeGiveaways = new Map();
 
 let ticketCounter = 0;
@@ -629,6 +630,7 @@ const commands = [
         .setDescription('Start a new V2 Giveaway')
         .addChannelOption(opt => opt.setName('channel').setDescription('Channel to post giveaway').setRequired(true))
         .addStringOption(opt => opt.setName('prize').setDescription('Prize of the giveaway').setRequired(true))
+        .addStringOption(opt => opt.setName('description').setDescription('Giveaway description details').setRequired(true))
         .addIntegerOption(opt => opt.setName('duration').setDescription('Duration in minutes').setRequired(true))
         .addIntegerOption(opt => opt.setName('winners').setDescription('Number of winners').setRequired(true))
         .addRoleOption(opt => opt.setName('role1').setDescription('Required Role 1 (Optional)').setRequired(false))
@@ -694,7 +696,7 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
     .addChannelOption(opt => opt.setName('channel').setDescription('Where to post the panel').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Panel title').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Panel description').setRequired(true))
+    .addStringOption(opt => opt.setDescription('Panel description').setRequired(true))
     .addRoleOption(opt => opt.setName('role1').setDescription('Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('desc1').setDescription('Description for Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false))
@@ -930,8 +932,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return interaction.reply({ content: '🎉 Successfully entered the giveaway! Good luck!', ephemeral: true });
     }
 
-    // --- VERIFICATION BUTTON TRIGGERS ---
+    // --- VERIFICATION BUTTON TRIGGERS (WITH REJECTION BLOCK CHECK) ---
     if (interaction.isButton() && interaction.customId.startsWith('btn_verify_guest_')) {
+      if (userRejectionReasons.has(interaction.user.id)) {
+        const reason = userRejectionReasons.get(interaction.user.id);
+        return interaction.reply({ 
+          content: `❌ **You have been rejected from verifying.**\n\n**Reason:** ${reason}\n\nPlease address the reason above before attempting to verify again.`, 
+          ephemeral: true 
+        });
+      }
+
       const roleId = interaction.customId.replace('btn_verify_guest_', '');
       const modal = new ModalBuilder()
         .setCustomId(`modal_verify_guest_${roleId}`)
@@ -968,6 +978,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (interaction.isButton() && interaction.customId.startsWith('btn_verify_member_')) {
+      if (userRejectionReasons.has(interaction.user.id)) {
+        const reason = userRejectionReasons.get(interaction.user.id);
+        return interaction.reply({ 
+          content: `❌ **You have been rejected from verifying.**\n\n**Reason:** ${reason}\n\nPlease address the reason above before attempting to verify again.`, 
+          ephemeral: true 
+        });
+      }
+
       const roleId = interaction.customId.replace('btn_verify_member_', '');
       const modal = new ModalBuilder()
         .setCustomId(`modal_verify_member_${roleId}`)
@@ -1028,10 +1046,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
         roleName: '@Guest'
       });
 
+      const userAvatar = interaction.user.displayAvatarURL({ extension: 'png', size: 128 });
+
       const logContainer = {
         type: 17,
         accent_color: 0x3498db,
         components: [
+          {
+            type: 12,
+            items: [{ media: { url: userAvatar } }]
+          },
           {
             type: 10,
             content: `🛡️ **New Verification Request (GUEST)**\n\n` +
@@ -1104,10 +1128,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
         roleName: '@Member'
       });
 
+      const userAvatar = interaction.user.displayAvatarURL({ extension: 'png', size: 128 });
+
       const logContainer = {
         type: 17,
         accent_color: 0x2ecc71,
         components: [
+          {
+            type: 12,
+            items: [{ media: { url: userAvatar } }]
+          },
           {
             type: 10,
             content: `🛡️ **New Verification Request (MEMBER)**\n\n` +
@@ -1162,6 +1192,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
           await member.roles.add(data.roleId).catch(() => {});
         }
 
+        userRejectionReasons.delete(data.userId);
+
         const approvedEmbed = new EmbedBuilder()
           .setTitle('✅ Verification Approved')
           .setDescription(`Approved by ${interaction.user}\n\n` +
@@ -1213,6 +1245,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (!data) {
         return interaction.followUp({ content: '⚠️ Request data not found.', ephemeral: true });
       }
+
+      userRejectionReasons.set(data.userId, reason);
 
       const rejectedEmbed = new EmbedBuilder()
         .setTitle('❌ Verification Rejected')
@@ -2011,6 +2045,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           await interaction.deferReply({ ephemeral: true });
           const channel = options.getChannel('channel');
           const prize = options.getString('prize');
+          const description = options.getString('description').replace(/\\n/g, '\n');
           const durationMins = options.getInteger('duration');
           const winnersCount = options.getInteger('winners');
           const role1 = options.getRole('role1')?.id || null;
@@ -2038,8 +2073,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 components: [
                   {
                     type: 10,
-                    content: `🎉 **GIVEAWAY** 🎉\n\n` +
-                             `**Prize:** ${prize}\n` +
+                    content: `🎉 **GIVEAWAY: ${prize}** 🎉\n\n` +
+                             `${description}\n\n` +
                              `**Winners:** ${winnersCount}\n` +
                              `Hosted by: ${interaction.user}\n` +
                              `Required Roles: ${roleReqText}\n` +
@@ -2048,7 +2083,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 ],
                 accessory: {
                   type: 2,
-                  style: 1,
+                  style: 3, // Style 3 = Green Button (Success)
                   custom_id: `gw_enter_${gwId}`,
                   label: '🎉 Enter Giveaway'
                 }
