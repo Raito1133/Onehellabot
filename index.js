@@ -602,18 +602,19 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
     .addChannelOption(opt => opt.setName('channel').setDescription('Channel to post stats').setRequired(true)),
 
-  // --- UPGRADED /EMBED COMMAND (Supports flexible rules layout with up to 5 items like the photo) ---
+  // --- UPGRADED /EMBED COMMAND (Supports top banner, rules list, and bottom banner) ---
   new SlashCommandBuilder()
     .setName('embed')
-    .setDescription('Create and send a customized Components V2 layout rules panel')
+    .setDescription('Create a Components V2 rules panel with top and bottom banners')
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
     .addChannelOption(opt => opt.setName('channel').setDescription('Target channel').setRequired(true))
     .addStringOption(opt => opt.setName('description').setDescription('Main introductory text content').setRequired(true))
-    .addStringOption(opt => opt.setName('banner_url').setDescription('Header banner image URL').setRequired(false))
+    .addStringOption(opt => opt.setName('banner_url').setDescription('Top banner image URL').setRequired(false))
+    .addStringOption(opt => opt.setName('footer_banner_url').setDescription('Bottom footer banner image URL').setRequired(false))
     // Item 1 (Required)
-    .addStringOption(opt => opt.setName('title1').setDescription('Title 1 (e.g. No hate speech)').setRequired(true))
+    .addStringOption(opt => opt.setName('title1').setDescription('Title 1').setRequired(true))
     .addStringOption(opt => opt.setName('desc1').setDescription('Description 1').setRequired(true))
-    .addStringOption(opt => opt.setName('emoji1').setDescription('Emoji 1 (e.g. 1️⃣ or custom emoji)').setRequired(false))
+    .addStringOption(opt => opt.setName('emoji1').setDescription('Emoji 1 (e.g. 1️⃣)').setRequired(false))
     // Item 2 (Optional)
     .addStringOption(opt => opt.setName('title2').setDescription('Title 2').setRequired(false))
     .addStringOption(opt => opt.setName('desc2').setDescription('Description 2').setRequired(false))
@@ -1616,7 +1617,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return await interaction.editReply(`✅ Live tracking stats message successfully set up in ${channel}!`);
       }
 
-      // --- UPGRADED COMPONENTS V2 /EMBED COMMAND (Matches the rules photo style) ---
+      // --- COMPONENTS V2 /EMBED COMMAND (With top and bottom banners) ---
       if (commandName === 'embed') {
         await interaction.deferReply({ ephemeral: true });
 
@@ -1627,6 +1628,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const description = options.getString('description').replace(/\\n/g, '\n');
         const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
+        const footerBannerUrl = options.getString('footer_banner_url');
 
         const sections = [];
         for (let i = 1; i <= 5; i++) {
@@ -1646,7 +1648,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             }
 
             sections.push({
-              type: 9, // Section Component
+              type: 9,
               components: [
                 {
                   type: 10,
@@ -1657,23 +1659,36 @@ client.on(Events.InteractionCreate, async (interaction) => {
           }
         }
 
+        const containerComponents = [
+          {
+            type: 12,
+            items: [{ media: { url: bannerUrl } }]
+          },
+          {
+            type: 10,
+            content: `${description}`
+          },
+          {
+            type: 14 // Divider line
+          },
+          ...sections
+        ];
+
+        // Kung may inilagay na footer/bottom banner, idagdag natin sa dulo
+        if (footerBannerUrl) {
+          containerComponents.push({
+            type: 14 // Isa pang divider line bago ang bottom banner
+          });
+          containerComponents.push({
+            type: 12,
+            items: [{ media: { url: footerBannerUrl } }]
+          });
+        }
+
         const containerComponent = {
           type: 17,
           accent_color: 0x8b0000,
-          components: [
-            {
-              type: 12,
-              items: [{ media: { url: bannerUrl } }]
-            },
-            {
-              type: 10,
-              content: `${description}`
-            },
-            {
-              type: 14 // Divider line component
-            },
-            ...sections
-          ]
+          components: containerComponents
         };
 
         try {
@@ -1681,7 +1696,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             components: [containerComponent],
             flags: MessageFlags.IsComponentsV2
           });
-          return await interaction.editReply(`✅ Components V2 rules embed successfully posted to ${channel}!`);
+          return await interaction.editReply(`✅ Components V2 rules panel with top and bottom banners successfully posted to ${channel}!`);
         } catch (err) {
           console.error('Error posting Components V2 embed:', err);
           return await interaction.editReply(`❌ Failed to post layout message: ${err.message}`);
