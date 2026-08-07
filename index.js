@@ -717,7 +717,7 @@ client.once(Events.ClientReady, async () => {
   client.user.setPresence({
     status: 'idle',
     activities: [{
-      name: 'Im yawa',
+      name: 'Im weird',
       type: 5
     }]
   });
@@ -1673,7 +1673,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
           const role = options.getRole(`role${i}`);
           const desc = options.getString(`desc${i}`);
           
-          // Strict check: only push if BOTH role and desc are provided for this slot
           if (role && desc) {
             if (usedRoleIds.has(role.id)) continue;
             usedRoleIds.add(role.id);
@@ -1689,6 +1688,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
               }
             }
 
+            // Gamitin ang tamang V2 section structure nang walang blangkong fields
             sections.push({
               type: 9,
               components: [
