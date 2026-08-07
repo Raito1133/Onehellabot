@@ -571,7 +571,7 @@ async function updateTicketEmbed(channel, ticketData) {
   }
 }
 
-// --- SLASH COMMANDS REGISTRATION (Optimized to stay under Discord's 25 option limit) ---
+// --- SLASH COMMANDS REGISTRATION (No createrole) ---
 const commands = [
   new SlashCommandBuilder()
     .setName('setup-ticket-hub')
@@ -722,7 +722,7 @@ client.once(Events.ClientReady, async () => {
   client.user.setPresence({
     status: 'idle',
     activities: [{
-      name: 'punitin',
+      name: 'UNTA MAO NANI',
       type: 5
     }]
   });
