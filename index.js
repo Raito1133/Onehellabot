@@ -603,11 +603,10 @@ const commands = [
     .addStringOption(opt => opt.setName('guest_desc').setDescription('Description for Guest Section').setRequired(true))
     .addStringOption(opt => opt.setName('member_title').setDescription('Title for Member Section').setRequired(true))
     .addStringOption(opt => opt.setName('member_desc').setDescription('Description for Member Section').setRequired(true))
-    // Optional params follow
-    .addStringOption(opt => opt.setName('guest_btn_name').setDescription('Custom button name for Guest (Default: Verify as Guest)').setRequired(false))
-    .addStringOption(opt => opt.setName('member_btn_name').setDescription('Custom button name for Member (Default: Verify as Member)').setRequired(false))
+    .addStringOption(opt => opt.setName('guest_btn_name').setDescription('Custom button name for Guest').setRequired(false))
+    .addStringOption(opt => opt.setName('member_btn_name').setDescription('Custom button name for Member').setRequired(false))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Top banner image URL').setRequired(false))
-    .addStringOption(opt => opt.setName('footer_banner_url').setDescription('Bottom banner image URL').setRequired(false)),
+    .addStringOption(opt => opt.setName('footer_banner_url').setDescription('Bottom banner image URL (Optional)').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('stats')
@@ -732,7 +731,7 @@ client.once(Events.ClientReady, async () => {
   client.user.setPresence({
     status: 'idle',
     activities: [{
-      name: 'Im gwapo',
+      name: 'Im weird',
       type: 5
     }]
   });
@@ -1838,60 +1837,64 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const guestBtnName = options.getString('guest_btn_name') || 'Verify as Guest';
         const memberBtnName = options.getString('member_btn_name') || 'Verify as Member';
         const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
-        const footerBannerUrl = options.getString('footer_banner_url') || STANDARD_BANNER_URL;
+        const footerBannerUrl = options.getString('footer_banner_url'); // Optional na ngayon
 
         if (!channel || !channel.isTextBased()) {
           return await interaction.editReply('❌ Please select a valid text channel.');
         }
 
+        const verifyComponents = [
+          {
+            type: 12,
+            items: [{ media: { url: bannerUrl } }]
+          },
+          {
+            type: 9,
+            components: [
+              {
+                type: 10,
+                content: `🛡️ **${guestTitle}**\n-# > ${guestDesc}`
+              }
+            ],
+            accessory: {
+              type: 2,
+              style: 1,
+              custom_id: `btn_verify_guest_${guestRole.id}`,
+              label: guestBtnName,
+              emoji: { id: '1534950248831516806', name: 'claimbt', animated: false }
+            }
+          },
+          {
+            type: 9,
+            components: [
+              {
+                type: 10,
+                content: `⚔️ **${memberTitle}**\n-# > ${memberDesc}`
+              }
+            ],
+            accessory: {
+              type: 2,
+              style: 1,
+              custom_id: `btn_verify_member_${memberRole.id}`,
+              label: memberBtnName,
+              emoji: { id: '1534950268679094397', name: 'completebt', animated: false }
+            }
+          }
+        ];
+
+        // Kung may inilagay na footer banner URL, saka lang idadagdag. Kung wala, hindi na isasama para walang blank/error.
+        if (footerBannerUrl) {
+          verifyComponents.push({ type: 14 });
+          verifyComponents.push({
+            type: 12,
+            items: [{ media: { url: footerBannerUrl } }]
+          });
+        }
+
         const verifyContainer = {
           type: 17,
           accent_color: 0x8b0000,
-          components: [
-            {
-              type: 12,
-              items: [{ media: { url: bannerUrl } }]
-            },
-            {
-              type: 9,
-              components: [
-                {
-                  type: 10,
-                  content: `🛡️ **${guestTitle}**\n-# > ${guestDesc}`
-                }
-              ],
-              accessory: {
-                type: 2,
-                style: 1,
-                custom_id: `btn_verify_guest_${guestRole.id}`,
-                label: guestBtnName,
-                emoji: { id: '1534950248831516806', name: 'claimbt', animated: false }
-              }
-            },
-            {
-              type: 9,
-              components: [
-                {
-                  type: 10,
-                  content: `⚔️ **${memberTitle}**\n-# > ${memberDesc}`
-                }
-              ],
-              accessory: {
-                type: 2,
-                style: 1,
-                custom_id: `btn_verify_member_${memberRole.id}`,
-                label: memberBtnName,
-                emoji: { id: '1534950268679094397', name: 'completebt', animated: false }
-              }
-            },
-            {
-              type: 14
-            },
-            {
-              type: 12,
-              items: [{ media: { url: footerBannerUrl } }]
-            }
-          ]
+          components: verifyComponents
         };
 
         try {
