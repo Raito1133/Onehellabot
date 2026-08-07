@@ -133,6 +133,34 @@ const TICKET_PRESETS = {
   }
 };
 
+// --- LIVE STATS UPDATER ---
+async function updateLiveStatsMessage(guild) {
+  try {
+    const cfg = guildSettings.get(guild.id) || {};
+    if (!cfg.statsChannelId || !cfg.statsMessageId) return;
+
+    const channel = guild.channels.cache.get(cfg.statsChannelId);
+    if (!channel) return;
+
+    const msg = await channel.messages.fetch(cfg.statsMessageId).catch(() => null);
+    if (!msg) return;
+
+    const statsEmbed = new EmbedBuilder()
+      .setTitle(`Ticket stats`)
+      .setDescription(
+        `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed.\n` +
+        `🏅 **\`${globalStats.totalPointsGiven}\`** points given out.\n\n` +
+        "A huge thank you to each and every one of you who made this possible! ❤️"
+      )
+      .setColor('#3498db')
+      .setTimestamp();
+
+    await msg.edit({ embeds: [statsEmbed] });
+  } catch (err) {
+    console.error('Failed to update live stats message:', err);
+  }
+}
+
 // --- HELPER LOGGING FUNCTION ---
 async function sendTicketLog(guild, title, description, color = '#3498db', fields = []) {
   try {
@@ -167,7 +195,6 @@ function isHelperInActiveTicket(userId) {
 
 function getPointsForTicket(ticketData, completedItems = null) {
   const type = (ticketData.type || '').toLowerCase();
-  
   let items = [];
   if (Array.isArray(completedItems)) {
     items = completedItems;
@@ -564,7 +591,17 @@ const commands = [
     )
     .addChannelOption(opt => opt.setName('log_channel').setDescription('Channel for Ticket Logs').setRequired(false)),
 
-  // --- COMPONENTS V2 /EMBED COMMAND ---
+  new SlashCommandBuilder()
+    .setName('stats')
+    .setDescription('Display global ticket stats counter')
+    .addStringOption(opt => opt.setName('custom_message').setDescription('Custom message below stats').setRequired(false)),
+
+  new SlashCommandBuilder()
+    .setName('setup-stats')
+    .setDescription('Post and link a live updating stats message')
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
+    .addChannelOption(opt => opt.setName('channel').setDescription('Channel to post stats').setRequired(true)),
+
   new SlashCommandBuilder()
     .setName('embed')
     .setDescription('Create and send a customized Components V2 layout message')
@@ -576,7 +613,7 @@ const commands = [
     .addStringOption(opt => opt.setName('color').setDescription('Hex color code (e.g. #8b0000)').setRequired(false))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Header banner image URL').setRequired(false)),
 
-  // --- COMPONENTS V2 /REACTIONROLE COMMAND (Up to 7 buttons styled like photo) ---
+  // --- COMPONENTS V2 /REACTIONROLE COMMAND (Up to 7 buttons styled like the photo) ---
   new SlashCommandBuilder()
     .setName('reactionrole')
     .setDescription('Create a Components V2 reaction role panel with up to 7 buttons')
@@ -621,7 +658,6 @@ const commands = [
     .addStringOption(opt => opt.setName('desc7').setDescription('Description for Role 7').setRequired(false))
     .addStringOption(opt => opt.setName('emoji7').setDescription('Emoji for Button 7').setRequired(false)),
 
-  // --- /CREATEROLE COMMAND ---
   new SlashCommandBuilder()
     .setName('createrole')
     .setDescription('Create a new role in the server')
@@ -766,7 +802,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     // STEP 1: Category Selected
     if (interaction.isStringSelectMenu() && interaction.customId === 'select_ticket_cat') {
       const selectedKey = interaction.values[0];
-      const preset = TICKET_PRESETS[selectedKey] || { label: 'Ticket', max: 6, points: 1, roleIds: [HELPER_ROLE_ID] };
+      const preset = TICKET_PRESETS[selectedKey] || { label: 'Ticket', max: 6, points: 1, pingRoleIds: [HELPER_ROLE_ID] };
 
       if (selectedKey === 'ultra_weeklies') {
         const menu = new StringSelectMenuBuilder()
