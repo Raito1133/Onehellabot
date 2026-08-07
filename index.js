@@ -76,7 +76,7 @@ const globalStats = {
   totalBossesSlain: 0
 };
 
-// --- ⚙️ CUSTOM TICKET PRESETS ---
+// --- ⚙️ ORIGINAL CUSTOM TICKET PRESETS & BANNERS ---
 const TICKET_PRESETS = {
   farming: { 
     label: 'Farming Assistance', 
@@ -1320,7 +1320,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    // STEP 1: Category Selected
+    // STEP 1: Category Selected (Dropdown Menu Restored!)
     if (interaction.isStringSelectMenu() && interaction.customId === 'select_ticket_cat') {
       const selectedKey = interaction.values[0];
       const preset = TICKET_PRESETS[selectedKey] || { label: 'Ticket', max: 6, points: 1, pingRoleIds: [HELPER_ROLE_ID] };
@@ -2208,7 +2208,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const channel = options.getChannel('channel');
         const guestRole = options.getRole('guest_role');
         const memberRole = options.getRole('member_role');
-        const panelTitle = options.getString('panel_title'); // Main Title
+        const panelTitle = options.getString('panel_title');
         const guestTitle = options.getString('guest_title');
         const guestDesc = options.getString('guest_desc').replace(/\\n/g, '\n');
         const memberTitle = options.getString('member_title');
