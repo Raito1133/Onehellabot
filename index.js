@@ -613,7 +613,7 @@ const commands = [
     .addStringOption(opt => opt.setName('color').setDescription('Hex color code (e.g. #8b0000)').setRequired(false))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Header banner image URL').setRequired(false)),
 
-  // --- COMPONENTS V2 /REACTIONROLE COMMAND (Up to 7 buttons styled like your photo) ---
+  // --- COMPONENTS V2 /REACTIONROLE COMMAND (Up to 7 buttons safely mapped without duplication) ---
   new SlashCommandBuilder()
     .setName('reactionrole')
     .setDescription('Create a Components V2 reaction role panel with up to 7 buttons')
@@ -723,7 +723,7 @@ client.once(Events.ClientReady, async () => {
   client.user.setPresence({
     status: 'idle',
     activities: [{
-      name: 'AHHHH',
+      name: 'Im weird',
       type: 5
     }]
   });
@@ -1690,18 +1690,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
             }
 
             sections.push({
-              type: 9, // Section component
+              type: 9,
               components: [
                 {
-                  type: 10, // Text Display
+                  type: 10,
                   content: `@${role.name}\n-# > ${desc}`
                 }
               ],
               accessory: {
-                type: 2, // Button component (Accessory is required when type 9 has it)
-                style: 2, // Secondary style
+                type: 2,
+                style: 2,
                 custom_id: `rr_${role.id}`,
-                label: role.name, // Required label for accessory button
+                label: role.name,
                 ...(emojiObj && { emoji: emojiObj })
               }
             });
@@ -1891,7 +1891,7 @@ async function executeTicketCompletion(interaction, ticketData, completedBosses)
     if (ticketData && ticketData.type === 'server_ticket') {
       detailContent = '🛠️ **Support ticket handled and resolved by staff.**';
     } else if (ticketData && ticketData.helpers.length > 0) {
-      const helperMentions = ticketData.helpers.map(h => `<@${h.id}>`).join(', ');
+      const helperMentions = ticketData.helpers.map(h => `<@${h.id}>`).join(', ')
       detailContent = `🏆 **+${pointsToAward} pts** awarded to:\n> ${helperMentions}`;
     }
 
