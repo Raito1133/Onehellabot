@@ -65,7 +65,7 @@ const guildSettings = new Map();
 const roleRewards = new Map();
 const tempTicketCache = new Map();
 const pendingVerifications = new Map();
-const activeGiveaways = new Map(); // Store active giveaways
+const activeGiveaways = new Map();
 
 let ticketCounter = 0;
 
@@ -583,7 +583,7 @@ function parseVariables(text, member, guild) {
     .replace(/{membercount}/g, guild.memberCount);
 }
 
-// --- SLASH COMMANDS REGISTRATION (Strictly ordered) ---
+// --- SLASH COMMANDS REGISTRATION (Strictly ordered: required before optional) ---
 const commands = [
   new SlashCommandBuilder()
     .setName('setup-ticket-hub')
@@ -653,7 +653,7 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
     .addChannelOption(opt => opt.setName('channel').setDescription('Boost announcement channel').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Boost message title').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Boost description (supports {user}, {server}, etc.)').setRequired(true))
+    .addStringOption(opt => opt.setName('description').setDescription('Boost description (supports variables)').setRequired(true))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false)),
 
   // --- /SETUP-WELCOME COMMAND ---
@@ -662,7 +662,7 @@ const commands = [
     .setDescription('Configure Server Welcome announcement')
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
     .addChannelOption(opt => opt.setName('channel').setDescription('Welcome announcement channel').setRequired(true))
-    .addStringOption(opt => opt.setName('outer_message').setDescription('Message outside container (e.g. Welcome {user}!)').setRequired(true))
+    .addStringOption(opt => opt.setName('outer_message').setDescription('Message outside container').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Welcome card title').setRequired(true))
     .addStringOption(opt => opt.setName('description').setDescription('Welcome description (supports variables)').setRequired(true))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false)),
@@ -694,7 +694,7 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
     .addChannelOption(opt => opt.setName('channel').setDescription('Where to post the panel').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Panel title').setRequired(true))
-    .addStringOption(opt => opt.setDescription('Panel description').setRequired(true))
+    .addStringOption(opt => opt.setName('description').setDescription('Panel description').setRequired(true))
     .addRoleOption(opt => opt.setName('role1').setDescription('Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('desc1').setDescription('Description for Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false))
@@ -907,7 +907,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return interaction.reply({ content: '❌ This giveaway has already ended or no longer exists.', ephemeral: true });
       }
 
-      // Check role requirements if any
       const role1 = giveaway.role1;
       const role2 = giveaway.role2;
 
@@ -2075,7 +2074,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
             endsAt
           });
 
-          // Set timeout to end giveaway automatically
           setTimeout(async () => {
             await endGiveaway(interaction.guild, gwId);
           }, durationMins * 60 * 1000);
