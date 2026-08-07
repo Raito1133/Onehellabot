@@ -164,9 +164,9 @@ function isHelperInActiveTicket(userId) {
   return null;
 }
 
-function getPointsForTicket(ticketData) {
+function getPointsForTicket(ticketData, completedItems = null) {
   const type = (ticketData.type || '').toLowerCase();
-  const desc = (ticketData.description || '').toLowerCase();
+  const desc = completedItems ? completedItems.join(', ') : (ticketData.description || '');
   const items = desc ? desc.split(',').map(x => x.trim()).filter(x => x.length > 0) : [];
   const itemCount = items.length > 0 ? items.length : 1;
 
@@ -276,7 +276,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- COMPONENTS V2 LAYOUT WITH KICK HELPER & ALL CUSTOM EMOJIS ---
+// --- COMPONENTS V2 LAYOUT WITH KICK HELPER, LEAVE BUTTON, & ALL CUSTOM EMOJIS ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -390,10 +390,21 @@ function buildTicketControlPayload(ticketData, userMention) {
           }
         ],
         accessory: {
-          type: 2,
-          style: 4,
-          custom_id: 'btn_kick_helper',
-          label: 'Kick Helper'
+          type: 1,
+          components: [
+            {
+              type: 2,
+              style: 4,
+              custom_id: 'btn_kick_helper',
+              label: 'Kick Helper'
+            },
+            {
+              type: 2,
+              style: 2,
+              custom_id: 'btn_leave_ticket',
+              label: 'Leave'
+            }
+          ]
         }
       },
       {
@@ -1035,7 +1046,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const isServerTicket = ticketType === 'server_ticket';
         
-        // Permission overwrites: Support tickets are private; all other tickets are public
         let permissionOverwrites = [
           { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages] },
           { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
@@ -1199,6 +1209,23 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return updateTicketEmbed(interaction.channel, ticketData);
       }
 
+      // --- NEW SUGGESTION 1: LEAVE TICKET BUTTON ---
+      if (customId === 'btn_leave_ticket') {
+        if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
+
+        const isHelper = ticketData.helpers.some(h => h.id === interaction.user.id);
+        if (!isHelper) {
+          return interaction.reply({ content: '❌ You are not a claimed helper in this ticket.', ephemeral: true });
+        }
+
+        ticketData.helpers = ticketData.helpers.filter(h => h.id !== interaction.user.id);
+        activeTickets.set(interaction.channel.id, ticketData);
+
+        await interaction.reply({ content: '✅ You have successfully stepped down and left this ticket.', ephemeral: true });
+        await interaction.channel.send({ content: `🏃‍♂️ ${interaction.user} has stepped down and left this ticket.` });
+        return updateTicketEmbed(interaction.channel, ticketData);
+      }
+
       if (customId === 'btn_pinghelpers') {
         const pingRoleIds = ticketData?.pingRoleIds || [SUPPORT_ROLE_ID];
         const validRoleIds = pingRoleIds.filter(id => id && /^\d+$/.test(id));
@@ -1228,83 +1255,90 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
+      // --- NEW SUGGESTION 2: COMPLETE WITH MULTI-BOSS DROPDOWN CHECKLIST ---
       if (customId === 'btn_complete') {
         if (ticketData && interaction.user.id !== ticketData.requesterId && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
           return interaction.reply({ content: '❌ Only requester or staff can complete.', ephemeral: true });
         }
 
-        await interaction.deferReply();
+        const desc = ticketData ? ticketData.description : '';
+        const items = desc ? desc.split(',').map(x => x.trim()).filter(x => x.length > 0) : [];
 
-        try {
-          await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: false }).catch(() => {});
+        // If there are multiple monsters/bosses, prompt the dropdown checklist
+        if (items.length > 1) {
+          const selectMenu = new StringSelectMenuBuilder()
+            .setCustomId(`select_complete_bosses_${interaction.channel.id}`)
+            .setPlaceholder('Select successfully completed monsters/bosses...')
+            .setMinValues(1)
+            .setMaxValues(items.length)
+            .addOptions(
+              items.map(item => new StringSelectMenuOptionBuilder().setLabel(item).setValue(item))
+            );
 
-          if (ticketData) {
-            const currentReqs = userRequestCounts.get(ticketData.requesterId) || 0;
-            userRequestCounts.set(ticketData.requesterId, currentReqs + 1);
-          }
-
-          let pointsToAward = 0;
-          if (ticketData && ticketData.helpers.length > 0 && ticketData.type !== 'server_ticket') {
-            pointsToAward = getPointsForTicket(ticketData);
-
-            for (const hObj of ticketData.helpers) {
-              const current = helperPoints.get(hObj.id) || 0;
-              const updated = current + pointsToAward;
-              helperPoints.set(hObj.id, updated);
-
-              checkAndAssignHelperRoles(interaction.guild, hObj.id, updated).catch(console.error);
-            }
-
-            globalStats.totalTicketsCompleted += 1;
-            globalStats.totalPointsGiven += pointsToAward;
-            globalStats.totalBossesSlain += 1;
-          }
-
-          const helperMentionsLog = ticketData && ticketData.helpers.length > 0
-            ? ticketData.helpers.map(h => `<@${h.id}>`).join(', ')
-            : 'None';
-
-          sendTicketLog(
-            interaction.guild,
-            '✅ Ticket Completed',
-            `**Requester:** <@${ticketData.requesterId}>\n**Helpers:** ${helperMentionsLog}\n**Points Awarded:** \`${pointsToAward}\`\n**Channel:** \`#${interaction.channel.name}\``,
-            '#2ecc71'
-          ).catch(() => {});
-
-          const categoryPreset = TICKET_PRESETS[ticketData?.type] || {};
-          const accentColor = categoryPreset.accentColor || 0x2ecc71;
-
-          let detailContent = '⚠️ **No helpers joined this ticket.**';
-          if (ticketData && ticketData.type === 'server_ticket') {
-            detailContent = '🛠️ **Support ticket handled and resolved by staff.**';
-          } else if (ticketData && ticketData.helpers.length > 0) {
-            const helperMentions = ticketData.helpers.map(h => `<@${h.id}>`).join(', ');
-            detailContent = `🏆 **+${pointsToAward} pts** awarded to:\n> ${helperMentions}`;
-          }
-
-          const completionEmbed = new EmbedBuilder()
-            .setTitle('🔒 Ticket Completed')
-            .setDescription(`Resolved successfully!\n${detailContent}\n\n*Deleting channel in 5 seconds...*`)
-            .setColor(accentColor)
-            .setTimestamp();
-
-          await interaction.editReply({ embeds: [completionEmbed] });
-
-          activeTickets.delete(interaction.channel.id);
-          setTimeout(() => {
-            interaction.channel.delete().catch(() => {});
-          }, 5000);
-
-        } catch (err) {
-          console.error('Error during ticket completion:', err);
-          await interaction.editReply({ content: '❌ Failed to complete ticket properly. Channel deleting shortly.' }).catch(() => {});
-          setTimeout(() => {
-            interaction.channel.delete().catch(() => {});
-          }, 3000);
+          return await interaction.reply({
+            content: '📋 **Check off the bosses/monsters that were successfully completed:**',
+            components: [new ActionRowBuilder().addComponents(selectMenu)],
+            ephemeral: true
+          });
         }
 
+        // If 1 or no items, confirm directly
+        const confirmRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId(`confirm_close_ticket_${interaction.channel.id}_all`).setLabel('Yes, Close Ticket').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId('cancel_close_ticket').setLabel('Cancel').setStyle(ButtonStyle.Secondary)
+        );
+
+        return await interaction.reply({
+          content: '⚠️ **Are you sure you want to close this ticket?**',
+          components: [confirmRow],
+          ephemeral: true
+        });
+      }
+
+      if (customId.startsWith('confirm_close_ticket_')) {
+        if (ticketData && interaction.user.id !== ticketData.requesterId && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+          return interaction.reply({ content: '❌ Only requester or staff can complete.', ephemeral: true });
+        }
+        await interaction.deferUpdate();
+        await executeTicketCompletion(interaction, ticketData, null);
         return;
       }
+
+      if (customId === 'cancel_close_ticket') {
+        return interaction.update({ content: '❌ Ticket closure canceled.', components: [], ephemeral: true });
+      }
+    }
+
+    // --- NEW SUGGESTION 2 (CONTINUED): HANDLE DROPDOWN CHECKLIST SELECTION ---
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_complete_bosses_')) {
+      const channelId = interaction.customId.replace('select_complete_bosses_', '');
+      const ticketData = activeTickets.get(channelId);
+      if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
+
+      const completedBosses = interaction.values;
+      tempTicketCache.set(`${interaction.user.id}_completed`, completedBosses);
+
+      const confirmRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`confirm_close_ticket_custom_${channelId}`).setLabel('Yes, Close Ticket').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId('cancel_close_ticket').setLabel('Cancel').setStyle(ButtonStyle.Secondary)
+      );
+
+      return await interaction.update({
+        content: `You selected completed: **${completedBosses.join(', ')}**\n\n⚠️ **Are you sure you want to close this ticket?**`,
+        components: [confirmRow],
+        ephemeral: true
+      });
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('confirm_close_ticket_custom_')) {
+      const channelId = interaction.customId.replace('confirm_close_ticket_custom_', '');
+      const ticketData = activeTickets.get(channelId);
+      const completedBosses = tempTicketCache.get(`${interaction.user.id}_completed`) || null;
+
+      await interaction.deferUpdate();
+      await executeTicketCompletion(interaction, ticketData, completedBosses);
+      tempTicketCache.delete(`${interaction.user.id}_completed`);
+      return;
     }
 
     if (interaction.isChatInputCommand()) {
@@ -1500,6 +1534,73 @@ client.on(Events.InteractionCreate, async (interaction) => {
     console.error('Error handling interaction:', error);
   }
 });
+
+// --- EXECUTE TICKET COMPLETION HELPER ---
+async function executeTicketCompletion(interaction, ticketData, completedBosses) {
+  try {
+    await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: false }).catch(() => {});
+
+    if (ticketData) {
+      const currentReqs = userRequestCounts.get(ticketData.requesterId) || 0;
+      userRequestCounts.set(ticketData.requesterId, currentReqs + 1);
+    }
+
+    let pointsToAward = 0;
+    if (ticketData && ticketData.helpers.length > 0 && ticketData.type !== 'server_ticket') {
+      pointsToAward = getPointsForTicket(ticketData, completedBosses);
+
+      for (const hObj of ticketData.helpers) {
+        const current = helperPoints.get(hObj.id) || 0;
+        const updated = current + pointsToAward;
+        helperPoints.set(hObj.id, updated);
+
+        checkAndAssignHelperRoles(interaction.guild, hObj.id, updated).catch(console.error);
+      }
+
+      globalStats.totalTicketsCompleted += 1;
+      globalStats.totalPointsGiven += pointsToAward;
+      globalStats.totalBossesSlain += 1;
+    }
+
+    const helperMentionsLog = ticketData && ticketData.helpers.length > 0
+      ? ticketData.helpers.map(h => `<@${h.id}>`).join(', ')
+      : 'None';
+
+    sendTicketLog(
+      interaction.guild,
+      '✅ Ticket Completed',
+      `**Requester:** <@${ticketData.requesterId}>\n**Helpers:** ${helperMentionsLog}\n**Points Awarded:** \`${pointsToAward}\`\n**Channel:** \`#${interaction.channel.name}\``,
+      '#2ecc71'
+    ).catch(() => {});
+
+    const categoryPreset = TICKET_PRESETS[ticketData?.type] || {};
+    const accentColor = categoryPreset.accentColor || 0x2ecc71;
+
+    let detailContent = '⚠️ **No helpers joined this ticket.**';
+    if (ticketData && ticketData.type === 'server_ticket') {
+      detailContent = '🛠️ **Support ticket handled and resolved by staff.**';
+    } else if (ticketData && ticketData.helpers.length > 0) {
+      const helperMentions = ticketData.helpers.map(h => `<@${h.id}>`).join(', ');
+      detailContent = `🏆 **+${pointsToAward} pts** awarded to:\n> ${helperMentions}`;
+    }
+
+    const completionEmbed = new EmbedBuilder()
+      .setTitle('🔒 Ticket Completed')
+      .setDescription(`Resolved successfully!\n${detailContent}\n\n*Deleting channel in 5 seconds...*`)
+      .setColor(accentColor)
+      .setTimestamp();
+
+    await interaction.editReply({ embeds: [completionEmbed], components: [] });
+
+    activeTickets.delete(interaction.channel.id);
+    setTimeout(() => {
+      interaction.channel.delete().catch(() => {});
+    }, 5000);
+  } catch (err) {
+    console.error('Error during ticket completion execution:', err);
+    await interaction.editReply({ content: '❌ Failed to complete ticket properly.', components: [] }).catch(() => {});
+  }
+}
 
 // --- LOGIN ---
 client.login(process.env.DISCORD_TOKEN);
