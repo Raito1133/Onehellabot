@@ -27,8 +27,12 @@ const GUILD_ID = '1371775026264670228'; // Server ID
 const ULTRA_HELPER_ROLE_ID = '1529499021884919858'; // Ultra Helper Role ID
 const HELPER_ROLE_ID = '1529499059596038285'; // Standard Helper / Farming Role ID
 const SUPPORT_ROLE_ID = '1529498802149392614'; // Support Role ID
-const TICKET_GUIDE_URL = 'https://discord.com'; 
 
+// --- 🛡️ VERIFICATION ROLE & LOG CONFIGS ---
+const GUEST_ROLE_ID = '1371775026264670230'; // Palitan ng totoong Guest Role ID
+const MEMBER_ROLE_ID = '1371775026264670229'; // Palitan ng totoong Member Role ID
+
+const TICKET_GUIDE_URL = 'https://discord.com'; 
 const STANDARD_BANNER_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
 
 const AQW_SERVERS = [
@@ -64,6 +68,7 @@ const userRequestCounts = new Map();
 const guildSettings = new Map();
 const roleRewards = new Map();
 const tempTicketCache = new Map();
+const pendingVerifications = new Map(); // Temporary store for verification requests waiting for staff review
 
 let ticketCounter = 0;
 
@@ -571,7 +576,7 @@ async function updateTicketEmbed(channel, ticketData) {
   }
 }
 
-// --- SLASH COMMANDS REGISTRATION (Strictly ordered: required options first) ---
+// --- SLASH COMMANDS REGISTRATION (Strictly ordered) ---
 const commands = [
   new SlashCommandBuilder()
     .setName('setup-ticket-hub')
@@ -592,6 +597,14 @@ const commands = [
     .addChannelOption(opt => opt.setName('log_channel').setDescription('Channel for Ticket Logs').setRequired(false)),
 
   new SlashCommandBuilder()
+    .setName('setup-verification')
+    .setDescription('Post the Components V2 Verification and Join Guild Panel')
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
+    .addChannelOption(opt => opt.setName('channel').setDescription('Target channel to post verification panel').setRequired(true))
+    .addStringOption(opt => opt.setName('banner_url').setDescription('Top banner image URL').setRequired(false))
+    .addStringOption(opt => opt.setName('footer_banner_url').setDescription('Bottom banner image URL').setRequired(false)),
+
+  new SlashCommandBuilder()
     .setName('stats')
     .setDescription('Display global ticket stats counter')
     .addStringOption(opt => opt.setName('custom_message').setDescription('Custom message below stats').setRequired(false)),
@@ -602,7 +615,6 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
     .addChannelOption(opt => opt.setName('channel').setDescription('Channel to post stats').setRequired(true)),
 
-  // --- SIMPLIFIED /EMBED COMMAND (Required options first: channel, title, description) ---
   new SlashCommandBuilder()
     .setName('embed')
     .setDescription('Create a clean Components V2 panel with title, description, and banners')
@@ -610,22 +622,18 @@ const commands = [
     .addChannelOption(opt => opt.setName('channel').setDescription('Target channel').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Panel title').setRequired(true))
     .addStringOption(opt => opt.setName('description').setDescription('Main text content').setRequired(true))
-    // Optional options follow after all required options
     .addStringOption(opt => opt.setName('banner_url').setDescription('Top banner image URL').setRequired(false))
     .addStringOption(opt => opt.setName('footer_banner_url').setDescription('Bottom footer banner image URL').setRequired(false)),
 
-  // --- FULLY FLEXIBLE /REACTIONROLE COMMAND (Up to 7 buttons, optional fields allowed) ---
   new SlashCommandBuilder()
     .setName('reactionrole')
     .setDescription('Create a Components V2 reaction role panel with up to 7 buttons')
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
     .addChannelOption(opt => opt.setName('channel').setDescription('Where to post the panel').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Panel title').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Panel description').setRequired(true))
-    // Required base options
+    .addStringOption(opt => opt.setDescription('Panel description').setRequired(true))
     .addRoleOption(opt => opt.setName('role1').setDescription('Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('desc1').setDescription('Description for Role 1').setRequired(true))
-    // Optional options follow
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false))
     .addStringOption(opt => opt.setName('emoji1').setDescription('Emoji for Button 1').setRequired(false))
     .addRoleOption(opt => opt.setName('role2').setDescription('Role 2').setRequired(false))
@@ -653,7 +661,8 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
     .addChannelOption(opt => opt.setName('log_channel').setDescription('Log channel').setRequired(false))
     .addChannelOption(opt => opt.setName('welcome_channel').setDescription('Welcome channel').setRequired(false))
-    .addChannelOption(opt => opt.setName('boost_channel').setDescription('Boost channel').setRequired(false)),
+    .addChannelOption(opt => opt.setName('boost_channel').setDescription('Boost channel').setRequired(false))
+    .addChannelOption(opt => opt.setName('verify_log_channel').setDescription('Verification Log Channel').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('leaderboard')
@@ -731,6 +740,318 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.guild || interaction.guild.id !== GUILD_ID) return;
 
   try {
+    // --- VERIFICATION PANEL BUTTON TRIGGERS ---
+    if (interaction.isButton() && interaction.customId === 'btn_verify_guest') {
+      const modal = new ModalBuilder()
+        .setCustomId('modal_verify_guest')
+        .setTitle('Verify as Guest');
+
+      const ignInput = new TextInputBuilder()
+        .setCustomId('ign')
+        .setLabel('AQW IGN')
+        .setPlaceholder('Enter your exact AQW username...')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const guildInput = new TextInputBuilder()
+        .setCustomId('guild_name')
+        .setLabel('Guild Name')
+        .setPlaceholder('Enter your guild name...')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const invitedInput = new TextInputBuilder()
+        .setCustomId('invited_by')
+        .setLabel('Who invited you? (Optional)')
+        .setPlaceholder('e.g. from AEO discord link / friend name...')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(ignInput),
+        new ActionRowBuilder().addComponents(guildInput),
+        new ActionRowBuilder().addComponents(invitedInput)
+      );
+
+      return await interaction.showModal(modal);
+    }
+
+    if (interaction.isButton() && interaction.customId === 'btn_verify_member') {
+      const modal = new ModalBuilder()
+        .setCustomId('modal_verify_member')
+        .setTitle('Verify as Member');
+
+      const ignInput = new TextInputBuilder()
+        .setCustomId('ign')
+        .setLabel('AQW IGN')
+        .setPlaceholder('Enter your exact AQW username...')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      const invitedInput = new TextInputBuilder()
+        .setCustomId('invited_by')
+        .setLabel('Who invited you?')
+        .setPlaceholder('e.g. friend name / link...')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(ignInput),
+        new ActionRowBuilder().addComponents(invitedInput)
+      );
+
+      return await interaction.showModal(modal);
+    }
+
+    // --- SUBMITTED GUEST MODAL ---
+    if (interaction.isModalSubmit() && interaction.customId === 'modal_verify_guest') {
+      await interaction.deferReply({ ephemeral: true });
+
+      const ign = interaction.fields.getTextInputValue('ign').trim();
+      const guildName = interaction.fields.getTextInputValue('guild_name').trim();
+      const invitedBy = interaction.fields.getTextInputValue('invited_by') || 'None provided';
+
+      const charPageUrl = `https://account.aq.com/CharPage?id=${encodeURIComponent(ign)}`;
+      const cfg = guildSettings.get(interaction.guild.id) || {};
+      const logChannelId = cfg.verifyLogChannelId;
+
+      if (!logChannelId) {
+        return await interaction.editReply('❌ Verification Log channel is not configured yet. Please ask an admin to run `/setup-channels`.');
+      }
+
+      const logChannel = interaction.guild.channels.cache.get(logChannelId);
+      if (!logChannel) {
+        return await interaction.editReply('❌ Verification log channel not found.');
+      }
+
+      // Store temporary verification data
+      const requestId = `ver_${interaction.user.id}_${Date.now()}`;
+      pendingVerifications.set(requestId, {
+        userId: interaction.user.id,
+        type: 'GUEST',
+        ign,
+        charPageUrl,
+        guildName,
+        invitedBy,
+        roleId: GRoleId = GUEST_ROLE_ID,
+        roleName: '@Guest'
+      });
+
+      // Build V2 Component Verification Log
+      const logContainer = {
+        type: 17,
+        accent_color: 0x3498db,
+        components: [
+          {
+            type: 10,
+            content: `🛡️ **New Verification Request (GUEST)**\n\n` +
+                     `**User:** <@${interaction.user.id}>\n` +
+                     `**AQW Username:** [${ign}](${charPageUrl})\n` +
+                     `**Verification Type:** GUEST\n` +
+                     `**Guild:** ${guildName}\n` +
+                     `**Role To Give:** <@&${GUEST_ROLE_ID}>\n` +
+                     `**Invited By:** ${invitedBy}`
+          },
+          {
+            type: 1,
+            components: [
+              {
+                type: 2,
+                style: 3,
+                custom_id: `ver_approve_${requestId}`,
+                label: 'Approve',
+                emoji: '✅'
+              },
+              {
+                type: 2,
+                style: 4,
+                custom_id: `ver_reject_${requestId}`,
+                label: 'Reject',
+                emoji: '❌'
+              }
+            ]
+          }
+        ]
+      };
+
+      await logChannel.send({
+        components: [logContainer],
+        flags: MessageFlags.IsComponentsV2
+      });
+
+      return await interaction.editReply('✅ Your verification request has been submitted to the staff! Please wait for approval.');
+    }
+
+    // --- SUBMITTED MEMBER MODAL ---
+    if (interaction.isModalSubmit() && interaction.customId === 'modal_verify_member') {
+      await interaction.deferReply({ ephemeral: true });
+
+      const ign = interaction.fields.getTextInputValue('ign').trim();
+      const invitedBy = interaction.fields.getTextInputValue('invited_by').trim();
+
+      const charPageUrl = `https://account.aq.com/CharPage?id=${encodeURIComponent(ign)}`;
+      const cfg = guildSettings.get(interaction.guild.id) || {};
+      const logChannelId = cfg.verifyLogChannelId;
+
+      if (!logChannelId) {
+        return await interaction.editReply('❌ Verification Log channel is not configured yet. Please ask an admin to run `/setup-channels`.');
+      }
+
+      const logChannel = interaction.guild.channels.cache.get(logChannelId);
+      if (!logChannel) {
+        return await interaction.editReply('❌ Verification log channel not found.');
+      }
+
+      const requestId = `ver_${interaction.user.id}_${Date.now()}`;
+      pendingVerifications.set(requestId, {
+        userId: interaction.user.id,
+        type: 'MEMBER',
+        ign,
+        charPageUrl,
+        guildName: 'Main Guild',
+        invitedBy,
+        roleId: MEMBER_ROLE_ID,
+        roleName: '@Member'
+      });
+
+      const logContainer = {
+        type: 17,
+        accent_color: 0x2ecc71,
+        components: [
+          {
+            type: 10,
+            content: `🛡️ **New Verification Request (MEMBER)**\n\n` +
+                     `**User:** <@${interaction.user.id}>\n` +
+                     `**AQW Username:** [${ign}](${charPageUrl})\n` +
+                     `**Verification Type:** MEMBER\n` +
+                     `**Guild:** Main Guild\n` +
+                     `**Role To Give:** <@&${MEMBER_ROLE_ID}>\n` +
+                     `**Invited By:** ${invitedBy}`
+          },
+          {
+            type: 1,
+            components: [
+              {
+                type: 2,
+                style: 3,
+                custom_id: `ver_approve_${requestId}`,
+                label: 'Approve',
+                emoji: '✅'
+              },
+              {
+                type: 2,
+                style: 4,
+                custom_id: `ver_reject_${requestId}`,
+                label: 'Reject',
+                emoji: '❌'
+              }
+            ]
+          }
+        ]
+      };
+
+      await logChannel.send({
+        components: [logContainer],
+        flags: MessageFlags.IsComponentsV2
+      });
+
+      return await interaction.editReply('✅ Your membership verification request has been submitted to the staff! Please wait for approval.');
+    }
+
+    // --- STAFF APPROVE BUTTON ---
+    if (interaction.isButton() && interaction.customId.startsWith('ver_approve_')) {
+      const requestId = interaction.customId.replace('ver_approve_', '');
+      const data = pendingVerifications.get(requestId);
+
+      if (!data) {
+        return interaction.reply({ content: '⚠️ This verification request is already processed or expired.', ephemeral: true });
+      }
+
+      try {
+        const member = await interaction.guild.members.fetch(data.userId).catch(() => null);
+        if (member) {
+          await member.roles.add(data.roleId).catch(() => {});
+        }
+
+        const approvedEmbed = new EmbedBuilder()
+          .setTitle('✅ Verification Approved')
+          .setDescription(`Approved by ${interaction.user}\n\n` +
+                        `**User:** <@${data.userId}>\n` +
+                        `**AQW Username:** [${data.ign}](${data.charPageUrl})\n` +
+                        `**Verification Type:** ${data.type}\n` +
+                        `**Role Given:** <@&${data.roleId}>`)
+          .setColor('#2ecc71')
+          .setTimestamp();
+
+        await interaction.update({ content: '✅ **Approved Successfully!**', components: [] });
+        await interaction.channel.send({ embeds: [approvedEmbed] });
+
+        // Notify user via DM if possible
+        if (member) {
+          await member.send(`🎉 Your verification for **${interaction.guild.name}** has been **Approved**! You have been given the role.`).catch(() => {});
+        }
+
+        pendingVerifications.delete(requestId);
+      } catch (err) {
+        console.error('Approval error:', err);
+        return interaction.reply({ content: `❌ Failed to approve: ${err.message}`, ephemeral: true });
+      }
+    }
+
+    // --- STAFF REJECT BUTTON (Triggers modal for reason) ---
+    if (interaction.isButton() && interaction.customId.startsWith('ver_reject_')) {
+      const requestId = interaction.customId.replace('ver_reject_', '');
+      
+      const modal = new ModalBuilder()
+        .setCustomId(`modal_reject_reason_${requestId}`)
+        .setTitle('Reason for Rejection');
+
+      const reasonInput = new TextInputBuilder()
+        .setCustomId('reason')
+        .setLabel('Reason / Explanation')
+        .setPlaceholder('Enter why this verification is rejected...')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(true);
+
+      modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+      return await interaction.showModal(modal);
+    }
+
+    // --- SUBMITTED REJECTION REASON MODAL ---
+    if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_reject_reason_')) {
+      await interaction.deferUpdate();
+      const requestId = interaction.customId.replace('modal_reject_reason_', '');
+      const reason = interaction.fields.getTextInputValue('reason');
+      const data = pendingVerifications.get(requestId);
+
+      if (!data) {
+        return interaction.followUp({ content: '⚠️ Request data not found.', ephemeral: true });
+      }
+
+      const rejectedEmbed = new EmbedBuilder()
+        .setTitle('❌ Verification Rejected')
+        .setDescription(`Rejected by ${interaction.user}\n\n` +
+                      `**User:** <@${data.userId}>\n` +
+                      `**AQW Username:** [${data.ign}](${data.charPageUrl})\n` +
+                      `**Verification Type:** ${data.type}\n` +
+                      `**Reason:** ${reason}`)
+        .setColor('#e74c3c')
+        .setTimestamp();
+
+      await interaction.editReply({ content: '❌ **Request Rejected.**', components: [] });
+      await interaction.channel.send({ embeds: [rejectedEmbed] });
+
+      // DM User about rejection reason
+      try {
+        const member = await interaction.guild.members.fetch(data.userId).catch(() => null);
+        if (member) {
+          await member.send(`❌ Your verification for **${interaction.guild.name}** was **Rejected**. \n**Reason:** ${reason}`).catch(() => {});
+        }
+      } catch {}
+
+      pendingVerifications.delete(requestId);
+    }
+
     // --- REACTION ROLE TOGGLE HANDLER ---
     if (interaction.isButton() && interaction.customId.startsWith('rr_')) {
       const roleId = interaction.customId.split('_')[1];
@@ -1512,6 +1833,80 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isChatInputCommand()) {
       const { commandName, options } = interaction;
 
+      // --- SETUP VERIFICATION PANEL COMMAND ---
+      if (commandName === 'setup-verification') {
+        await interaction.deferReply({ ephemeral: true });
+
+        const channel = options.getChannel('channel');
+        if (!channel || !channel.isTextBased()) {
+          return await interaction.editReply('❌ Please select a valid text channel.');
+        }
+
+        const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
+        const footerBannerUrl = options.getString('footer_banner_url') || 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
+
+        const verifyContainer = {
+          type: 17,
+          accent_color: 0x8b0000,
+          components: [
+            {
+              type: 12,
+              items: [{ media: { url: bannerUrl } }]
+            },
+            {
+              type: 9,
+              components: [
+                {
+                  type: 10,
+                  content: `🛡️ **Get access to the discord**\n-# > Verify by entering your AQW username, and get access to the rest of the discord. Click **'Verify as Guest'** to get started!`
+                }
+              ],
+              accessory: {
+                type: 2,
+                style: 1,
+                custom_id: 'btn_verify_guest',
+                label: 'Verify as Guest',
+                emoji: { id: '1534950248831516806', name: 'claimbt', animated: false }
+              }
+            },
+            {
+              type: 9,
+              components: [
+                {
+                  type: 10,
+                  content: `⚔️ **Join the guild**\n-# > Come hang out with us in game, participate in guild-only events and screenshots. Click **'Verify as Member'** to get started!`
+                }
+              ],
+              accessory: {
+                type: 2,
+                style: 1,
+                custom_id: 'btn_verify_member',
+                label: 'Verify as Member',
+                emoji: { id: '1534950268679094397', name: 'completebt', animated: false }
+              }
+            },
+            {
+              type: 14
+            },
+            {
+              type: 12,
+              items: [{ media: { url: footerBannerUrl } }]
+            }
+          ]
+        };
+
+        try {
+          await channel.send({
+            components: [verifyContainer],
+            flags: MessageFlags.IsComponentsV2
+          });
+          return await interaction.editReply(`✅ Verification panel successfully posted to ${channel}!`);
+        } catch (err) {
+          console.error('Error posting verification panel:', err);
+          return await interaction.editReply(`❌ Failed to post panel: ${err.message}`);
+        }
+      }
+
       if (commandName === 'setup-ticket-hub') {
         await interaction.deferReply({ ephemeral: true });
 
@@ -1744,11 +2139,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const logChannel = options.getChannel('log_channel');
         const welcomeChannel = options.getChannel('welcome_channel');
         const boostChannel = options.getChannel('boost_channel');
+        const verifyLogChannel = options.getChannel('verify_log_channel');
 
         const cfg = guildSettings.get(interaction.guild.id) || {};
         if (logChannel) cfg.logChannelId = logChannel.id;
         if (welcomeChannel) cfg.welcomeChannelId = welcomeChannel.id;
         if (boostChannel) cfg.boostChannelId = boostChannel.id;
+        if (verifyLogChannel) cfg.verifyLogChannelId = verifyLogChannel.id;
 
         guildSettings.set(interaction.guild.id, cfg);
 
@@ -1756,6 +2153,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           logChannel ? `• **Log Channel:** ${logChannel}` : null,
           welcomeChannel ? `• **Welcome Channel:** ${welcomeChannel}` : null,
           boostChannel ? `• **Boost Channel:** ${boostChannel}` : null,
+          verifyLogChannel ? `• **Verify Log Channel:** ${verifyLogChannel}` : null,
         ].filter(Boolean);
 
         if (statusUpdates.length === 0) return await interaction.editReply('⚠️ No channels updated.');
