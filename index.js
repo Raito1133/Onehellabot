@@ -602,16 +602,34 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
     .addChannelOption(opt => opt.setName('channel').setDescription('Channel to post stats').setRequired(true)),
 
+  // --- UPGRADED /EMBED COMMAND (Supports flexible rules layout with up to 5 items like the photo) ---
   new SlashCommandBuilder()
     .setName('embed')
-    .setDescription('Create and send a customized Components V2 layout message')
+    .setDescription('Create and send a customized Components V2 layout rules panel')
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
     .addChannelOption(opt => opt.setName('channel').setDescription('Target channel').setRequired(true))
-    .addStringOption(opt => opt.setName('title').setDescription('Title content').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Main text content').setRequired(true))
-    .addStringOption(opt => opt.setName('outer_message').setDescription('Plain text outside the container box').setRequired(false))
-    .addStringOption(opt => opt.setName('color').setDescription('Hex color code (e.g. #8b0000)').setRequired(false))
-    .addStringOption(opt => opt.setName('banner_url').setDescription('Header banner image URL').setRequired(false)),
+    .addStringOption(opt => opt.setName('description').setDescription('Main introductory text content').setRequired(true))
+    .addStringOption(opt => opt.setName('banner_url').setDescription('Header banner image URL').setRequired(false))
+    // Item 1 (Required)
+    .addStringOption(opt => opt.setName('title1').setDescription('Title 1 (e.g. No hate speech)').setRequired(true))
+    .addStringOption(opt => opt.setName('desc1').setDescription('Description 1').setRequired(true))
+    .addStringOption(opt => opt.setName('emoji1').setDescription('Emoji 1 (e.g. 1️⃣ or custom emoji)').setRequired(false))
+    // Item 2 (Optional)
+    .addStringOption(opt => opt.setName('title2').setDescription('Title 2').setRequired(false))
+    .addStringOption(opt => opt.setName('desc2').setDescription('Description 2').setRequired(false))
+    .addStringOption(opt => opt.setName('emoji2').setDescription('Emoji 2').setRequired(false))
+    // Item 3 (Optional)
+    .addStringOption(opt => opt.setName('title3').setDescription('Title 3').setRequired(false))
+    .addStringOption(opt => opt.setName('desc3').setDescription('Description 3').setRequired(false))
+    .addStringOption(opt => opt.setName('emoji3').setDescription('Emoji 3').setRequired(false))
+    // Item 4 (Optional)
+    .addStringOption(opt => opt.setName('title4').setDescription('Title 4').setRequired(false))
+    .addStringOption(opt => opt.setName('desc4').setDescription('Description 4').setRequired(false))
+    .addStringOption(opt => opt.setName('emoji4').setDescription('Emoji 4').setRequired(false))
+    // Item 5 (Optional)
+    .addStringOption(opt => opt.setName('title5').setDescription('Title 5').setRequired(false))
+    .addStringOption(opt => opt.setName('desc5').setDescription('Description 5').setRequired(false))
+    .addStringOption(opt => opt.setName('emoji5').setDescription('Emoji 5').setRequired(false)),
 
   // --- FULLY FLEXIBLE /REACTIONROLE COMMAND (Up to 7 buttons, optional fields allowed) ---
   new SlashCommandBuilder()
@@ -1598,7 +1616,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return await interaction.editReply(`✅ Live tracking stats message successfully set up in ${channel}!`);
       }
 
-      // --- COMPONENTS V2 /EMBED COMMAND ---
+      // --- UPGRADED COMPONENTS V2 /EMBED COMMAND (Matches the rules photo style) ---
       if (commandName === 'embed') {
         await interaction.deferReply({ ephemeral: true });
 
@@ -1607,17 +1625,41 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return await interaction.editReply('❌ Please select a valid text channel.');
         }
 
-        const title = options.getString('title');
         const description = options.getString('description').replace(/\\n/g, '\n');
-        const rawOuterMessage = options.getString('outer_message');
-        const colorInput = options.getString('color') || '#8b0000';
         const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
 
-        const accentColorInt = parseInt(colorInput.replace('#', ''), 16) || 0x8b0000;
+        const sections = [];
+        for (let i = 1; i <= 5; i++) {
+          const title = options.getString(`title${i}`);
+          const desc = options.getString(`desc${i}`);
+
+          if (title && desc) {
+            const rawEmoji = options.getString(`emoji${i}`);
+            let emojiPrefix = '';
+            if (rawEmoji) {
+              const customEmojiMatch = rawEmoji.match(/<a?:(.+?):(\d+)>/);
+              if (customEmojiMatch) {
+                emojiPrefix = `${rawEmoji} `;
+              } else {
+                emojiPrefix = `${rawEmoji.trim()} `;
+              }
+            }
+
+            sections.push({
+              type: 9, // Section Component
+              components: [
+                {
+                  type: 10,
+                  content: `${emojiPrefix}**${title}**\n-# > ${desc}`
+                }
+              ]
+            });
+          }
+        }
 
         const containerComponent = {
           type: 17,
-          accent_color: accentColorInt,
+          accent_color: 0x8b0000,
           components: [
             {
               type: 12,
@@ -1625,23 +1667,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
             },
             {
               type: 10,
-              content: `**${title}**\n\n${description}`
-            }
+              content: `${description}`
+            },
+            {
+              type: 14 // Divider line component
+            },
+            ...sections
           ]
         };
 
-        const messageOptions = {
-          components: [containerComponent],
-          flags: MessageFlags.IsComponentsV2
-        };
-
-        if (rawOuterMessage) {
-          messageOptions.content = rawOuterMessage.replace(/\\n/g, '\n');
-        }
-
         try {
-          await channel.send(messageOptions);
-          return await interaction.editReply(`✅ Components V2 layout message posted to ${channel}!`);
+          await channel.send({
+            components: [containerComponent],
+            flags: MessageFlags.IsComponentsV2
+          });
+          return await interaction.editReply(`✅ Components V2 rules embed successfully posted to ${channel}!`);
         } catch (err) {
           console.error('Error posting Components V2 embed:', err);
           return await interaction.editReply(`❌ Failed to post layout message: ${err.message}`);
@@ -1715,7 +1755,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
               items: [{ media: { url: bannerUrl } }]
             },
             {
-              type: 10, // Ginamit ang type 10 para sa header text para maiwasan ang accessory error sa index 1
+              type: 10,
               content: `**${title}**\n\n${description}`
             },
             ...sections
