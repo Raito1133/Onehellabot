@@ -67,6 +67,7 @@ const tempTicketCache = new Map();
 const pendingVerifications = new Map();
 const userRejectionReasons = new Map();
 const activeGiveaways = new Map();
+const snipeCache = new Map(); // Store deleted messages for snipe command
 
 let ticketCounter = 0;
 
@@ -75,6 +76,17 @@ const globalStats = {
   totalPointsGiven: 0,
   totalBossesSlain: 0
 };
+
+// --- SNIPE EVENT LISTENER ---
+client.on(Events.MessageDelete, (message) => {
+  if (!message.guild || message.guild.id !== GUILD_ID || message.author?.bot) return;
+  snipeCache.set(message.channel.id, {
+    content: message.content || '[No text content / Embed / Image]',
+    author: message.author,
+    image: message.attachments.first()?.proxyURL || null,
+    createdAt: message.createdAt
+  });
+});
 
 // --- ⚙️ ORIGINAL CUSTOM TICKET PRESETS & BANNERS ---
 const TICKET_PRESETS = {
@@ -631,6 +643,7 @@ const commands = [
         .setDescription('Start a new V2 Giveaway')
         .addChannelOption(opt => opt.setName('channel').setDescription('Channel to post giveaway').setRequired(true))
         .addStringOption(opt => opt.setName('prize').setDescription('Prize of the giveaway').setRequired(true))
+        .addStringOption(opt => opt.setName('title').setDescription('Giveaway embed/card title').setRequired(true))
         .addStringOption(opt => opt.setName('description').setDescription('Giveaway description details').setRequired(true))
         .addIntegerOption(opt => opt.setName('duration').setDescription('Duration in minutes').setRequired(true))
         .addIntegerOption(opt => opt.setName('winners').setDescription('Number of winners').setRequired(true))
@@ -670,6 +683,38 @@ const commands = [
     .addStringOption(opt => opt.setName('description').setDescription('Welcome description (supports variables)').setRequired(true))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false)),
 
+  // --- /VIEWPOINTS COMMAND ---
+  new SlashCommandBuilder()
+    .setName('viewpoints')
+    .setDescription('Check your points or another user points')
+    .addUserOption(opt => opt.setName('user').setDescription('User to check points for (Optional)').setRequired(false)),
+
+  // --- MODERATION COMMANDS ---
+  new SlashCommandBuilder()
+    .setName('kick')
+    .setDescription('Kick a member from the server')
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.KickMembers)
+    .addUserOption(opt => opt.setName('user').setDescription('User to kick').setRequired(true))
+    .addStringOption(opt => opt.setName('reason').setDescription('Reason for kick').setRequired(false)),
+
+  new SlashCommandBuilder()
+    .setName('mute')
+    .setDescription('Timeout/mute a member')
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers)
+    .addUserOption(opt => opt.setName('user').setDescription('User to mute').setRequired(true))
+    .addIntegerOption(opt => opt.setName('duration').setDescription('Duration in minutes').setRequired(true))
+    .addStringOption(opt => opt.setName('reason').setDescription('Reason for mute').setRequired(false)),
+
+  new SlashCommandBuilder()
+    .setName('snipe')
+    .setDescription('Retrieve the last deleted message in the channel')
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages),
+
+  new SlashCommandBuilder()
+    .setName('viewprofile')
+    .setDescription('View user profile details')
+    .addUserOption(opt => opt.setName('user').setDescription('User to view profile of').setRequired(false)),
+
   new SlashCommandBuilder()
     .setName('stats')
     .setDescription('Display global ticket stats counter')
@@ -697,7 +742,7 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
     .addChannelOption(opt => opt.setName('channel').setDescription('Where to post the panel').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Panel title').setRequired(true))
-    .addStringOption(opt => opt.setDescription('Panel description').setRequired(true))
+    .addStringOption(opt => opt.setName('description').setDescription('Panel description').setRequired(true))
     .addRoleOption(opt => opt.setName('role1').setDescription('Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('desc1').setDescription('Description for Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false))
@@ -1191,6 +1236,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const member = await interaction.guild.members.fetch(data.userId).catch(() => null);
         if (member) {
           await member.roles.add(data.roleId).catch(() => {});
+          // Awtomatikong palitan ang server nickname ng user sa kanilang AQW IGN
+          await member.setNickname(data.ign).catch(err => console.log('Failed to set nickname:', err));
         }
 
         userRejectionReasons.delete(data.userId);
@@ -1201,7 +1248,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
                         `**User:** <@${data.userId}>\n` +
                         `**AQW Username:** [${data.ign}](${data.charPageUrl})\n` +
                         `**Verification Type:** ${data.type}\n` +
-                        `**Role Given:** <@&${data.roleId}>`)
+                        `**Role Given:** <@&${data.roleId}>\n` +
+                        `**Nickname Updated:** \`${data.ign}\``)
           .setColor('#2ecc71')
           .setTimestamp();
 
@@ -1209,7 +1257,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.channel.send({ embeds: [approvedEmbed] });
 
         if (member) {
-          await member.send(`🎉 Your verification for **${interaction.guild.name}** has been **Approved**! You have been given the role.`).catch(() => {});
+          await member.send(`🎉 Your verification for **${interaction.guild.name}** has been **Approved**! Your nickname has been updated to **${data.ign}** and you have been given the role.`).catch(() => {});
         }
 
         pendingVerifications.delete(requestId);
@@ -2038,6 +2086,83 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isChatInputCommand()) {
       const { commandName, options } = interaction;
 
+      // --- /VIEWPOINTS COMMAND ---
+      if (commandName === 'viewpoints') {
+        const target = options.getUser('user') || interaction.user;
+        const pts = helperPoints.get(target.id) || 0;
+        return await interaction.reply({ content: `🏅 **${target.tag}** currently has **${pts}** helper points.`, ephemeral: true });
+      }
+
+      // --- MODERATION COMMANDS ---
+      if (commandName === 'kick') {
+        const targetUser = options.getUser('user');
+        const reason = options.getString('reason') || 'No reason provided';
+        const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+
+        if (!member) return await interaction.reply({ content: '❌ User not found in this server.', ephemeral: true });
+        
+        await member.kick(reason).catch(err => {
+          return interaction.reply({ content: `❌ Failed to kick user: ${err.message}`, ephemeral: true });
+        });
+
+        return await interaction.reply({ content: `✅ Successfully kicked **${targetUser.tag}**. Reason: ${reason}`, ephemeral: true });
+      }
+
+      if (commandName === 'mute') {
+        const targetUser = options.getUser('user');
+        const durationMins = options.getInteger('duration');
+        const reason = options.getString('reason') || 'No reason provided';
+        const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+
+        if (!member) return await interaction.reply({ content: '❌ User not found in this server.', ephemeral: true });
+
+        await member.timeout(durationMins * 60 * 1000, reason).catch(err => {
+          return interaction.reply({ content: `❌ Failed to mute user: ${err.message}`, ephemeral: true });
+        });
+
+        return await interaction.reply({ content: `✅ Successfully muted **${targetUser.tag}** for **${durationMins} minutes**. Reason: ${reason}`, ephemeral: true });
+      }
+
+      if (commandName === 'snipe') {
+        const sniped = snipeCache.get(interaction.channel.id);
+        if (!sniped) {
+          return await interaction.reply({ content: '❌ There are no deleted messages to snipe in this channel.', ephemeral: true });
+        }
+
+        const snipeEmbed = new EmbedBuilder()
+          .setTitle('🎯 Sniped Message')
+          .setDescription(sniped.content)
+          .setAuthor({ name: sniped.author.tag, iconURL: sniped.author.displayAvatarURL() })
+          .setTimestamp(sniped.createdAt)
+          .setColor('#e74c3c');
+
+        if (sniped.image) snipeEmbed.setImage(sniped.image);
+
+        return await interaction.reply({ embeds: [snipeEmbed] });
+      }
+
+      if (commandName === 'viewprofile') {
+        const targetUser = options.getUser('user') || interaction.user;
+        const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
+
+        if (!member) return await interaction.reply({ content: '❌ User not found.', ephemeral: true });
+
+        const roles = member.roles.cache.filter(r => r.id !== interaction.guild.id).map(r => r).join(', ') || 'None';
+        const profileEmbed = new EmbedBuilder()
+          .setTitle(`👤 Profile: ${targetUser.tag}`)
+          .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
+          .addFields(
+            { name: '🆔 User ID', value: `\`${targetUser.id}\``, inline: true },
+            { name: '📅 Joined Server', value: `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>`, inline: true },
+            { name: '🎂 Account Created', value: `<t:${Math.floor(targetUser.createdTimestamp / 1000)}:R>`, inline: true },
+            { name: `🛡️ Roles (${member.roles.cache.size - 1})`, value: roles, inline: false }
+          )
+          .setColor('#3498db')
+          .setTimestamp();
+
+        return await interaction.reply({ embeds: [profileEmbed], ephemeral: true });
+      }
+
       // --- GIVEAWAY COMMAND HANDLER ---
       if (commandName === 'giveaway') {
         const sub = options.getSubcommand();
@@ -2046,6 +2171,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           await interaction.deferReply({ ephemeral: true });
           const channel = options.getChannel('channel');
           const prize = options.getString('prize');
+          const title = options.getString('title');
           const description = options.getString('description').replace(/\\n/g, '\n');
           const durationMins = options.getInteger('duration');
           const winnersCount = options.getInteger('winners');
@@ -2074,7 +2200,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
                 components: [
                   {
                     type: 10,
-                    content: `🎉 **GIVEAWAY: ${prize}** 🎉\n\n` +
+                    content: `# ${title}\n\n` +
+                             `🎉 **Prize:** ${prize}\n\n` +
                              `${description}\n\n` +
                              `**Winners:** ${winnersCount}\n` +
                              `Hosted by: ${interaction.user}\n` +
