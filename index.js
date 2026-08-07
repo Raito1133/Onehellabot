@@ -571,7 +571,7 @@ async function updateTicketEmbed(channel, ticketData) {
   }
 }
 
-// --- SLASH COMMANDS REGISTRATION ---
+// --- SLASH COMMANDS REGISTRATION (Strictly ordered: required options first) ---
 const commands = [
   new SlashCommandBuilder()
     .setName('setup-ticket-hub')
@@ -602,32 +602,32 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
     .addChannelOption(opt => opt.setName('channel').setDescription('Channel to post stats').setRequired(true)),
 
-  // --- UPGRADED /EMBED COMMAND (Supports top banner, rules list, and bottom banner) ---
+  // --- UPGRADED /EMBED COMMAND (Required options placed strictly first) ---
   new SlashCommandBuilder()
     .setName('embed')
     .setDescription('Create a Components V2 rules panel with top and bottom banners')
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
     .addChannelOption(opt => opt.setName('channel').setDescription('Target channel').setRequired(true))
     .addStringOption(opt => opt.setName('description').setDescription('Main introductory text content').setRequired(true))
-    .addStringOption(opt => opt.setName('banner_url').setDescription('Top banner image URL').setRequired(false))
-    .addStringOption(opt => opt.setName('footer_banner_url').setDescription('Bottom footer banner image URL').setRequired(false))
-    // Item 1 (Required)
     .addStringOption(opt => opt.setName('title1').setDescription('Title 1').setRequired(true))
     .addStringOption(opt => opt.setName('desc1').setDescription('Description 1').setRequired(true))
+    // Optional options follow after all required options
+    .addStringOption(opt => opt.setName('banner_url').setDescription('Top banner image URL').setRequired(false))
+    .addStringOption(opt => opt.setName('footer_banner_url').setDescription('Bottom footer banner image URL').setRequired(false))
     .addStringOption(opt => opt.setName('emoji1').setDescription('Emoji 1 (e.g. 1️⃣)').setRequired(false))
-    // Item 2 (Optional)
+    // Item 2
     .addStringOption(opt => opt.setName('title2').setDescription('Title 2').setRequired(false))
     .addStringOption(opt => opt.setName('desc2').setDescription('Description 2').setRequired(false))
     .addStringOption(opt => opt.setName('emoji2').setDescription('Emoji 2').setRequired(false))
-    // Item 3 (Optional)
+    // Item 3
     .addStringOption(opt => opt.setName('title3').setDescription('Title 3').setRequired(false))
     .addStringOption(opt => opt.setName('desc3').setDescription('Description 3').setRequired(false))
     .addStringOption(opt => opt.setName('emoji3').setDescription('Emoji 3').setRequired(false))
-    // Item 4 (Optional)
+    // Item 4
     .addStringOption(opt => opt.setName('title4').setDescription('Title 4').setRequired(false))
     .addStringOption(opt => opt.setName('desc4').setDescription('Description 4').setRequired(false))
     .addStringOption(opt => opt.setName('emoji4').setDescription('Emoji 4').setRequired(false))
-    // Item 5 (Optional)
+    // Item 5
     .addStringOption(opt => opt.setName('title5').setDescription('Title 5').setRequired(false))
     .addStringOption(opt => opt.setName('desc5').setDescription('Description 5').setRequired(false))
     .addStringOption(opt => opt.setName('emoji5').setDescription('Emoji 5').setRequired(false)),
@@ -640,10 +640,10 @@ const commands = [
     .addChannelOption(opt => opt.setName('channel').setDescription('Where to post the panel').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Panel title').setRequired(true))
     .addStringOption(opt => opt.setName('description').setDescription('Panel description').setRequired(true))
-    // Required base option
+    // Required base options
     .addRoleOption(opt => opt.setName('role1').setDescription('Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('desc1').setDescription('Description for Role 1').setRequired(true))
-    // All subsequent roles and options are completely optional so you can use 2, 3, up to 7 freely
+    // Optional options follow
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false))
     .addStringOption(opt => opt.setName('emoji1').setDescription('Emoji for Button 1').setRequired(false))
     .addRoleOption(opt => opt.setName('role2').setDescription('Role 2').setRequired(false))
@@ -1617,7 +1617,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return await interaction.editReply(`✅ Live tracking stats message successfully set up in ${channel}!`);
       }
 
-      // --- COMPONENTS V2 /EMBED COMMAND (With top and bottom banners) ---
+      // --- COMPONENTS V2 /EMBED COMMAND ---
       if (commandName === 'embed') {
         await interaction.deferReply({ ephemeral: true });
 
@@ -1669,15 +1669,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
             content: `${description}`
           },
           {
-            type: 14 // Divider line
+            type: 14
           },
           ...sections
         ];
 
-        // Kung may inilagay na footer/bottom banner, idagdag natin sa dulo
         if (footerBannerUrl) {
           containerComponents.push({
-            type: 14 // Isa pang divider line bago ang bottom banner
+            type: 14
           });
           containerComponents.push({
             type: 12,
@@ -1703,7 +1702,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
       }
 
-      // --- COMPONENTS V2 /REACTIONROLE COMMAND (Fully Flexible & Error-Free) ---
+      // --- COMPONENTS V2 /REACTIONROLE COMMAND ---
       if (commandName === 'reactionrole') {
         await interaction.deferReply({ ephemeral: true });
 
