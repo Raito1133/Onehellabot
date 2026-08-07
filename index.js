@@ -571,7 +571,7 @@ async function updateTicketEmbed(channel, ticketData) {
   }
 }
 
-// --- SLASH COMMANDS REGISTRATION (Strictly ordered: required options first) ---
+// --- SLASH COMMANDS REGISTRATION ---
 const commands = [
   new SlashCommandBuilder()
     .setName('setup-ticket-hub')
@@ -613,7 +613,7 @@ const commands = [
     .addStringOption(opt => opt.setName('color').setDescription('Hex color code (e.g. #8b0000)').setRequired(false))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Header banner image URL').setRequired(false)),
 
-  // --- COMPONENTS V2 /REACTIONROLE COMMAND (Up to 7 buttons safely mapped without duplication) ---
+  // --- COMPONENTS V2 /REACTIONROLE COMMAND (Up to 7 buttons styled cleanly) ---
   new SlashCommandBuilder()
     .setName('reactionrole')
     .setDescription('Create a Components V2 reaction role panel with up to 7 buttons')
@@ -723,7 +723,7 @@ client.once(Events.ClientReady, async () => {
   client.user.setPresence({
     status: 'idle',
     activities: [{
-      name: 'Im weird',
+      name: 'bunjing',
       type: 5
     }]
   });
@@ -1659,7 +1659,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
       }
 
-      // --- COMPONENTS V2 /REACTIONROLE COMMAND (Up to 7 buttons styled like your photo) ---
+      // --- COMPONENTS V2 /REACTIONROLE COMMAND (Up to 7 buttons, safely mapped) ---
       if (commandName === 'reactionrole') {
         await interaction.deferReply({ ephemeral: true });
 
@@ -1673,11 +1673,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
 
         const sections = [];
+        const usedRoleIds = new Set(); // Track custom_ids to prevent duplicates
+
         for (let i = 1; i <= 7; i++) {
           const role = options.getRole(`role${i}`);
           const desc = options.getString(`desc${i}`);
           
           if (role && desc) {
+            // Prevent duplicate role IDs causing Discord API crash
+            if (usedRoleIds.has(role.id)) continue;
+            usedRoleIds.add(role.id);
+
             const rawEmoji = options.getString(`emoji${i}`);
             let emojiObj = undefined;
             if (rawEmoji) {
@@ -1690,16 +1696,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
             }
 
             sections.push({
-              type: 9,
+              type: 9, // Section Component
               components: [
                 {
-                  type: 10,
+                  type: 10, // Text Display Component
                   content: `@${role.name}\n-# > ${desc}`
                 }
               ],
               accessory: {
-                type: 2,
-                style: 2,
+                type: 2, // Button Accessory
+                style: 2, // Secondary Gray Button
                 custom_id: `rr_${role.id}`,
                 label: role.name,
                 ...(emojiObj && { emoji: emojiObj })
@@ -1713,15 +1719,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         const containerComponent = {
-          type: 17,
+          type: 17, // Container Component
           accent_color: 0x8b0000,
           components: [
             {
-              type: 12,
+              type: 12, // Media Gallery Banner
               items: [{ media: { url: bannerUrl } }]
             },
             {
-              type: 9,
+              type: 9, // Header Section
               components: [
                 {
                   type: 10,
@@ -1891,7 +1897,7 @@ async function executeTicketCompletion(interaction, ticketData, completedBosses)
     if (ticketData && ticketData.type === 'server_ticket') {
       detailContent = '🛠️ **Support ticket handled and resolved by staff.**';
     } else if (ticketData && ticketData.helpers.length > 0) {
-      const helperMentions = ticketData.helpers.map(h => `<@${h.id}>`).join(', ')
+      const helperMentions = ticketData.helpers.map(h => `<@${h.id}>`).join(', ');
       detailContent = `🏆 **+${pointsToAward} pts** awarded to:\n> ${helperMentions}`;
     }
 
