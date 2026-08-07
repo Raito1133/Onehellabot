@@ -723,7 +723,7 @@ client.once(Events.ClientReady, async () => {
   client.user.setPresence({
     status: 'idle',
     activities: [{
-      name: 'Im weird',
+      name: 'AHHHH',
       type: 5
     }]
   });
@@ -1690,18 +1690,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
             }
 
             sections.push({
-              type: 9,
+              type: 9, // Section component
               components: [
                 {
-                  type: 10,
+                  type: 10, // Text Display
                   content: `@${role.name}\n-# > ${desc}`
                 }
               ],
               accessory: {
-                type: 2,
-                style: 2, // Secondary / Gray button
+                type: 2, // Button component (Accessory is required when type 9 has it)
+                style: 2, // Secondary style
                 custom_id: `rr_${role.id}`,
-                label: role.name,
+                label: role.name, // Required label for accessory button
                 ...(emojiObj && { emoji: emojiObj })
               }
             });
