@@ -276,7 +276,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- COMPONENTS V2 LAYOUT WITH KICK HELPER, LEAVE BUTTON, & ALL CUSTOM EMOJIS ---
+// --- COMPONENTS V2 LAYOUT WITH KICK HELPER & LEAVE BUTTON ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -390,21 +390,25 @@ function buildTicketControlPayload(ticketData, userMention) {
           }
         ],
         accessory: {
-          type: 1,
-          components: [
-            {
-              type: 2,
-              style: 4,
-              custom_id: 'btn_kick_helper',
-              label: 'Kick Helper'
-            },
-            {
-              type: 2,
-              style: 2,
-              custom_id: 'btn_leave_ticket',
-              label: 'Leave'
-            }
-          ]
+          type: 2,
+          style: 4,
+          custom_id: 'btn_kick_helper',
+          label: 'Kick Helper'
+        }
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `Stepped down from helping? Click **Leave!**`
+          }
+        ],
+        accessory: {
+          type: 2,
+          style: 2,
+          custom_id: 'btn_leave_ticket',
+          label: 'Leave'
         }
       },
       {
@@ -1046,6 +1050,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const isServerTicket = ticketType === 'server_ticket';
         
+        // Permission overwrites: Support tickets are private; all other tickets are public
         let permissionOverwrites = [
           { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages] },
           { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
@@ -1209,7 +1214,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return updateTicketEmbed(interaction.channel, ticketData);
       }
 
-      // --- NEW SUGGESTION 1: LEAVE TICKET BUTTON ---
+      // --- NEW FEATURE 1: LEAVE BUTTON HANDLER ---
       if (customId === 'btn_leave_ticket') {
         if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
 
@@ -1255,7 +1260,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      // --- NEW SUGGESTION 2: COMPLETE WITH MULTI-BOSS DROPDOWN CHECKLIST ---
+      // --- NEW FEATURE 2: COMPLETE BUTTON WITH MULTI-BOSS DROPDOWN CHECKLIST ---
       if (customId === 'btn_complete') {
         if (ticketData && interaction.user.id !== ticketData.requesterId && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
           return interaction.reply({ content: '❌ Only requester or staff can complete.', ephemeral: true });
@@ -1264,7 +1269,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const desc = ticketData ? ticketData.description : '';
         const items = desc ? desc.split(',').map(x => x.trim()).filter(x => x.length > 0) : [];
 
-        // If there are multiple monsters/bosses, prompt the dropdown checklist
+        // If there are multiple bosses/monsters, prompt dropdown checklist
         if (items.length > 1) {
           const selectMenu = new StringSelectMenuBuilder()
             .setCustomId(`select_complete_bosses_${interaction.channel.id}`)
@@ -1309,7 +1314,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
 
-    // --- NEW SUGGESTION 2 (CONTINUED): HANDLE DROPDOWN CHECKLIST SELECTION ---
+    // --- NEW FEATURE 2 (CONTINUED): HANDLE COMPLETED BOSS DROPDOWN & CONFIRMATION ---
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_complete_bosses_')) {
       const channelId = interaction.customId.replace('select_complete_bosses_', '');
       const ticketData = activeTickets.get(channelId);
@@ -1535,7 +1540,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
-// --- EXECUTE TICKET COMPLETION HELPER ---
+// --- HELPER FUNCTION FOR TICKET COMPLETION EXECUTION ---
 async function executeTicketCompletion(interaction, ticketData, completedBosses) {
   try {
     await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: false }).catch(() => {});
