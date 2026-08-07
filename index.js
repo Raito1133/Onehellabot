@@ -613,7 +613,7 @@ const commands = [
     .addStringOption(opt => opt.setName('color').setDescription('Hex color code (e.g. #8b0000)').setRequired(false))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Header banner image URL').setRequired(false)),
 
-  // --- COMPONENTS V2 /REACTIONROLE COMMAND (Up to 7 buttons styled cleanly) ---
+  // --- FULLY FLEXIBLE /REACTIONROLE COMMAND (Up to 7 buttons, optional fields allowed) ---
   new SlashCommandBuilder()
     .setName('reactionrole')
     .setDescription('Create a Components V2 reaction role panel with up to 7 buttons')
@@ -621,33 +621,27 @@ const commands = [
     .addChannelOption(opt => opt.setName('channel').setDescription('Where to post the panel').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Panel title').setRequired(true))
     .addStringOption(opt => opt.setName('description').setDescription('Panel description').setRequired(true))
-    // Required options first
+    // Required base option
     .addRoleOption(opt => opt.setName('role1').setDescription('Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('desc1').setDescription('Description for Role 1').setRequired(true))
-    // Optional options follow
+    // All subsequent roles and options are completely optional so you can use 2, 3, up to 7 freely
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false))
     .addStringOption(opt => opt.setName('emoji1').setDescription('Emoji for Button 1').setRequired(false))
-    // Role 2
     .addRoleOption(opt => opt.setName('role2').setDescription('Role 2').setRequired(false))
     .addStringOption(opt => opt.setName('desc2').setDescription('Description for Role 2').setRequired(false))
     .addStringOption(opt => opt.setName('emoji2').setDescription('Emoji for Button 2').setRequired(false))
-    // Role 3
     .addRoleOption(opt => opt.setName('role3').setDescription('Role 3').setRequired(false))
     .addStringOption(opt => opt.setName('desc3').setDescription('Description for Role 3').setRequired(false))
     .addStringOption(opt => opt.setName('emoji3').setDescription('Emoji for Button 3').setRequired(false))
-    // Role 4
     .addRoleOption(opt => opt.setName('role4').setDescription('Role 4').setRequired(false))
     .addStringOption(opt => opt.setName('desc4').setDescription('Description for Role 4').setRequired(false))
     .addStringOption(opt => opt.setName('emoji4').setDescription('Emoji for Button 4').setRequired(false))
-    // Role 5
     .addRoleOption(opt => opt.setName('role5').setDescription('Role 5').setRequired(false))
     .addStringOption(opt => opt.setName('desc5').setDescription('Description for Role 5').setRequired(false))
     .addStringOption(opt => opt.setName('emoji5').setDescription('Emoji for Button 5').setRequired(false))
-    // Role 6
     .addRoleOption(opt => opt.setName('role6').setDescription('Role 6').setRequired(false))
     .addStringOption(opt => opt.setName('desc6').setDescription('Description for Role 6').setRequired(false))
     .addStringOption(opt => opt.setName('emoji6').setDescription('Emoji for Button 6').setRequired(false))
-    // Role 7
     .addRoleOption(opt => opt.setName('role7').setDescription('Role 7').setRequired(false))
     .addStringOption(opt => opt.setName('desc7').setDescription('Description for Role 7').setRequired(false))
     .addStringOption(opt => opt.setName('emoji7').setDescription('Emoji for Button 7').setRequired(false)),
@@ -723,7 +717,7 @@ client.once(Events.ClientReady, async () => {
   client.user.setPresence({
     status: 'idle',
     activities: [{
-      name: 'bunjing',
+      name: 'Im yawa',
       type: 5
     }]
   });
@@ -1659,7 +1653,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
       }
 
-      // --- COMPONENTS V2 /REACTIONROLE COMMAND (Up to 7 buttons, safely mapped) ---
+      // --- COMPONENTS V2 /REACTIONROLE COMMAND (Fully Flexible up to 7 buttons) ---
       if (commandName === 'reactionrole') {
         await interaction.deferReply({ ephemeral: true });
 
@@ -1673,14 +1667,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
 
         const sections = [];
-        const usedRoleIds = new Set(); // Track custom_ids to prevent duplicates
+        const usedRoleIds = new Set();
 
         for (let i = 1; i <= 7; i++) {
           const role = options.getRole(`role${i}`);
           const desc = options.getString(`desc${i}`);
           
+          // Strict check: only push if BOTH role and desc are provided for this slot
           if (role && desc) {
-            // Prevent duplicate role IDs causing Discord API crash
             if (usedRoleIds.has(role.id)) continue;
             usedRoleIds.add(role.id);
 
@@ -1696,16 +1690,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
             }
 
             sections.push({
-              type: 9, // Section Component
+              type: 9,
               components: [
                 {
-                  type: 10, // Text Display Component
+                  type: 10,
                   content: `@${role.name}\n-# > ${desc}`
                 }
               ],
               accessory: {
-                type: 2, // Button Accessory
-                style: 2, // Secondary Gray Button
+                type: 2,
+                style: 2,
                 custom_id: `rr_${role.id}`,
                 label: role.name,
                 ...(emojiObj && { emoji: emojiObj })
@@ -1719,15 +1713,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         const containerComponent = {
-          type: 17, // Container Component
+          type: 17,
           accent_color: 0x8b0000,
           components: [
             {
-              type: 12, // Media Gallery Banner
+              type: 12,
               items: [{ media: { url: bannerUrl } }]
             },
             {
-              type: 9, // Header Section
+              type: 9,
               components: [
                 {
                   type: 10,
