@@ -722,7 +722,7 @@ client.once(Events.ClientReady, async () => {
   client.user.setPresence({
     status: 'idle',
     activities: [{
-      name: 'Im weird',
+      name: 'punitin',
       type: 5
     }]
   });
