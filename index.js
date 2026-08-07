@@ -28,10 +28,6 @@ const ULTRA_HELPER_ROLE_ID = '1529499021884919858'; // Ultra Helper Role ID
 const HELPER_ROLE_ID = '1529499059596038285'; // Standard Helper / Farming Role ID
 const SUPPORT_ROLE_ID = '1529498802149392614'; // Support Role ID
 
-// --- 🛡️ VERIFICATION ROLE & LOG CONFIGS ---
-const GUEST_ROLE_ID = '1371775026264670230'; // Palitan ng totoong Guest Role ID
-const MEMBER_ROLE_ID = '1371775026264670229'; // Palitan ng totoong Member Role ID
-
 const TICKET_GUIDE_URL = 'https://discord.com'; 
 const STANDARD_BANNER_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
 
@@ -68,7 +64,7 @@ const userRequestCounts = new Map();
 const guildSettings = new Map();
 const roleRewards = new Map();
 const tempTicketCache = new Map();
-const pendingVerifications = new Map(); // Temporary store for verification requests waiting for staff review
+const pendingVerifications = new Map();
 
 let ticketCounter = 0;
 
@@ -598,9 +594,18 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('setup-verification')
-    .setDescription('Post the Components V2 Verification and Join Guild Panel')
+    .setDescription('Post a fully customizable Verification and Member Join panel')
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
     .addChannelOption(opt => opt.setName('channel').setDescription('Target channel to post verification panel').setRequired(true))
+    .addRoleOption(opt => opt.setName('guest_role').setDescription('Guest Role to give upon approval').setRequired(true))
+    .addRoleOption(opt => opt.setName('member_role').setDescription('Member Role to give upon approval').setRequired(true))
+    .addStringOption(opt => opt.setName('guest_title').setDescription('Title for Guest Section').setRequired(true))
+    .addStringOption(opt => opt.setName('guest_desc').setDescription('Description for Guest Section').setRequired(true))
+    .addStringOption(opt => opt.setName('member_title').setDescription('Title for Member Section').setRequired(true))
+    .addStringOption(opt => opt.setName('member_desc').setDescription('Description for Member Section').setRequired(true))
+    // Optional params follow
+    .addStringOption(opt => opt.setName('guest_btn_name').setDescription('Custom button name for Guest (Default: Verify as Guest)').setRequired(false))
+    .addStringOption(opt => opt.setName('member_btn_name').setDescription('Custom button name for Member (Default: Verify as Member)').setRequired(false))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Top banner image URL').setRequired(false))
     .addStringOption(opt => opt.setName('footer_banner_url').setDescription('Bottom banner image URL').setRequired(false)),
 
@@ -631,7 +636,7 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
     .addChannelOption(opt => opt.setName('channel').setDescription('Where to post the panel').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Panel title').setRequired(true))
-    .addStringOption(opt => opt.setDescription('Panel description').setRequired(true))
+    .addStringOption(opt => opt.setName('description').setDescription('Panel description').setRequired(true))
     .addRoleOption(opt => opt.setName('role1').setDescription('Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('desc1').setDescription('Description for Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false))
@@ -727,7 +732,7 @@ client.once(Events.ClientReady, async () => {
   client.user.setPresence({
     status: 'idle',
     activities: [{
-      name: 'Im weird',
+      name: 'Im gwapo',
       type: 5
     }]
   });
@@ -740,10 +745,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.guild || interaction.guild.id !== GUILD_ID) return;
 
   try {
-    // --- VERIFICATION PANEL BUTTON TRIGGERS ---
-    if (interaction.isButton() && interaction.customId === 'btn_verify_guest') {
+    // --- VERIFICATION BUTTON TRIGGERS (DYNAMIC WITH ROLE MAPPING) ---
+    if (interaction.isButton() && interaction.customId.startsWith('btn_verify_guest_')) {
+      const roleId = interaction.customId.replace('btn_verify_guest_', '');
       const modal = new ModalBuilder()
-        .setCustomId('modal_verify_guest')
+        .setCustomId(`modal_verify_guest_${roleId}`)
         .setTitle('Verify as Guest');
 
       const ignInput = new TextInputBuilder()
@@ -776,9 +782,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return await interaction.showModal(modal);
     }
 
-    if (interaction.isButton() && interaction.customId === 'btn_verify_member') {
+    if (interaction.isButton() && interaction.customId.startsWith('btn_verify_member_')) {
+      const roleId = interaction.customId.replace('btn_verify_member_', '');
       const modal = new ModalBuilder()
-        .setCustomId('modal_verify_member')
+        .setCustomId(`modal_verify_member_${roleId}`)
         .setTitle('Verify as Member');
 
       const ignInput = new TextInputBuilder()
@@ -804,9 +811,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     // --- SUBMITTED GUEST MODAL ---
-    if (interaction.isModalSubmit() && interaction.customId === 'modal_verify_guest') {
+    if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_verify_guest_')) {
       await interaction.deferReply({ ephemeral: true });
 
+      const roleId = interaction.customId.replace('modal_verify_guest_', '');
       const ign = interaction.fields.getTextInputValue('ign').trim();
       const guildName = interaction.fields.getTextInputValue('guild_name').trim();
       const invitedBy = interaction.fields.getTextInputValue('invited_by') || 'None provided';
@@ -816,7 +824,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const logChannelId = cfg.verifyLogChannelId;
 
       if (!logChannelId) {
-        return await interaction.editReply('❌ Verification Log channel is not configured yet. Please ask an admin to run `/setup-channels`.');
+        return await interaction.editReply('❌ Verification Log channel is not configured yet. Please ask an admin to run `/setup-channels verify_log_channel:#channel`.');
       }
 
       const logChannel = interaction.guild.channels.cache.get(logChannelId);
@@ -824,7 +832,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return await interaction.editReply('❌ Verification log channel not found.');
       }
 
-      // Store temporary verification data
       const requestId = `ver_${interaction.user.id}_${Date.now()}`;
       pendingVerifications.set(requestId, {
         userId: interaction.user.id,
@@ -833,11 +840,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         charPageUrl,
         guildName,
         invitedBy,
-        roleId: GRoleId = GUEST_ROLE_ID,
+        roleId,
         roleName: '@Guest'
       });
 
-      // Build V2 Component Verification Log
       const logContainer = {
         type: 17,
         accent_color: 0x3498db,
@@ -849,7 +855,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
                      `**AQW Username:** [${ign}](${charPageUrl})\n` +
                      `**Verification Type:** GUEST\n` +
                      `**Guild:** ${guildName}\n` +
-                     `**Role To Give:** <@&${GUEST_ROLE_ID}>\n` +
+                     `**Role To Give:** <@&${roleId}>\n` +
                      `**Invited By:** ${invitedBy}`
           },
           {
@@ -879,13 +885,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
         flags: MessageFlags.IsComponentsV2
       });
 
-      return await interaction.editReply('✅ Your verification request has been submitted to the staff! Please wait for approval.');
+      return await interaction.editReply('✅ Your guest verification request has been submitted to the staff! Please wait for approval.');
     }
 
     // --- SUBMITTED MEMBER MODAL ---
-    if (interaction.isModalSubmit() && interaction.customId === 'modal_verify_member') {
+    if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_verify_member_')) {
       await interaction.deferReply({ ephemeral: true });
 
+      const roleId = interaction.customId.replace('modal_verify_member_', '');
       const ign = interaction.fields.getTextInputValue('ign').trim();
       const invitedBy = interaction.fields.getTextInputValue('invited_by').trim();
 
@@ -894,7 +901,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const logChannelId = cfg.verifyLogChannelId;
 
       if (!logChannelId) {
-        return await interaction.editReply('❌ Verification Log channel is not configured yet. Please ask an admin to run `/setup-channels`.');
+        return await interaction.editReply('❌ Verification Log channel is not configured yet. Please ask an admin to run `/setup-channels verify_log_channel:#channel`.');
       }
 
       const logChannel = interaction.guild.channels.cache.get(logChannelId);
@@ -910,7 +917,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         charPageUrl,
         guildName: 'Main Guild',
         invitedBy,
-        roleId: MEMBER_ROLE_ID,
+        roleId,
         roleName: '@Member'
       });
 
@@ -925,7 +932,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
                      `**AQW Username:** [${ign}](${charPageUrl})\n` +
                      `**Verification Type:** MEMBER\n` +
                      `**Guild:** Main Guild\n` +
-                     `**Role To Give:** <@&${MEMBER_ROLE_ID}>\n` +
+                     `**Role To Give:** <@&${roleId}>\n` +
                      `**Invited By:** ${invitedBy}`
           },
           {
@@ -986,7 +993,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.update({ content: '✅ **Approved Successfully!**', components: [] });
         await interaction.channel.send({ embeds: [approvedEmbed] });
 
-        // Notify user via DM if possible
         if (member) {
           await member.send(`🎉 Your verification for **${interaction.guild.name}** has been **Approved**! You have been given the role.`).catch(() => {});
         }
@@ -998,7 +1004,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
 
-    // --- STAFF REJECT BUTTON (Triggers modal for reason) ---
+    // --- STAFF REJECT BUTTON ---
     if (interaction.isButton() && interaction.customId.startsWith('ver_reject_')) {
       const requestId = interaction.customId.replace('ver_reject_', '');
       
@@ -1041,7 +1047,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await interaction.editReply({ content: '❌ **Request Rejected.**', components: [] });
       await interaction.channel.send({ embeds: [rejectedEmbed] });
 
-      // DM User about rejection reason
       try {
         const member = await interaction.guild.members.fetch(data.userId).catch(() => null);
         if (member) {
@@ -1166,7 +1171,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         });
       }
 
-      // If Support Ticket, skip server dropdown and go straight to Modal Form
       if (selectedKey === 'server_ticket') {
         tempTicketCache.set(interaction.user.id, { categoryKey: 'server_ticket', server: 'N/A', bosses: '' });
 
@@ -1204,7 +1208,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return await interaction.showModal(modal);
       }
 
-      // For other categories, prompt Server Dropdown next
       const serverMenu = new StringSelectMenuBuilder()
         .setCustomId(`select_server_form_${selectedKey}`)
         .setPlaceholder('Select your AQW server...')
@@ -1223,7 +1226,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    // Boss selection finished -> Prompt Server Dropdown
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_bosses_')) {
       const categoryKey = interaction.customId.replace('select_bosses_', '');
       const selectedBosses = interaction.values.join(', ');
@@ -1248,7 +1250,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    // Server selected from dropdown -> Show Final Modal
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_server_form_')) {
       const selectedServer = interaction.values[0];
       let categoryKey, bossVal = '';
@@ -1310,7 +1311,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return await interaction.showModal(modal);
     }
 
-    // Changing server inside active ticket via Dropdown menu
     if (interaction.isButton() && interaction.customId === 'btn_change_server') {
       const ticketData = activeTickets.get(interaction.channel.id);
       if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
@@ -1350,7 +1350,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return updateTicketEmbed(interaction.channel, ticketData);
     }
 
-    // --- CHANGE MONSTERS BUTTON: DEPENDS STRICTLY ON TICKET TYPE ---
     if (interaction.isButton() && interaction.customId === 'btn_change_bosses') {
       const ticketData = activeTickets.get(interaction.channel.id);
       if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
@@ -1431,7 +1430,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return updateTicketEmbed(interaction.channel, ticketData);
     }
 
-    // Kick Helper Button Clicked
     if (interaction.isButton() && interaction.customId === 'btn_kick_helper') {
       const ticketData = activeTickets.get(interaction.channel.id);
       if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
@@ -1464,7 +1462,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    // Process Kick Helper Selection
     if (interaction.isStringSelectMenu() && interaction.customId === 'active_kick_helper_menu') {
       await interaction.deferUpdate();
       const ticketData = activeTickets.get(interaction.channel.id);
@@ -1491,7 +1488,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return updateTicketEmbed(interaction.channel, ticketData);
     }
 
-    // Final Ticket Creation Submit
     if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket_form_final_')) {
       await interaction.deferReply({ ephemeral: true });
 
@@ -1695,7 +1691,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return updateTicketEmbed(interaction.channel, ticketData);
       }
 
-      // --- LEAVE BUTTON HANDLER ---
       if (customId === 'btn_leave_ticket') {
         if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
 
@@ -1741,7 +1736,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      // --- COMPLETE BUTTON WITH CHECKLIST & ACCURATE POINT CALCULATION ---
       if (customId === 'btn_complete') {
         if (ticketData && interaction.user.id !== ticketData.requesterId && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
           return interaction.reply({ content: '❌ Only requester or staff can complete.', ephemeral: true });
@@ -1750,7 +1744,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const desc = ticketData ? ticketData.description : '';
         const items = desc ? desc.split(',').map(x => x.trim()).filter(x => x.length > 0) : [];
 
-        // If multiple items, show dropdown checklist
         if (items.length > 1) {
           const selectMenu = new StringSelectMenuBuilder()
             .setCustomId(`select_complete_bosses_${interaction.channel.id}`)
@@ -1768,7 +1761,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
           });
         }
 
-        // If 1 or no items, confirm directly
         const confirmRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId(`confirm_close_ticket_${interaction.channel.id}_all`).setLabel('Yes, Close Ticket').setStyle(ButtonStyle.Success),
           new ButtonBuilder().setCustomId('cancel_close_ticket').setLabel('Cancel').setStyle(ButtonStyle.Secondary)
@@ -1795,7 +1787,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
 
-    // --- HANDLE CHECKLIST SUBMISSION & RE-CALCULATE POINTS ACCURATELY ---
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_complete_bosses_')) {
       const channelId = interaction.customId.replace('select_complete_bosses_', '');
       const ticketData = activeTickets.get(channelId);
@@ -1804,7 +1795,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const completedBosses = interaction.values;
       tempTicketCache.set(`${interaction.user.id}_completed`, completedBosses);
 
-      // Recalculate accurately using ONLY the selected completed items
       const calculatedPts = getPointsForTicket(ticketData, completedBosses);
 
       const confirmRow = new ActionRowBuilder().addComponents(
@@ -1838,12 +1828,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.deferReply({ ephemeral: true });
 
         const channel = options.getChannel('channel');
+        const guestRole = options.getRole('guest_role');
+        const memberRole = options.getRole('member_role');
+        const guestTitle = options.getString('guest_title');
+        const guestDesc = options.getString('guest_desc').replace(/\\n/g, '\n');
+        const memberTitle = options.getString('member_title');
+        const memberDesc = options.getString('member_desc').replace(/\\n/g, '\n');
+
+        const guestBtnName = options.getString('guest_btn_name') || 'Verify as Guest';
+        const memberBtnName = options.getString('member_btn_name') || 'Verify as Member';
+        const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
+        const footerBannerUrl = options.getString('footer_banner_url') || STANDARD_BANNER_URL;
+
         if (!channel || !channel.isTextBased()) {
           return await interaction.editReply('❌ Please select a valid text channel.');
         }
-
-        const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
-        const footerBannerUrl = options.getString('footer_banner_url') || 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
 
         const verifyContainer = {
           type: 17,
@@ -1858,14 +1857,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
               components: [
                 {
                   type: 10,
-                  content: `🛡️ **Get access to the discord**\n-# > Verify by entering your AQW username, and get access to the rest of the discord. Click **'Verify as Guest'** to get started!`
+                  content: `🛡️ **${guestTitle}**\n-# > ${guestDesc}`
                 }
               ],
               accessory: {
                 type: 2,
                 style: 1,
-                custom_id: 'btn_verify_guest',
-                label: 'Verify as Guest',
+                custom_id: `btn_verify_guest_${guestRole.id}`,
+                label: guestBtnName,
                 emoji: { id: '1534950248831516806', name: 'claimbt', animated: false }
               }
             },
@@ -1874,14 +1873,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
               components: [
                 {
                   type: 10,
-                  content: `⚔️ **Join the guild**\n-# > Come hang out with us in game, participate in guild-only events and screenshots. Click **'Verify as Member'** to get started!`
+                  content: `⚔️ **${memberTitle}**\n-# > ${memberDesc}`
                 }
               ],
               accessory: {
                 type: 2,
                 style: 1,
-                custom_id: 'btn_verify_member',
-                label: 'Verify as Member',
+                custom_id: `btn_verify_member_${memberRole.id}`,
+                label: memberBtnName,
                 emoji: { id: '1534950268679094397', name: 'completebt', animated: false }
               }
             },
@@ -1951,7 +1950,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
       }
 
-      // --- /STATS COMMAND ---
       if (commandName === 'stats') {
         const customMessage = options.getString('custom_message');
         const defaultFooterMessage = "A huge thank you to each and every one of you who made this possible! ❤️";
@@ -1969,7 +1967,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return await interaction.reply({ embeds: [statsEmbed] });
       }
 
-      // --- /SETUP-STATS COMMAND ---
       if (commandName === 'setup-stats') {
         await interaction.deferReply({ ephemeral: true });
         const channel = options.getChannel('channel');
@@ -1994,7 +1991,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return await interaction.editReply(`✅ Live tracking stats message successfully set up in ${channel}!`);
       }
 
-      // --- SIMPLIFIED COMPONENTS V2 /EMBED COMMAND ---
       if (commandName === 'embed') {
         await interaction.deferReply({ ephemeral: true });
 
@@ -2020,9 +2016,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         ];
 
         if (footerBannerUrl) {
-          containerComponents.push({
-            type: 14 // Divider line
-          });
+          containerComponents.push({ type: 14 });
           containerComponents.push({
             type: 12,
             items: [{ media: { url: footerBannerUrl } }]
@@ -2047,7 +2041,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
       }
 
-      // --- COMPONENTS V2 /REACTIONROLE COMMAND ---
       if (commandName === 'reactionrole') {
         await interaction.deferReply({ ephemeral: true });
 
@@ -2260,7 +2253,6 @@ async function executeTicketCompletion(interaction, ticketData, completedBosses)
       globalStats.totalPointsGiven += pointsToAward;
       globalStats.totalBossesSlain += 1;
 
-      // Update the live stats message automatically!
       await updateLiveStatsMessage(interaction.guild);
     }
 
