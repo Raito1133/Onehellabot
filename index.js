@@ -166,8 +166,18 @@ function isHelperInActiveTicket(userId) {
 
 function getPointsForTicket(ticketData, completedItems = null) {
   const type = (ticketData.type || '').toLowerCase();
-  // Use completedItems array if provided, otherwise fallback to the entire ticket description string
-  const items = completedItems ? completedItems : ((ticketData.description || '').split(',').map(x => x.trim()).filter(x => x.length > 0));
+  
+  // Properly parse items whether passed as an array or string
+  let items = [];
+  if (Array.isArray(completedItems)) {
+    items = completedItems;
+  } else if (typeof completedItems === 'string') {
+    items = completedItems.split(',').map(x => x.trim()).filter(x => x.length > 0);
+  } else {
+    const desc = ticketData.description || '';
+    items = desc.split(',').map(x => x.trim()).filter(x => x.length > 0);
+  }
+
   const itemCount = items.length > 0 ? items.length : 1;
 
   if (type === 'ultra_weeklies') {
@@ -276,7 +286,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- COMPONENTS V2 LAYOUT WITH KICK HELPER, LEAVE BUTTON, & ALL CUSTOM EMOJIS ---
+// --- COMPONENTS V2 LAYOUT WITH KICK HELPER & LEAVE BUTTON ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -644,7 +654,7 @@ client.once(Events.ClientReady, async () => {
   client.user.setPresence({
     status: 'idle',
     activities: [{
-      name: 'ambot lang',
+      name: 'Im weird',
       type: 5
     }]
   });
@@ -985,7 +995,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
             new StringSelectMenuOptionBuilder().setLabel('Lavarock Shore').setValue('Lavarock Shore')
           );
       } else {
-        // Fallback to text modal for general/farming tickets
         const modal = new ModalBuilder()
           .setCustomId('modal_edit_bosses')
           .setTitle('Change Monsters / Details')
