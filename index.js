@@ -1837,7 +1837,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const guestBtnName = options.getString('guest_btn_name') || 'Verify as Guest';
         const memberBtnName = options.getString('member_btn_name') || 'Verify as Member';
         const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
-        const footerBannerUrl = options.getString('footer_banner_url'); // Optional na ngayon
+        const footerBannerUrl = options.getString('footer_banner_url'); // Optional
 
         if (!channel || !channel.isTextBased()) {
           return await interaction.editReply('❌ Please select a valid text channel.');
@@ -1853,15 +1853,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
             components: [
               {
                 type: 10,
-                content: `🛡️ **${guestTitle}**\n-# > ${guestDesc}`
+                content: `**${guestTitle}**\n-# > ${guestDesc}`
               }
             ],
             accessory: {
               type: 2,
-              style: 1,
+              style: 2, // Style 2 = Grey Button
               custom_id: `btn_verify_guest_${guestRole.id}`,
-              label: guestBtnName,
-              emoji: { id: '1534950248831516806', name: 'claimbt', animated: false }
+              label: guestBtnName
             }
           },
           {
@@ -1869,20 +1868,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
             components: [
               {
                 type: 10,
-                content: `⚔️ **${memberTitle}**\n-# > ${memberDesc}`
+                content: `**${memberTitle}**\n-# > ${memberDesc}`
               }
             ],
             accessory: {
               type: 2,
-              style: 1,
+              style: 2, // Style 2 = Grey Button
               custom_id: `btn_verify_member_${memberRole.id}`,
-              label: memberBtnName,
-              emoji: { id: '1534950268679094397', name: 'completebt', animated: false }
+              label: memberBtnName
             }
           }
         ];
 
-        // Kung may inilagay na footer banner URL, saka lang idadagdag. Kung wala, hindi na isasama para walang blank/error.
         if (footerBannerUrl) {
           verifyComponents.push({ type: 14 });
           verifyComponents.push({
