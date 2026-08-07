@@ -65,6 +65,7 @@ const guildSettings = new Map();
 const roleRewards = new Map();
 const tempTicketCache = new Map();
 const pendingVerifications = new Map();
+const activeGiveaways = new Map(); // Store active giveaways
 
 let ticketCounter = 0;
 
@@ -572,6 +573,16 @@ async function updateTicketEmbed(channel, ticketData) {
   }
 }
 
+// --- PARSE VARIABLES HELPER ---
+function parseVariables(text, member, guild) {
+  if (!text) return '';
+  return text
+    .replace(/{user}/g, `<@${member.id}>`)
+    .replace(/{username}/g, member.user.username)
+    .replace(/{server}/g, guild.name)
+    .replace(/{membercount}/g, guild.memberCount);
+}
+
 // --- SLASH COMMANDS REGISTRATION (Strictly ordered) ---
 const commands = [
   new SlashCommandBuilder()
@@ -608,6 +619,54 @@ const commands = [
     .addStringOption(opt => opt.setName('banner_url').setDescription('Top banner image URL').setRequired(false))
     .addStringOption(opt => opt.setName('footer_banner_url').setDescription('Bottom banner image URL (Optional)').setRequired(false)),
 
+  // --- /GIVEAWAY COMMAND ---
+  new SlashCommandBuilder()
+    .setName('giveaway')
+    .setDescription('Manage server giveaways')
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
+    .addSubcommand(sub =>
+      sub.setName('start')
+        .setDescription('Start a new V2 Giveaway')
+        .addChannelOption(opt => opt.setName('channel').setDescription('Channel to post giveaway').setRequired(true))
+        .addStringOption(opt => opt.setName('prize').setDescription('Prize of the giveaway').setRequired(true))
+        .addIntegerOption(opt => opt.setName('duration').setDescription('Duration in minutes').setRequired(true))
+        .addIntegerOption(opt => opt.setName('winners').setDescription('Number of winners').setRequired(true))
+        .addRoleOption(opt => opt.setName('role1').setDescription('Required Role 1 (Optional)').setRequired(false))
+        .addRoleOption(opt => opt.setName('role2').setDescription('Required Role 2 (Optional)').setRequired(false))
+        .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false))
+    )
+    .addSubcommand(sub =>
+      sub.setName('end')
+        .setDescription('End an active giveaway early')
+        .addStringOption(opt => opt.setName('message_id').setDescription('Giveaway message ID').setRequired(true))
+    )
+    .addSubcommand(sub =>
+      sub.setName('reroll')
+        .setDescription('Reroll a winner for a giveaway')
+        .addStringOption(opt => opt.setName('message_id').setDescription('Giveaway message ID').setRequired(true))
+    ),
+
+  // --- /SETUP-BOOST COMMAND ---
+  new SlashCommandBuilder()
+    .setName('setup-boost')
+    .setDescription('Configure Server Boost announcement')
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
+    .addChannelOption(opt => opt.setName('channel').setDescription('Boost announcement channel').setRequired(true))
+    .addStringOption(opt => opt.setName('title').setDescription('Boost message title').setRequired(true))
+    .addStringOption(opt => opt.setName('description').setDescription('Boost description (supports {user}, {server}, etc.)').setRequired(true))
+    .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false)),
+
+  // --- /SETUP-WELCOME COMMAND ---
+  new SlashCommandBuilder()
+    .setName('setup-welcome')
+    .setDescription('Configure Server Welcome announcement')
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
+    .addChannelOption(opt => opt.setName('channel').setDescription('Welcome announcement channel').setRequired(true))
+    .addStringOption(opt => opt.setName('outer_message').setDescription('Message outside container (e.g. Welcome {user}!)').setRequired(true))
+    .addStringOption(opt => opt.setName('title').setDescription('Welcome card title').setRequired(true))
+    .addStringOption(opt => opt.setName('description').setDescription('Welcome description (supports variables)').setRequired(true))
+    .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false)),
+
   new SlashCommandBuilder()
     .setName('stats')
     .setDescription('Display global ticket stats counter')
@@ -635,7 +694,7 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
     .addChannelOption(opt => opt.setName('channel').setDescription('Where to post the panel').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Panel title').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Panel description').setRequired(true))
+    .addStringOption(opt => opt.setDescription('Panel description').setRequired(true))
     .addRoleOption(opt => opt.setName('role1').setDescription('Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('desc1').setDescription('Description for Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false))
@@ -739,12 +798,140 @@ client.once(Events.ClientReady, async () => {
   await registerCommands();
 });
 
+// --- WELCOME & BOOST EVENT LISTENERS ---
+client.on(Events.GuildMemberAdd, async (member) => {
+  if (member.guild.id !== GUILD_ID) return;
+  const cfg = guildSettings.get(member.guild.id) || {};
+  if (!cfg.welcomeChannelId) return;
+
+  const channel = member.guild.channels.cache.get(cfg.welcomeChannelId);
+  if (!channel) return;
+
+  const welcomeData = cfg.welcomeData || {
+    outerMessage: 'Welcome to the server, {user}!',
+    title: 'New Member Joined!',
+    description: 'We are thrilled to have you here, {user}! Enjoy your stay at {server}.',
+    bannerUrl: STANDARD_BANNER_URL
+  };
+
+  const parsedOuter = parseVariables(welcomeData.outerMessage, member, member.guild);
+  const parsedTitle = parseVariables(welcomeData.title, member, member.guild);
+  const parsedDesc = parseVariables(welcomeData.description, member, member.guild);
+
+  const container = {
+    type: 17,
+    accent_color: 0x3498db,
+    components: [
+      {
+        type: 12,
+        items: [{ media: { url: welcomeData.bannerUrl } }]
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `**${parsedTitle}**\n\n${parsedDesc}`
+          }
+        ]
+      }
+    ]
+  };
+
+  await channel.send({
+    content: parsedOuter,
+    components: [container],
+    flags: MessageFlags.IsComponentsV2
+  }).catch(console.error);
+});
+
+client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
+  if (newMember.guild.id !== GUILD_ID) return;
+  const wasBoosting = oldMember.premiumSince;
+  const isBoosting = newMember.premiumSince;
+
+  if (!wasBoosting && isBoosting) {
+    const cfg = guildSettings.get(newMember.guild.id) || {};
+    if (!cfg.boostChannelId) return;
+
+    const channel = newMember.guild.channels.cache.get(cfg.boostChannelId);
+    if (!channel) return;
+
+    const boostData = cfg.boostData || {
+      title: 'Server Boosted! 🚀',
+      description: 'Thank you {user} for boosting {server}!',
+      bannerUrl: STANDARD_BANNER_URL
+    };
+
+    const parsedTitle = parseVariables(boostData.title, newMember, newMember.guild);
+    const parsedDesc = parseVariables(boostData.description, newMember, newMember.guild);
+
+    const container = {
+      type: 17,
+      accent_color: 0xf47fff,
+      components: [
+        {
+          type: 12,
+          items: [{ media: { url: boostData.bannerUrl } }]
+        },
+        {
+          type: 9,
+          components: [
+            {
+              type: 10,
+              content: `**${parsedTitle}**\n\n${parsedDesc}`
+            }
+          ]
+        }
+      ]
+    };
+
+    await channel.send({
+      components: [container],
+      flags: MessageFlags.IsComponentsV2
+    }).catch(console.error);
+  }
+});
+
 // --- INTERACTION LISTENER ---
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.guild || interaction.guild.id !== GUILD_ID) return;
 
   try {
-    // --- VERIFICATION BUTTON TRIGGERS (DYNAMIC WITH ROLE MAPPING) ---
+    // --- GIVEAWAY ENTER BUTTON ---
+    if (interaction.isButton() && interaction.customId.startsWith('gw_enter_')) {
+      const gwId = interaction.customId.replace('gw_enter_', '');
+      const giveaway = activeGiveaways.get(gwId);
+
+      if (!giveaway || giveaway.ended) {
+        return interaction.reply({ content: '❌ This giveaway has already ended or no longer exists.', ephemeral: true });
+      }
+
+      // Check role requirements if any
+      const role1 = giveaway.role1;
+      const role2 = giveaway.role2;
+
+      if (role1 || role2) {
+        const hasRole1 = role1 ? interaction.member.roles.cache.has(role1) : true;
+        const hasRole2 = role2 ? interaction.member.roles.cache.has(role2) : true;
+
+        if (!hasRole1 && !hasRole2) {
+          let reqNames = [];
+          if (role1) reqNames.push(`<@&${role1}>`);
+          if (role2) reqNames.push(`<@&${role2}>`);
+          return interaction.reply({ content: `❌ You do not have the required role(s) to enter this giveaway: ${reqNames.join(' or ')}`, ephemeral: true });
+        }
+      }
+
+      if (giveaway.entries.has(interaction.user.id)) {
+        return interaction.reply({ content: '⚠️ You have already entered this giveaway!', ephemeral: true });
+      }
+
+      giveaway.entries.add(interaction.user.id);
+      return interaction.reply({ content: '🎉 Successfully entered the giveaway! Good luck!', ephemeral: true });
+    }
+
+    // --- VERIFICATION BUTTON TRIGGERS ---
     if (interaction.isButton() && interaction.customId.startsWith('btn_verify_guest_')) {
       const roleId = interaction.customId.replace('btn_verify_guest_', '');
       const modal = new ModalBuilder()
@@ -809,7 +996,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return await interaction.showModal(modal);
     }
 
-    // --- SUBMITTED GUEST MODAL ---
     if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_verify_guest_')) {
       await interaction.deferReply({ ephemeral: true });
 
@@ -887,7 +1073,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return await interaction.editReply('✅ Your guest verification request has been submitted to the staff! Please wait for approval.');
     }
 
-    // --- SUBMITTED MEMBER MODAL ---
     if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_verify_member_')) {
       await interaction.deferReply({ ephemeral: true });
 
@@ -964,7 +1149,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return await interaction.editReply('✅ Your membership verification request has been submitted to the staff! Please wait for approval.');
     }
 
-    // --- STAFF APPROVE BUTTON ---
     if (interaction.isButton() && interaction.customId.startsWith('ver_approve_')) {
       const requestId = interaction.customId.replace('ver_approve_', '');
       const data = pendingVerifications.get(requestId);
@@ -1003,7 +1187,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
 
-    // --- STAFF REJECT BUTTON ---
     if (interaction.isButton() && interaction.customId.startsWith('ver_reject_')) {
       const requestId = interaction.customId.replace('ver_reject_', '');
       
@@ -1022,7 +1205,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return await interaction.showModal(modal);
     }
 
-    // --- SUBMITTED REJECTION REASON MODAL ---
     if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_reject_reason_')) {
       await interaction.deferUpdate();
       const requestId = interaction.customId.replace('modal_reject_reason_', '');
@@ -1822,6 +2004,169 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isChatInputCommand()) {
       const { commandName, options } = interaction;
 
+      // --- GIVEAWAY COMMAND HANDLER ---
+      if (commandName === 'giveaway') {
+        const sub = options.getSubcommand();
+
+        if (sub === 'start') {
+          await interaction.deferReply({ ephemeral: true });
+          const channel = options.getChannel('channel');
+          const prize = options.getString('prize');
+          const durationMins = options.getInteger('duration');
+          const winnersCount = options.getInteger('winners');
+          const role1 = options.getRole('role1')?.id || null;
+          const role2 = options.getRole('role2')?.id || null;
+          const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
+
+          const endsAt = Date.now() + durationMins * 60 * 1000;
+          const gwId = `gw_${Date.now()}`;
+
+          let roleReqText = 'None (Everyone can join)';
+          if (role1 && role2) roleReqText = `<@&${role1}> or <@&${role2}>`;
+          else if (role1) roleReqText = `<@&${role1}>`;
+          else if (role2) roleReqText = `<@&${role2}>`;
+
+          const gwContainer = {
+            type: 17,
+            accent_color: 0xf1c40f,
+            components: [
+              {
+                type: 12,
+                items: [{ media: { url: bannerUrl } }]
+              },
+              {
+                type: 9,
+                components: [
+                  {
+                    type: 10,
+                    content: `🎉 **GIVEAWAY** 🎉\n\n` +
+                             `**Prize:** ${prize}\n` +
+                             `**Winners:** ${winnersCount}\n` +
+                             `Hosted by: ${interaction.user}\n` +
+                             `Required Roles: ${roleReqText}\n` +
+                             `Ends At: <t:${Math.floor(endsAt / 1000)}:R>`
+                  }
+                ],
+                accessory: {
+                  type: 2,
+                  style: 1,
+                  custom_id: `gw_enter_${gwId}`,
+                  label: '🎉 Enter Giveaway'
+                }
+              }
+            ]
+          };
+
+          const gwMsg = await channel.send({
+            components: [gwContainer],
+            flags: MessageFlags.IsComponentsV2
+          });
+
+          activeGiveaways.set(gwId, {
+            messageId: gwMsg.id,
+            channelId: channel.id,
+            prize,
+            winnersCount,
+            role1,
+            role2,
+            hostId: interaction.user.id,
+            entries: new Set(),
+            ended: false,
+            endsAt
+          });
+
+          // Set timeout to end giveaway automatically
+          setTimeout(async () => {
+            await endGiveaway(interaction.guild, gwId);
+          }, durationMins * 60 * 1000);
+
+          return await interaction.editReply(`✅ Giveaway successfully started in ${channel}! (ID: \`${gwId}\`)`);
+        }
+
+        if (sub === 'end') {
+          await interaction.deferReply({ ephemeral: true });
+          const messageId = options.getString('message_id');
+          let foundGwId = null;
+
+          for (const [id, data] of activeGiveaways.entries()) {
+            if (data.messageId === messageId && !data.ended) {
+              foundGwId = id;
+              break;
+            }
+          }
+
+          if (!foundGwId) {
+            return await interaction.editReply('❌ Active giveaway with that Message ID not found.');
+          }
+
+          await endGiveaway(interaction.guild, foundGwId);
+          return await interaction.editReply('✅ Giveaway ended successfully!');
+        }
+
+        if (sub === 'reroll') {
+          await interaction.deferReply({ ephemeral: true });
+          const messageId = options.getString('message_id');
+          let foundGw = null;
+
+          for (const data of activeGiveaways.values()) {
+            if (data.messageId === messageId && data.ended) {
+              foundGw = data;
+              break;
+            }
+          }
+
+          if (!foundGw) {
+            return await interaction.editReply('❌ Ended giveaway with that Message ID not found.');
+          }
+
+          const entriesArr = Array.from(foundGw.entries);
+          if (entriesArr.length === 0) {
+            return await interaction.editReply('❌ No entries found to reroll from.');
+          }
+
+          const winnerId = entriesArr[Math.floor(Math.random() * entriesArr.length)];
+          const channel = interaction.guild.channels.cache.get(foundGw.channelId);
+          if (channel) {
+            await channel.send(`🔄 **Reroll Winner!** Congratulations <@${winnerId}>! You won the **${foundGw.prize}**! 🎉`);
+          }
+
+          return await interaction.editReply(`✅ Successfully rerolled a new winner: <@${winnerId}>`);
+        }
+      }
+
+      // --- /SETUP-BOOST COMMAND ---
+      if (commandName === 'setup-boost') {
+        await interaction.deferReply({ ephemeral: true });
+        const channel = options.getChannel('channel');
+        const title = options.getString('title');
+        const description = options.getString('description').replace(/\\n/g, '\n');
+        const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
+
+        const cfg = guildSettings.get(interaction.guild.id) || {};
+        cfg.boostChannelId = channel.id;
+        cfg.boostData = { title, description, bannerUrl };
+        guildSettings.set(interaction.guild.id, cfg);
+
+        return await interaction.editReply(`✅ Boost announcement channel set to ${channel}!`);
+      }
+
+      // --- /SETUP-WELCOME COMMAND ---
+      if (commandName === 'setup-welcome') {
+        await interaction.deferReply({ ephemeral: true });
+        const channel = options.getChannel('channel');
+        const outerMessage = options.getString('outer_message').replace(/\\n/g, '\n');
+        const title = options.getString('title');
+        const description = options.getString('description').replace(/\\n/g, '\n');
+        const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
+
+        const cfg = guildSettings.get(interaction.guild.id) || {};
+        cfg.welcomeChannelId = channel.id;
+        cfg.welcomeData = { outerMessage, title, description, bannerUrl };
+        guildSettings.set(interaction.guild.id, cfg);
+
+        return await interaction.editReply(`✅ Welcome announcement channel set to ${channel}!`);
+      }
+
       // --- SETUP VERIFICATION PANEL COMMAND ---
       if (commandName === 'setup-verification') {
         await interaction.deferReply({ ephemeral: true });
@@ -1837,7 +2182,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const guestBtnName = options.getString('guest_btn_name') || 'Verify as Guest';
         const memberBtnName = options.getString('member_btn_name') || 'Verify as Member';
         const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
-        const footerBannerUrl = options.getString('footer_banner_url'); // Optional
+        const footerBannerUrl = options.getString('footer_banner_url');
 
         if (!channel || !channel.isTextBased()) {
           return await interaction.editReply('❌ Please select a valid text channel.');
@@ -1858,7 +2203,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             ],
             accessory: {
               type: 2,
-              style: 2, // Style 2 = Grey Button
+              style: 2,
               custom_id: `btn_verify_guest_${guestRole.id}`,
               label: guestBtnName
             }
@@ -1873,7 +2218,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             ],
             accessory: {
               type: 2,
-              style: 2, // Style 2 = Grey Button
+              style: 2,
               custom_id: `btn_verify_member_${memberRole.id}`,
               label: memberBtnName
             }
@@ -2225,6 +2570,63 @@ client.on(Events.InteractionCreate, async (interaction) => {
     console.error('Error handling interaction:', error);
   }
 });
+
+// --- GIVEAWAY END HELPER ---
+async function endGiveaway(guild, gwId) {
+  const giveaway = activeGiveaways.get(gwId);
+  if (!giveaway || giveaway.ended) return;
+
+  giveaway.ended = true;
+  const channel = guild.channels.cache.get(giveaway.channelId);
+  if (!channel) return;
+
+  const msg = await channel.messages.fetch(giveaway.messageId).catch(() => null);
+  const entriesArr = Array.from(giveaway.entries);
+
+  let winnerMentions = [];
+  if (entriesArr.length > 0) {
+    const shuffled = entriesArr.sort(() => 0.5 - Math.random());
+    const selected = shuffled.slice(0, giveaway.winnersCount);
+    winnerMentions = selected.map(id => `<@${id}>`);
+  }
+
+  const resultText = winnerMentions.length > 0 ? winnerMentions.join(', ') : 'No valid entries.';
+
+  const endedContainer = {
+    type: 17,
+    accent_color: 0x7f8c8d,
+    components: [
+      {
+        type: 12,
+        items: [{ media: { url: STANDARD_BANNER_URL } }]
+      },
+      {
+        type: 9,
+        components: [
+          {
+            type: 10,
+            content: `🎉 **GIVEAWAY ENDED** 🎉\n\n` +
+                     `**Prize:** ${giveaway.prize}\n` +
+                     `**Winner(s):** ${resultText}\n` +
+                     `Hosted by: <@${giveaway.hostId}>`
+          }
+        ]
+      }
+    ]
+  };
+
+  if (msg) {
+    await msg.edit({ components: [endedContainer], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
+  }
+
+  if (winnerMentions.length > 0) {
+    await channel.send(`🎊 Congratulations ${resultText}! You won the **${giveaway.prize}**! 🎉`);
+  } else {
+    await channel.send(`❌ Giveaway for **${giveaway.prize}** ended with no participants.`);
+  }
+
+  activeGiveaways.delete(gwId);
+}
 
 // --- HELPER FUNCTION FOR TICKET COMPLETION EXECUTION ---
 async function executeTicketCompletion(interaction, ticketData, completedBosses) {
