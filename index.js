@@ -276,7 +276,7 @@ function buildTicketHubPayload(options = {}) {
   };
 }
 
-// --- COMPONENTS V2 LAYOUT WITH KICK HELPER & LEAVE BUTTON ---
+// --- COMPONENTS V2 LAYOUT WITH KICK HELPER, LEAVE BUTTON, & ALL CUSTOM EMOJIS ---
 function buildTicketControlPayload(ticketData, userMention) {
   const maxLimit = ticketData.maxHelpers || 3;
   const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
@@ -933,6 +933,107 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return updateTicketEmbed(interaction.channel, ticketData);
     }
 
+    // --- CHANGE MONSTERS BUTTON CLICKED (RESTORED DROPDOWN MENU) ---
+    if (interaction.isButton() && interaction.customId === 'btn_change_bosses') {
+      const ticketData = activeTickets.get(interaction.channel.id);
+      if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
+      if (interaction.user.id !== ticketData.requesterId && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
+        return interaction.reply({ content: '❌ Only the requester can change monster details.', ephemeral: true });
+      }
+
+      const catMenu = new StringSelectMenuBuilder()
+        .setCustomId('active_change_monsters_cat')
+        .setPlaceholder('Select monster category...')
+        .addOptions([
+          new StringSelectMenuOptionBuilder().setLabel('Ultra Weeklies').setValue('ultra_weeklies'),
+          new StringSelectMenuOptionBuilder().setLabel('Ultra Dailies').setValue('ultra_dailies'),
+          new StringSelectMenuOptionBuilder().setLabel('7-Man Dailies').setValue('seven_man_dailies'),
+          new StringSelectMenuOptionBuilder().setLabel('Custom Type (Text)').setValue('custom_text')
+        ]);
+
+      return await interaction.reply({
+        content: '⚔️ **Select category for the monsters:**',
+        components: [new ActionRowBuilder().addComponents(catMenu)],
+        ephemeral: true
+      });
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId === 'active_change_monsters_cat') {
+      const choice = interaction.values[0];
+
+      if (choice === 'custom_text') {
+        const ticketData = activeTickets.get(interaction.channel.id);
+        const modal = new ModalBuilder()
+          .setCustomId('modal_edit_bosses')
+          .setTitle('Change Monsters / Details')
+          .addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('new_details').setLabel('New Monsters or Details').setValue(ticketData ? ticketData.description : '').setStyle(TextInputStyle.Paragraph).setRequired(true)
+          ));
+        return await interaction.showModal(modal);
+      }
+
+      let bossMenu;
+      if (choice === 'ultra_weeklies') {
+        bossMenu = new StringSelectMenuBuilder()
+          .setCustomId('active_change_bosses_selected_ultra_weeklies')
+          .setPlaceholder('Select Ultra Weeklies bosses...')
+          .setMinValues(1)
+          .setMaxValues(6)
+          .addOptions(
+            new StringSelectMenuOptionBuilder().setLabel('Champion Drakath').setValue('Champion Drakath'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Dage').setValue('Ultra Dage'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Darkon').setValue('Ultra Darkon'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Drago').setValue('Ultra Drago'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Gramiel').setValue('Ultra Gramiel'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Speaker').setValue('Ultra Speaker')
+          );
+      } else if (choice === 'ultra_dailies') {
+        bossMenu = new StringSelectMenuBuilder()
+          .setCustomId('active_change_bosses_selected_ultra_dailies')
+          .setPlaceholder('Select Ultra Dailies bosses...')
+          .setMinValues(1)
+          .setMaxValues(6)
+          .addOptions(
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Ezrajal').setValue('Ultra Ezrajal'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Warden').setValue('Ultra Warden'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Engineer').setValue('Ultra Engineer'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Tyndarius').setValue('Ultra Tyndarius'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Kala').setValue('Ultra Kala'),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Iara').setValue('Ultra Iara')
+          );
+      } else {
+        bossMenu = new StringSelectMenuBuilder()
+          .setCustomId('active_change_bosses_selected_seven_man_dailies')
+          .setPlaceholder('Select 7-Man Dailies bosses...')
+          .setMinValues(1)
+          .setMaxValues(4)
+          .addOptions(
+            new StringSelectMenuOptionBuilder().setLabel('Kathool Depths').setValue('Kathool Depths'),
+            new StringSelectMenuOptionBuilder().setLabel('Originul').setValue('Originul'),
+            new StringSelectMenuOptionBuilder().setLabel('Astral Shrine').setValue('Astral Shrine'),
+            new StringSelectMenuOptionBuilder().setLabel('Lavarock Shore').setValue('Lavarock Shore')
+          );
+      }
+
+      return await interaction.update({
+        content: '⚔️ **Select the monsters/bosses:**',
+        components: [new ActionRowBuilder().addComponents(bossMenu)]
+      });
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('active_change_bosses_selected_')) {
+      await interaction.deferUpdate();
+      const ticketData = activeTickets.get(interaction.channel.id);
+      if (!ticketData) return;
+
+      const newBosses = interaction.values.join(', ');
+      ticketData.description = newBosses;
+      activeTickets.set(interaction.channel.id, ticketData);
+
+      await interaction.editReply({ content: `✅ Successfully updated monsters to: **${newBosses}**`, components: [] });
+      return updateTicketEmbed(interaction.channel, ticketData);
+    }
+
     // Kick Helper Button Clicked
     if (interaction.isButton() && interaction.customId === 'btn_kick_helper') {
       const ticketData = activeTickets.get(interaction.channel.id);
@@ -1050,7 +1151,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const isServerTicket = ticketType === 'server_ticket';
         
-        // Permission overwrites: Support tickets are private; all other tickets are public
         let permissionOverwrites = [
           { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages] },
           { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
@@ -1120,22 +1220,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isButton()) {
       const ticketData = activeTickets.get(interaction.channel.id);
       const customId = interaction.customId;
-
-      if (customId === 'btn_change_bosses') {
-        if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
-        if (interaction.user.id !== ticketData.requesterId && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
-          return interaction.reply({ content: '❌ Only the requester can edit monster details.', ephemeral: true });
-        }
-
-        const modal = new ModalBuilder()
-          .setCustomId('modal_edit_bosses')
-          .setTitle('Change Monsters / Details')
-          .addComponents(new ActionRowBuilder().addComponents(
-            new TextInputBuilder().setCustomId('new_details').setLabel('New Monsters or Details').setValue(ticketData.description).setStyle(TextInputStyle.Paragraph).setRequired(true)
-          ));
-
-        return await interaction.showModal(modal);
-      }
 
       if (customId === 'btn_location') {
         if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
@@ -1214,7 +1298,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return updateTicketEmbed(interaction.channel, ticketData);
       }
 
-      // --- NEW FEATURE 1: LEAVE BUTTON HANDLER ---
+      // --- LEAVE BUTTON HANDLER ---
       if (customId === 'btn_leave_ticket') {
         if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
 
@@ -1260,7 +1344,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      // --- NEW FEATURE 2: COMPLETE BUTTON WITH MULTI-BOSS DROPDOWN CHECKLIST ---
+      // --- COMPLETE BUTTON WITH MULTI-BOSS CHECKLIST & ADJUSTED POINTS ---
       if (customId === 'btn_complete') {
         if (ticketData && interaction.user.id !== ticketData.requesterId && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
           return interaction.reply({ content: '❌ Only requester or staff can complete.', ephemeral: true });
@@ -1269,7 +1353,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const desc = ticketData ? ticketData.description : '';
         const items = desc ? desc.split(',').map(x => x.trim()).filter(x => x.length > 0) : [];
 
-        // If there are multiple bosses/monsters, prompt dropdown checklist
+        // If multiple bosses/monsters, prompt dropdown checklist
         if (items.length > 1) {
           const selectMenu = new StringSelectMenuBuilder()
             .setCustomId(`select_complete_bosses_${interaction.channel.id}`)
@@ -1314,7 +1398,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
     }
 
-    // --- NEW FEATURE 2 (CONTINUED): HANDLE COMPLETED BOSS DROPDOWN & CONFIRMATION ---
+    // --- HANDLE COMPLETED BOSS CHECKLIST & CONFIRMATION ---
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_complete_bosses_')) {
       const channelId = interaction.customId.replace('select_complete_bosses_', '');
       const ticketData = activeTickets.get(channelId);
@@ -1328,8 +1412,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         new ButtonBuilder().setCustomId('cancel_close_ticket').setLabel('Cancel').setStyle(ButtonStyle.Secondary)
       );
 
+      const calculatedPts = getPointsForTicket(ticketData, completedBosses);
+
       return await interaction.update({
-        content: `You selected completed: **${completedBosses.join(', ')}**\n\n⚠️ **Are you sure you want to close this ticket?**`,
+        content: `You selected completed: **${completedBosses.join(', ')}**\nAdjusted Points to Award: **${calculatedPts} pts**\n\n⚠️ **Are you sure you want to close this ticket?**`,
         components: [confirmRow],
         ephemeral: true
       });
