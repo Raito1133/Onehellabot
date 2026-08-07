@@ -602,35 +602,17 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
     .addChannelOption(opt => opt.setName('channel').setDescription('Channel to post stats').setRequired(true)),
 
-  // --- UPGRADED /EMBED COMMAND (Required options placed strictly first) ---
+  // --- SIMPLIFIED /EMBED COMMAND (Required options first: channel, title, description) ---
   new SlashCommandBuilder()
     .setName('embed')
-    .setDescription('Create a Components V2 rules panel with top and bottom banners')
+    .setDescription('Create a clean Components V2 panel with title, description, and banners')
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
     .addChannelOption(opt => opt.setName('channel').setDescription('Target channel').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Main introductory text content').setRequired(true))
-    .addStringOption(opt => opt.setName('title1').setDescription('Title 1').setRequired(true))
-    .addStringOption(opt => opt.setName('desc1').setDescription('Description 1').setRequired(true))
+    .addStringOption(opt => opt.setName('title').setDescription('Panel title').setRequired(true))
+    .addStringOption(opt => opt.setName('description').setDescription('Main text content').setRequired(true))
     // Optional options follow after all required options
     .addStringOption(opt => opt.setName('banner_url').setDescription('Top banner image URL').setRequired(false))
-    .addStringOption(opt => opt.setName('footer_banner_url').setDescription('Bottom footer banner image URL').setRequired(false))
-    .addStringOption(opt => opt.setName('emoji1').setDescription('Emoji 1 (e.g. 1️⃣)').setRequired(false))
-    // Item 2
-    .addStringOption(opt => opt.setName('title2').setDescription('Title 2').setRequired(false))
-    .addStringOption(opt => opt.setName('desc2').setDescription('Description 2').setRequired(false))
-    .addStringOption(opt => opt.setName('emoji2').setDescription('Emoji 2').setRequired(false))
-    // Item 3
-    .addStringOption(opt => opt.setName('title3').setDescription('Title 3').setRequired(false))
-    .addStringOption(opt => opt.setName('desc3').setDescription('Description 3').setRequired(false))
-    .addStringOption(opt => opt.setName('emoji3').setDescription('Emoji 3').setRequired(false))
-    // Item 4
-    .addStringOption(opt => opt.setName('title4').setDescription('Title 4').setRequired(false))
-    .addStringOption(opt => opt.setName('desc4').setDescription('Description 4').setRequired(false))
-    .addStringOption(opt => opt.setName('emoji4').setDescription('Emoji 4').setRequired(false))
-    // Item 5
-    .addStringOption(opt => opt.setName('title5').setDescription('Title 5').setRequired(false))
-    .addStringOption(opt => opt.setName('desc5').setDescription('Description 5').setRequired(false))
-    .addStringOption(opt => opt.setName('emoji5').setDescription('Emoji 5').setRequired(false)),
+    .addStringOption(opt => opt.setName('footer_banner_url').setDescription('Bottom footer banner image URL').setRequired(false)),
 
   // --- FULLY FLEXIBLE /REACTIONROLE COMMAND (Up to 7 buttons, optional fields allowed) ---
   new SlashCommandBuilder()
@@ -1617,7 +1599,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return await interaction.editReply(`✅ Live tracking stats message successfully set up in ${channel}!`);
       }
 
-      // --- COMPONENTS V2 /EMBED COMMAND ---
+      // --- SIMPLIFIED COMPONENTS V2 /EMBED COMMAND ---
       if (commandName === 'embed') {
         await interaction.deferReply({ ephemeral: true });
 
@@ -1626,38 +1608,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return await interaction.editReply('❌ Please select a valid text channel.');
         }
 
+        const title = options.getString('title');
         const description = options.getString('description').replace(/\\n/g, '\n');
         const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
         const footerBannerUrl = options.getString('footer_banner_url');
-
-        const sections = [];
-        for (let i = 1; i <= 5; i++) {
-          const title = options.getString(`title${i}`);
-          const desc = options.getString(`desc${i}`);
-
-          if (title && desc) {
-            const rawEmoji = options.getString(`emoji${i}`);
-            let emojiPrefix = '';
-            if (rawEmoji) {
-              const customEmojiMatch = rawEmoji.match(/<a?:(.+?):(\d+)>/);
-              if (customEmojiMatch) {
-                emojiPrefix = `${rawEmoji} `;
-              } else {
-                emojiPrefix = `${rawEmoji.trim()} `;
-              }
-            }
-
-            sections.push({
-              type: 9,
-              components: [
-                {
-                  type: 10,
-                  content: `${emojiPrefix}**${title}**\n-# > ${desc}`
-                }
-              ]
-            });
-          }
-        }
 
         const containerComponents = [
           {
@@ -1666,17 +1620,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
           },
           {
             type: 10,
-            content: `${description}`
-          },
-          {
-            type: 14
-          },
-          ...sections
+            content: `**${title}**\n\n${description}`
+          }
         ];
 
         if (footerBannerUrl) {
           containerComponents.push({
-            type: 14
+            type: 14 // Divider line
           });
           containerComponents.push({
             type: 12,
@@ -1695,7 +1645,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
             components: [containerComponent],
             flags: MessageFlags.IsComponentsV2
           });
-          return await interaction.editReply(`✅ Components V2 rules panel with top and bottom banners successfully posted to ${channel}!`);
+          return await interaction.editReply(`✅ Components V2 panel successfully posted to ${channel}!`);
         } catch (err) {
           console.error('Error posting Components V2 embed:', err);
           return await interaction.editReply(`❌ Failed to post layout message: ${err.message}`);
