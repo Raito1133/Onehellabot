@@ -167,7 +167,6 @@ function isHelperInActiveTicket(userId) {
 function getPointsForTicket(ticketData, completedItems = null) {
   const type = (ticketData.type || '').toLowerCase();
   
-  // Properly parse items whether passed as an array or string
   let items = [];
   if (Array.isArray(completedItems)) {
     items = completedItems;
@@ -565,23 +564,55 @@ const commands = [
     )
     .addChannelOption(opt => opt.setName('log_channel').setDescription('Channel for Ticket Logs').setRequired(false)),
 
-  new SlashCommandBuilder()
-    .setName('stats')
-    .setDescription('Display global ticket stats counter')
-    .addStringOption(opt => opt.setName('custom_message').setDescription('Custom message below stats').setRequired(false)),
-
+  // --- NEW V2 COMPONENTS EMBED COMMAND (3rd Photo Layout) ---
   new SlashCommandBuilder()
     .setName('embed')
-    .setDescription('Create and send a customized embed message')
+    .setDescription('Create and send a customized Components V2 layout message')
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
     .addChannelOption(opt => opt.setName('channel').setDescription('Target channel').setRequired(true))
-    .addStringOption(opt => opt.setName('title').setDescription('Embed Title').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Embed Description').setRequired(true))
-    .addStringOption(opt => opt.setName('outer_message').setDescription('Message outside embed').setRequired(false))
-    .addStringOption(opt => opt.setName('color').setDescription('Hex color code').setRequired(false))
-    .addStringOption(opt => opt.setName('image_url').setDescription('Banner image URL').setRequired(false))
-    .addStringOption(opt => opt.setName('thumbnail_url').setDescription('Thumbnail URL').setRequired(false))
-    .addStringOption(opt => opt.setName('footer').setDescription('Footer text').setRequired(false)),
+    .addStringOption(opt => opt.setName('title').setDescription('Title content').setRequired(true))
+    .addStringOption(opt => opt.setName('description').setDescription('Main text content').setRequired(true))
+    .addStringOption(opt => opt.setName('outer_message').setDescription('Plain text outside the container box').setRequired(false))
+    .addStringOption(opt => opt.setName('color').setDescription('Hex color code (e.g. #8b0000)').setRequired(false))
+    .addStringOption(opt => opt.setName('banner_url').setDescription('Header banner image URL').setRequired(false)),
+
+  // --- NEW V2 REACTION ROLE SETUP COMMAND (2nd Photo Layout with up to 7 buttons) ---
+  new SlashCommandBuilder()
+    .setName('reactionrole')
+    .setDescription('Create a Components V2 reaction role panel with up to 7 buttons')
+    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
+    .addChannelOption(opt => opt.setName('channel').setDescription('Where to post the panel').setRequired(true))
+    .addStringOption(opt => opt.setName('title').setDescription('Panel title').setRequired(true))
+    .addStringOption(opt => opt.setName('description').setDescription('Panel description').setRequired(true))
+    .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false))
+    // Role 1
+    .addRoleOption(opt => opt.setName('role1').setDescription('Role 1').setRequired(true))
+    .addStringOption(opt => opt.setName('label1').setDescription('Label for Role 1 button').setRequired(true))
+    .addStringOption(opt => opt.setName('emoji1').setDescription('Emoji for Role 1').setRequired(false))
+    // Role 2
+    .addRoleOption(opt => opt.setName('role2').setDescription('Role 2').setRequired(false))
+    .addStringOption(opt => opt.setName('label2').setDescription('Label for Role 2 button').setRequired(false))
+    .addStringOption(opt => opt.setName('emoji2').setDescription('Emoji for Role 2').setRequired(false))
+    // Role 3
+    .addRoleOption(opt => opt.setName('role3').setDescription('Role 3').setRequired(false))
+    .addStringOption(opt => opt.setName('label3').setDescription('Label for Role 3 button').setRequired(false))
+    .addStringOption(opt => opt.setName('emoji3').setDescription('Emoji for Role 3').setRequired(false))
+    // Role 4
+    .addRoleOption(opt => opt.setName('role4').setDescription('Role 4').setRequired(false))
+    .addStringOption(opt => opt.setName('label4').setDescription('Label for Role 4 button').setRequired(false))
+    .addStringOption(opt => opt.setName('emoji4').setDescription('Emoji for Role 4').setRequired(false))
+    // Role 5
+    .addRoleOption(opt => opt.setName('role5').setDescription('Role 5').setRequired(false))
+    .addStringOption(opt => opt.setName('label5').setDescription('Label for Role 5 button').setRequired(false))
+    .addStringOption(opt => opt.setName('emoji5').setDescription('Emoji for Role 5').setRequired(false))
+    // Role 6
+    .addRoleOption(opt => opt.setName('role6').setDescription('Role 6').setRequired(false))
+    .addStringOption(opt => opt.setName('label6').setDescription('Label for Role 6 button').setRequired(false))
+    .addStringOption(opt => opt.setName('emoji6').setDescription('Emoji for Role 6').setRequired(false))
+    // Role 7
+    .addRoleOption(opt => opt.setName('role7').setDescription('Role 7').setRequired(false))
+    .addStringOption(opt => opt.setName('label7').setDescription('Label for Role 7 button').setRequired(false))
+    .addStringOption(opt => opt.setName('emoji7').setDescription('Emoji for Role 7').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('setup-channels')
@@ -667,6 +698,28 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.guild || interaction.guild.id !== GUILD_ID) return;
 
   try {
+    // --- REACTION ROLE TOGGLE HANDLER ---
+    if (interaction.isButton() && interaction.customId.startsWith('rr_')) {
+      const roleId = interaction.customId.split('_')[1];
+      const role = interaction.guild.roles.cache.get(roleId);
+
+      if (!role) {
+        return interaction.reply({ content: '❌ Target role no longer exists.', ephemeral: true });
+      }
+
+      try {
+        if (interaction.member.roles.cache.has(roleId)) {
+          await interaction.member.roles.remove(roleId);
+          return interaction.reply({ content: `Removed role: **${role.name}**`, ephemeral: true });
+        } else {
+          await interaction.member.roles.add(roleId);
+          return interaction.reply({ content: `Added role: **${role.name}**`, ephemeral: true });
+        }
+      } catch (err) {
+        return interaction.reply({ content: '❌ Failed to update role. Check bot hierarchy/permissions.', ephemeral: true });
+      }
+    }
+
     if (interaction.isButton() && interaction.customId === 'btn_open_ticket_menu') {
       const selectMenu = new StringSelectMenuBuilder()
         .setCustomId('select_ticket_cat')
@@ -1470,23 +1523,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
       }
 
-      if (commandName === 'stats') {
-        const customMessage = options.getString('custom_message');
-        const defaultFooterMessage = "A huge thank you to each and every one of you who made this possible! ❤️";
-
-        const statsEmbed = new EmbedBuilder()
-          .setTitle(`Ticket stats`)
-          .setDescription(
-            `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed.\n` +
-            `🏅 **\`${globalStats.totalPointsGiven}\`** points given out.\n\n` +
-            (customMessage ? customMessage.replace(/\\n/g, '\n') : defaultFooterMessage)
-          )
-          .setColor('#3498db')
-          .setTimestamp();
-
-        return await interaction.reply({ embeds: [statsEmbed] });
-      }
-
+      // --- COMPONENTS V2 /EMBED COMMAND ---
       if (commandName === 'embed') {
         await interaction.deferReply({ ephemeral: true });
 
@@ -1496,27 +1533,134 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         const title = options.getString('title');
-        const desc = options.getString('description').replace(/\\n/g, '\n');
+        const description = options.getString('description').replace(/\\n/g, '\n');
         const rawOuterMessage = options.getString('outer_message');
-        const color = options.getString('color') || '#3498db';
-        const image = options.getString('image_url');
-        const thumbnail = options.getString('thumbnail_url');
-        const footer = options.getString('footer');
+        const colorInput = options.getString('color') || '#8b0000';
+        const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
+
+        const accentColorInt = parseInt(colorInput.replace('#', ''), 16) || 0x8b0000;
+
+        const containerComponent = {
+          type: 17,
+          accent_color: accentColorInt,
+          components: [
+            {
+              type: 12,
+              items: [{ media: { url: bannerUrl } }]
+            },
+            {
+              type: 9,
+              components: [
+                {
+                  type: 10,
+                  content: `**${title}**\n\n${description}`
+                }
+              ]
+            }
+          ]
+        };
+
+        const messageOptions = {
+          components: [containerComponent],
+          flags: MessageFlags.IsComponentsV2
+        };
+
+        if (rawOuterMessage) {
+          messageOptions.content = rawOuterMessage.replace(/\\n/g, '\n');
+        }
 
         try {
-          const customEmbed = new EmbedBuilder().setTitle(title).setDescription(desc).setColor(color).setTimestamp();
-          if (image) customEmbed.setImage(image);
-          if (thumbnail) customEmbed.setThumbnail(thumbnail);
-          if (footer) customEmbed.setFooter({ text: footer });
-
-          const messageOptions = { embeds: [customEmbed] };
-          if (rawOuterMessage) messageOptions.content = rawOuterMessage.replace(/\\n/g, '\n');
-
           await channel.send(messageOptions);
-          return await interaction.editReply(`✅ Embed posted to ${channel}!`);
+          return await interaction.editReply(`✅ Components V2 layout message posted to ${channel}!`);
         } catch (err) {
-          console.error('Error posting embed:', err);
-          return await interaction.editReply(`❌ Failed: ${err.message}`);
+          console.error('Error posting Components V2 embed:', err);
+          return await interaction.editReply(`❌ Failed to post layout message: ${err.message}`);
+        }
+      }
+
+      // --- COMPONENTS V2 /REACTIONROLE COMMAND (Up to 7 buttons) ---
+      if (commandName === 'reactionrole') {
+        await interaction.deferReply({ ephemeral: true });
+
+        const channel = options.getChannel('channel');
+        if (!channel || !channel.isTextBased()) {
+          return await interaction.editReply('❌ Please select a valid text channel.');
+        }
+
+        const title = options.getString('title');
+        const description = options.getString('description').replace(/\\n/g, '\n');
+        const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
+
+        // Collect up to 7 roles and button options dynamically
+        const roleButtons = [];
+        for (let i = 1; i <= 7; i++) {
+          const role = options.getRole(`role${i}`);
+          const label = options.getString(`label${i}`);
+          if (role && label) {
+            const rawEmoji = options.getString(`emoji${i}`);
+            let emojiObj = undefined;
+            if (rawEmoji) {
+              const customEmojiMatch = rawEmoji.match(/<a?:(.+?):(\d+)>/);
+              if (customEmojiMatch) {
+                emojiObj = { id: customEmojiMatch[2], name: customEmojiMatch[1] };
+              } else {
+                emojiObj = { name: rawEmoji.trim() };
+              }
+            }
+
+            roleButtons.push({
+              type: 2,
+              style: 2, // Secondary / Gray button
+              custom_id: `rr_${role.id}`,
+              label: label,
+              ...(emojiObj && { emoji: emojiObj })
+            });
+          }
+        }
+
+        if (roleButtons.length === 0) {
+          return await interaction.editReply('❌ You must provide at least one valid role and button label.');
+        }
+
+        // Group buttons into action rows (max 5 buttons per row)
+        const actionRows = [];
+        for (let i = 0; i < roleButtons.length; i += 5) {
+          actionRows.push({
+            type: 1,
+            components: roleButtons.slice(i, i + 5)
+          });
+        }
+
+        const containerComponent = {
+          type: 17,
+          accent_color: 0x8b0000,
+          components: [
+            {
+              type: 12,
+              items: [{ media: { url: bannerUrl } }]
+            },
+            {
+              type: 9,
+              components: [
+                {
+                  type: 10,
+                  content: `**${title}**\n\n${description}`
+                }
+              ]
+            },
+            ...actionRows
+          ]
+        };
+
+        try {
+          await channel.send({
+            components: [containerComponent],
+            flags: MessageFlags.IsComponentsV2
+          });
+          return await interaction.editReply(`✅ Components V2 reaction role panel successfully posted to ${channel}!`);
+        } catch (err) {
+          console.error('Error posting reaction role panel:', err);
+          return await interaction.editReply(`❌ Failed to post panel: ${err.message}`);
         }
       }
 
@@ -1629,7 +1773,8 @@ async function executeTicketCompletion(interaction, ticketData, completedBosses)
 
     let pointsToAward = 0;
     if (ticketData && ticketData.helpers.length > 0 && ticketData.type !== 'server_ticket') {
-      pointsToAward = getPointsForTicket(ticketData, completedBosses);
+      const checkedBosses = completedBosses || tempTicketCache.get(`${interaction.user.id}_completed`) || null;
+      pointsToAward = getPointsForTicket(ticketData, checkedBosses);
 
       for (const hObj of ticketData.helpers) {
         const current = helperPoints.get(hObj.id) || 0;
