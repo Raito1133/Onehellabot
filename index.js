@@ -671,7 +671,7 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
     .addChannelOption(opt => opt.setName('channel').setDescription('Boost announcement channel').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Boost message title').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Boost description (supports variables)').setRequired(true))
+    .addStringOption(opt => opt.setDescription('Boost description (supports variables)').setRequired(true))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false)),
 
   // --- /SETUP-WELCOME COMMAND ---
@@ -682,7 +682,7 @@ const commands = [
     .addChannelOption(opt => opt.setName('channel').setDescription('Welcome announcement channel').setRequired(true))
     .addStringOption(opt => opt.setName('outer_message').setDescription('Message outside container').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Welcome card title').setRequired(true))
-    .addStringOption(opt => opt.setDescription('Welcome description (supports variables)').setRequired(true))
+    .addStringOption(opt => opt.setName('description').setDescription('Welcome description (supports variables)').setRequired(true))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false)),
 
   // --- /VIEWPOINTS COMMAND ---
@@ -908,7 +908,7 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     if (!channel) return;
 
     const boostData = cfg.boostData || {
-      title: 'Server Boosted! 🚀',
+      title: 'Server Boosts! 🚀',
       description: 'Thank you {user} for boosting {server}!',
       bannerUrl: STANDARD_BANNER_URL
     };
@@ -980,15 +980,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return interaction.reply({ content: '🎉 Successfully entered the giveaway! Good luck!', ephemeral: true });
     }
 
-    // --- VERIFICATION BUTTON TRIGGERS (WITH REJECTION BLOCK CHECK) ---
+    // --- VERIFICATION BUTTON TRIGGERS (WITH RE-VERIFY ALLOWED AFTER CLICK) ---
     if (interaction.isButton() && interaction.customId.startsWith('btn_verify_guest_')) {
-      if (userRejectionReasons.has(interaction.user.id)) {
-        const reason = userRejectionReasons.get(interaction.user.id);
-        return interaction.reply({ 
-          content: `❌ **Rejected:** ${reason}\n\nPlease address the reason above before attempting to verify again.`, 
-          ephemeral: true 
-        });
-      }
+      // Kapag pinindot nila ulit ang verify button para mag-apply, tinatanggal muna natin ang rejection record para pwedeng mag-apply ulit nang unli-attempt (one-at-a-time / pwedeng ulitin kapag inaddress na)
+      userRejectionReasons.delete(interaction.user.id);
 
       const roleId = interaction.customId.replace('btn_verify_guest_', '');
       const modal = new ModalBuilder()
@@ -1026,13 +1021,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (interaction.isButton() && interaction.customId.startsWith('btn_verify_member_')) {
-      if (userRejectionReasons.has(interaction.user.id)) {
-        const reason = userRejectionReasons.get(interaction.user.id);
-        return interaction.reply({ 
-          content: `❌ **Rejected:** ${reason}\n\nPlease address the reason above before attempting to verify again.`, 
-          ephemeral: true 
-        });
-      }
+      userRejectionReasons.delete(interaction.user.id);
 
       const roleId = interaction.customId.replace('btn_verify_member_', '');
       const modal = new ModalBuilder()
@@ -1238,9 +1227,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
           await member.setNickname(data.ign).catch(err => console.log('Failed to set nickname:', err));
         }
 
-        // Kapag na-approve, tinatanggal na ang rejection record para malinis
         userRejectionReasons.delete(data.userId);
 
+        // Pinalitan ang log message para maging "Approved" na walang buttons para hindi na ma-click ulit
         const userAvatar = interaction.message.embeds?.[0]?.thumbnail?.url || STANDARD_BANNER_URL;
         const approvedContainer = {
           type: 17,
@@ -1301,9 +1290,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return interaction.followUp({ content: '⚠️ Request data not found.', ephemeral: true });
       }
 
-      // Sine-save ang reason para ma-block ang user, pero kapag nag-submit sila ulit ng form, matatanggal ito para pwedeng mag-verify ulit (one-at-a-time fix)
       userRejectionReasons.set(data.userId, reason);
 
+      // Pinalitan ang log message para maging "Rejected" na may kasamang Rejection Reason tulad ng reference mo at tinanggal ang mga buttons
       const userAvatar = interaction.message.embeds?.[0]?.thumbnail?.url || STANDARD_BANNER_URL;
       const rejectedContainer = {
         type: 17,
@@ -1315,9 +1304,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
           },
           {
             type: 10,
-            content: `📋 **Verification Rejected**\n\n` +
+            content: `📋 **New ${data.type} Verification Request**\n\n` +
                      `**User** | **AQW Username** | **Verification Type**\n` +
                      `<@${data.userId}> | [${data.ign}](${data.charPageUrl}) | ${data.type}\n\n` +
+                     `**Guild** | **Role To Give** | **Invited By**\n` +
+                     `${data.guildName} | <@&${data.roleId}> | ${data.invitedBy}\n\n` +
                      `**Rejection Reason**\n` +
                      `${reason}\n\n` +
                      `Rejected by ${interaction.user} • <t:${Math.floor(Date.now() / 1000)}:R>`
@@ -1330,7 +1321,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       try {
         const member = await interaction.guild.members.fetch(data.userId).catch(() => null);
         if (member) {
-          await member.send(`❌ Your verification for **${interaction.guild.name}** was **Rejected**. \n**Reason:** ${reason}\n\nPlease address this reason and attempt to verify again.`).catch(() => {});
+          await member.send(`❌ Your verification for **${interaction.guild.name}** was **Rejected**. \n**Reason:** ${reason}\n\nYou may now address this reason and attempt to verify again.`).catch(() => {});
         }
       } catch {}
 
@@ -1510,7 +1501,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_bosses_')) {
       const categoryKey = interaction.customId.replace('select_bosses_', '');
       const selectedBosses = interaction.values.join(', ');
-      
+       
       tempTicketCache.set(interaction.user.id, { categoryKey, bosses: selectedBosses });
 
       const serverMenu = new StringSelectMenuBuilder()
@@ -1570,13 +1561,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setPlaceholder('Add extra details (optional)...')
         .setStyle(TextInputStyle.Paragraph)
         .setRequired(false);
-      
+       
       const modalComps = [
         new ActionRowBuilder().addComponents(ignInput), 
         new ActionRowBuilder().addComponents(mapInput),
         new ActionRowBuilder().addComponents(detailsInput)
       ];
-      
+       
       if (!bossVal) {
         const descInput = new TextInputBuilder()
           .setCustomId('description')
@@ -2857,7 +2848,7 @@ async function executeTicketCompletion(interaction, ticketData, completedBosses)
     const categoryPreset = TICKET_PRESETS[ticketData?.type] || {};
     const accentColor = categoryPreset.accentColor || 0x2ecc71;
 
-    let detailContent = '⚠️ **No helpers joined this ticket.**';
+    let detailContent = '⚠️ **No helpers joined this ticket.***';
     if (ticketData && ticketData.type === 'server_ticket') {
       detailContent = '🛠️ **Support ticket handled and resolved by staff.**';
     } else if (ticketData && ticketData.helpers.length > 0) {
@@ -2875,7 +2866,7 @@ async function executeTicketCompletion(interaction, ticketData, completedBosses)
 
     activeTickets.delete(interaction.channel.id);
     setTimeout(() => {
-      interaction.channel.id.delete().catch(() => {});
+      interaction.channel.delete().catch(() => {});
     }, 5000);
   } catch (err) {
     console.error('Error during ticket completion execution:', err);
