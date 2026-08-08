@@ -165,7 +165,7 @@ async function updateLiveStatsMessage(guild) {
       .setDescription(
         `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed.\n` +
         `🏅 **\`${globalStats.totalPointsGiven}\`** points given out.\n\n` +
-        "A huge thank you to each and every one of you who made this possible! ❤️"
+        "Ticket status has been updated everytime you make one!"
       )
       .setColor('#3498db')
       .setTimestamp();
@@ -278,7 +278,7 @@ function buildTicketHubPayload(options = {}) {
     guideDesc = "Read through the ticket rules and guidelines before requesting assistance.",
     guideUrl = TICKET_GUIDE_URL,
     createTitle = "MAKE A TICKET",
-    createDesc = "Select a category from the menu to open a new ticket. Our helpers will join shortly!"
+    createDesc = "Select a category below to open a ticket."
   } = options;
 
   const containerComponent = {
@@ -742,7 +742,7 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
     .addChannelOption(opt => opt.setName('channel').setDescription('Where to post the panel').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Panel title').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Panel description').setRequired(true))
+    .addStringOption(opt => opt.setDescription('Panel description').setRequired(true))
     .addRoleOption(opt => opt.setName('role1').setDescription('Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('desc1').setDescription('Description for Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false))
@@ -838,7 +838,7 @@ client.once(Events.ClientReady, async () => {
   client.user.setPresence({
     status: 'idle',
     activities: [{
-      name: 'Im weird',
+      name: 'Sindria On Top',
       type: 5
     }]
   });
@@ -1236,7 +1236,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const member = await interaction.guild.members.fetch(data.userId).catch(() => null);
         if (member) {
           await member.roles.add(data.roleId).catch(() => {});
-          // Awtomatikong palitan ang server nickname ng user sa kanilang AQW IGN
           await member.setNickname(data.ign).catch(err => console.log('Failed to set nickname:', err));
         }
 
