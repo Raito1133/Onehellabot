@@ -67,7 +67,7 @@ const tempTicketCache = new Map();
 const pendingVerifications = new Map();
 const userRejectionReasons = new Map();
 const activeGiveaways = new Map();
-const snipeCache = new Map(); // Store deleted messages for snipe command
+const snipeCache = new Map();
 
 let ticketCounter = 0;
 
@@ -88,7 +88,7 @@ client.on(Events.MessageDelete, (message) => {
   });
 });
 
-// --- ⚙️ ORIGINAL CUSTOM TICKET PRESETS & BANNERS ---
+// --- TICKET PRESETS ---
 const TICKET_PRESETS = {
   farming: { 
     label: 'Farming Assistance', 
@@ -165,7 +165,7 @@ async function updateLiveStatsMessage(guild) {
       .setDescription(
         `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed.\n` +
         `🏅 **\`${globalStats.totalPointsGiven}\`** points given out.\n\n` +
-        "A huge thank you to each and every one of you who made this possible! ❤️"
+        "Ticket status has been updated everytime you make one!"
       )
       .setColor('#3498db')
       .setTimestamp();
@@ -244,15 +244,9 @@ function getPointsForTicket(ticketData, completedItems = null) {
     return ticketData.customPoints;
   }
 
-  if (type.includes('farm') || type.includes('farming')) {
-    return 3;
-  }
-  if (type.includes('weekly')) {
-    return 8;
-  }
-  if (type.includes('daily')) {
-    return 5;
-  }
+  if (type.includes('farm') || type.includes('farming')) return 3;
+  if (type.includes('weekly')) return 8;
+  if (type.includes('daily')) return 5;
   return 1;
 }
 
@@ -280,54 +274,28 @@ function buildTicketHubPayload(options = {}) {
     guideDesc = "Read through the ticket rules and guidelines before requesting assistance.",
     guideUrl = TICKET_GUIDE_URL,
     createTitle = "MAKE A TICKET",
-    createDesc = "Select a category from the menu to open a new ticket. Our helpers will join shortly!"
+    createDesc = "Select a category below to open a ticket."
   } = options;
 
   const containerComponent = {
     type: 17,
     accent_color: 0x8b0000,
     components: [
+      { type: 12, items: [{ media: { url: imageUrl } }] },
       {
-        type: 12,
-        items: [{ media: { url: imageUrl } }]
+        type: 9,
+        components: [{ type: 10, content: `**${guideTitle.replace(/\\n/g, '\n')}**\n\n${guideDesc.replace(/\\n/g, '\n')}` }],
+        accessory: { type: 2, style: 5, url: guideUrl, label: 'Guide' }
       },
       {
         type: 9,
-        components: [
-          {
-            type: 10,
-            content: `**${guideTitle.replace(/\\n/g, '\n')}**\n\n${guideDesc.replace(/\\n/g, '\n')}`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 5,
-          url: guideUrl,
-          label: 'Guide'
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `**${createTitle.replace(/\\n/g, '\n')}**\n\n${createDesc.replace(/\\n/g, '\n')}`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_open_ticket_menu',
-          label: 'Create'
-        }
+        components: [{ type: 10, content: `**${createTitle.replace(/\\n/g, '\n')}**\n\n${createDesc.replace(/\\n/g, '\n')}` }],
+        accessory: { type: 2, style: 2, custom_id: 'btn_open_ticket_menu', label: 'Create' }
       }
     ]
   };
 
-  return {
-    components: [containerComponent],
-    flags: MessageFlags.IsComponentsV2
-  };
+  return { components: [containerComponent], flags: MessageFlags.IsComponentsV2 };
 }
 
 function buildTicketControlPayload(ticketData, userMention) {
@@ -347,162 +315,57 @@ function buildTicketControlPayload(ticketData, userMention) {
     type: 17,
     accent_color: accentColor,
     components: [
+      { type: 12, items: [{ media: { url: ticketBanner } }] },
+      { type: 10, content: `<:pointsbt:1534950425080496189> **Points:**\n-# > **${points}**` },
+      { type: 10, content: `<:requestbt:1534950441060798594> **Requester:** ${requesterTag}` },
       {
-        type: 12,
-        items: [{ media: { url: ticketBanner } }]
-      },
-      {
-        type: 10,
-        content: `<:pointsbt:1534950425080496189> **Points:**\n-# > **${points}**`
-      },
-      {
-        type: 10,
-        content: `<:requestbt:1534950441060798594> **Requester:** ${requesterTag}`
+        type: 9,
+        components: [{ type: 10, content: `Selected server:\n-# > **${ticketData.server}**` }],
+        accessory: { type: 2, style: 2, custom_id: 'btn_change_server', label: 'Change server', emoji: { id: '1534950290908909749', name: 'changeserverbt', animated: false } }
       },
       {
         type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Selected server:\n-# > **${ticketData.server}**`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_change_server',
-          label: 'Change server',
-          emoji: { id: '1534950290908909749', name: 'changeserverbt', animated: false }
-        }
+        components: [{ type: 10, content: `Monsters:\n-# > **${ticketData.description}**` }],
+        accessory: { type: 2, style: 2, custom_id: 'btn_change_bosses', label: 'Change Monsters', emoji: { id: '1534950407003050185', name: 'monstersbt', animated: false } }
       },
+      { type: 10, content: `Details:\n-# > **${ticketData.details || 'None provided'}**` },
       {
         type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Monsters:\n-# > **${ticketData.description}**`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_change_bosses',
-          label: 'Change Monsters',
-          emoji: { id: '1534950407003050185', name: 'monstersbt', animated: false }
-        }
+        components: [{ type: 10, content: `Need more help? **Ping helpers!**` }],
+        accessory: { type: 2, style: 2, custom_id: 'btn_pinghelpers', label: 'Ping helpers', emoji: { id: '1534950337167884368', name: 'pinghelpersbt', animated: false } }
       },
-      {
-        type: 10,
-        content: `Details:\n-# > **${ticketData.details || 'None provided'}**`
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Need more help? **Ping helpers!**`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_pinghelpers',
-          label: 'Ping helpers',
-          emoji: { id: '1534950337167884368', name: 'pinghelpersbt', animated: false }
-        }
-      },
-      {
-        type: 10,
-        content: `Done with the ticket?`
-      },
+      { type: 10, content: `Done with the ticket?` },
       {
         type: 1,
         components: [
-          {
-            type: 2,
-            style: 3,
-            custom_id: 'btn_complete',
-            label: 'Complete',
-            emoji: { id: '1534950268679094397', name: 'completebt', animated: false }
-          },
-          {
-            type: 2,
-            style: 4,
-            custom_id: 'btn_cancel',
-            label: 'Cancel',
-            emoji: { id: '1534950219517788170', name: 'cancelbt', animated: false }
-          }
+          { type: 2, style: 3, custom_id: 'btn_complete', label: 'Complete', emoji: { id: '1534950268679094397', name: 'completebt', animated: false } },
+          { type: 2, style: 4, custom_id: 'btn_cancel', label: 'Cancel', emoji: { id: '1534950219517788170', name: 'cancelbt', animated: false } }
         ]
       },
       {
         type: 9,
-        components: [
-          {
-            type: 10,
-            content: `<:helpersbt:1534950382109986876> **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 4,
-          custom_id: 'btn_kick_helper',
-          label: 'Kick Helper'
-        }
+        components: [{ type: 10, content: `<:helpersbt:1534950382109986876> **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}` }],
+        accessory: { type: 2, style: 4, custom_id: 'btn_kick_helper', label: 'Kick Helper' }
       },
       {
         type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Stepped down from helping? Click **Leave!**`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_leave_ticket',
-          label: 'Leave'
-        }
+        components: [{ type: 10, content: `Stepped down from helping? Click **Leave!**` }],
+        accessory: { type: 2, style: 2, custom_id: 'btn_leave_ticket', label: 'Leave' }
       },
       {
         type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Need the room information again? Click **Room details!**`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_location',
-          label: 'Room details',
-          emoji: { id: '1534950471922483382', name: 'roomdeetsbt', animated: false }
-        }
+        components: [{ type: 10, content: `Need the room information again? Click **Room details!**` }],
+        accessory: { type: 2, style: 2, custom_id: 'btn_location', label: 'Room details', emoji: { id: '1534950471922483382', name: 'roomdeetsbt', animated: false } }
       },
       {
         type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Claim this ticket to view room details.`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 3,
-          custom_id: 'btn_claim',
-          label: 'Claim',
-          emoji: { id: '1534950248831516806', name: 'claimbt', animated: false }
-        }
+        components: [{ type: 10, content: `Claim this ticket to view room details.` }],
+        accessory: { type: 2, style: 3, custom_id: 'btn_claim', label: 'Claim', emoji: { id: '1534950248831516806', name: 'claimbt', animated: false } }
       }
     ]
   };
 
-  return {
-    components: [containerComponent],
-    flags: MessageFlags.IsComponentsV2
-  };
+  return { components: [containerComponent], flags: MessageFlags.IsComponentsV2 };
 }
 
 function buildSupportTicketControlPayload(ticketData, userMention) {
@@ -516,60 +379,25 @@ function buildSupportTicketControlPayload(ticketData, userMention) {
     type: 17,
     accent_color: accentColor,
     components: [
-      {
-        type: 12,
-        items: [{ media: { url: ticketBanner } }]
-      },
-      {
-        type: 10,
-        content: `<:requestbt:1534950441060798594> **User:** ${requesterTag}\n\n**Subject / Concern:**\n-# > **${ticketData.subject}**`
-      },
-      {
-        type: 10,
-        content: `**Details / Report:**\n-# > **${ticketData.description}**`
-      },
+      { type: 12, items: [{ media: { url: ticketBanner } }] },
+      { type: 10, content: `<:requestbt:1534950441060798594> **User:** ${requesterTag}\n\n**Subject / Concern:**\n-# > **${ticketData.subject}**` },
+      { type: 10, content: `**Details / Report:**\n-# > **${ticketData.description}**` },
       {
         type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Need staff attention? **Ping staff!**`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_pinghelpers',
-          label: 'Ping staff',
-          emoji: { id: '1534950337167884368', name: 'pinghelpersbt', animated: false }
-        }
+        components: [{ type: 10, content: `Need staff attention? **Ping staff!**` }],
+        accessory: { type: 2, style: 2, custom_id: 'btn_pinghelpers', label: 'Ping staff', emoji: { id: '1534950337167884368', name: 'pinghelpersbt', animated: false } }
       },
       {
         type: 1,
         components: [
-          {
-            type: 2,
-            style: 3,
-            custom_id: 'btn_complete',
-            label: 'Complete',
-            emoji: { id: '1534950268679094397', name: 'completebt', animated: false }
-          },
-          {
-            type: 2,
-            style: 4,
-            custom_id: 'btn_cancel',
-            label: 'Cancel',
-            emoji: { id: '1534950219517788170', name: 'cancelbt', animated: false }
-          }
+          { type: 2, style: 3, custom_id: 'btn_complete', label: 'Complete', emoji: { id: '1534950268679094397', name: 'completebt', animated: false } },
+          { type: 2, style: 4, custom_id: 'btn_cancel', label: 'Cancel', emoji: { id: '1534950219517788170', name: 'cancelbt', animated: false } }
         ]
       }
     ]
   };
 
-  return {
-    components: [containerComponent],
-    flags: MessageFlags.IsComponentsV2
-  };
+  return { components: [containerComponent], flags: MessageFlags.IsComponentsV2 };
 }
 
 async function updateTicketEmbed(channel, ticketData) {
@@ -744,7 +572,7 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
     .addChannelOption(opt => opt.setName('channel').setDescription('Where to post the panel').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Panel title').setRequired(true))
-    .addStringOption(opt => opt.setDescription('Panel description').setRequired(true))
+    .addStringOption(opt => opt.setName('description').setDescription('Panel description').setRequired(true))
     .addRoleOption(opt => opt.setName('role1').setDescription('Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('desc1').setDescription('Description for Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false))
@@ -1251,4 +1079,9 @@ async function endGiveaway(guild, gwId) {
 }
 
 client.login(process.env.DISCORD_TOKEN);
-http.createServer((req, res) => res.end("Bot is alive!")).listen(process.env.PORT || 3000);
+
+// --- HTTP SERVER FOR KEEP-ALIVE (RENDER FIX) ---
+const PORT = process.env.PORT || 3000;
+http.createServer((req, res) => res.end("Bot is alive!")).listen(PORT, () => {
+  console.log(`HTTP server is listening on port ${PORT}`);
+});
