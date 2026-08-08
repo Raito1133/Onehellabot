@@ -849,7 +849,7 @@ client.once(Events.ClientReady, async () => {
   await registerCommands();
 });
 
-// --- WELCOME & BOOST EVENT LISTENERS (FIXED ERROR-FREE LAYOUT) ---
+// --- WELCOME EVENT LISTENER (FIXED COMPONENTS V2) ---
 client.on(Events.GuildMemberAdd, async (member) => {
   if (member.guild.id !== GUILD_ID) return;
   
@@ -864,7 +864,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
 
   const container = {
     type: 17,
-    accent_color: 0x8b0000,
+    accent_color: #98FB98,
     components: [
       {
         type: 12,
@@ -872,8 +872,8 @@ client.on(Events.GuildMemberAdd, async (member) => {
       },
       {
         type: 10,
-        content: `**Welcome to ${member.guild.name}!**\n\n` +
-                 `Hey there, <@${member.id}>! We are thrilled to have you here.\n\n` +
+        content: `Hey there, <@${member.id}>! We're glad to have you here.\n\n` +
+                 `**Welcome to ${member.guild.name}!**\n\n` +
                  ` **Get Verified to Unlock the Server!**\n` +
                  `You currently have access to:\n\n` +
                  ` **Read through our rule and community guidelines.** (<#1529492085848412303>)\n` +
@@ -889,12 +889,10 @@ client.on(Events.GuildMemberAdd, async (member) => {
   };
 
   await channel.send({
-    content: `Hey there, <@${member.id}>! We're glad to have you here.`,
     components: [container],
     flags: MessageFlags.IsComponentsV2
   }).catch(console.error);
 });
-
 // --- INTERACTION LISTENER ---
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.guild || interaction.guild.id !== GUILD_ID) return;
