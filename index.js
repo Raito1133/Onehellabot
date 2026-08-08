@@ -165,7 +165,7 @@ async function updateLiveStatsMessage(guild) {
       .setDescription(
         `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed.\n` +
         `🏅 **\`${globalStats.totalPointsGiven}\`** points given out.\n\n` +
-        "A huge thank you to each and every one of you who made this possible! ❤️"
+        "The ticket status is updated automatically whenever a ticket is completed."
       )
       .setColor('#3498db')
       .setTimestamp();
@@ -225,12 +225,13 @@ function getPointsForTicket(ticketData, completedItems = null) {
   if (type === 'ultra_weeklies') {
     let totalPts = 0;
     for (const item of items) {
-      if (item.toLowerCase().includes('speaker')) {
-        totalPts += 5; 
-      } else if (item.toLowerCase().includes('nulgath')) {
-        totalPts += 3; // Ultra Nulgath = 3 points
+      const lowerItem = item.toLowerCase();
+      if (lowerItem.includes('speaker')) {
+        totalPts += 5; // Ultra Speaker = 5 pts
+      } else if (lowerItem.includes('gramiel') || lowerItem.includes('darkon')) {
+        totalPts += 4; // Ultra Gramiel & Darkon = 4 pts
       } else {
-        totalPts += 3; 
+        totalPts += 3; // Ultra Drakath, Dage, Drago, Nulgath = 3 pts
       }
     }
     return totalPts > 0 ? totalPts : 3 * itemCount;
@@ -671,7 +672,7 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
     .addChannelOption(opt => opt.setName('channel').setDescription('Boost announcement channel').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Boost message title').setRequired(true))
-    .addStringOption(opt => opt.setDescription('Boost description (supports variables)').setRequired(true))
+    .addStringOption(opt => opt.setName('description').setDescription('Boost description (supports variables)').setRequired(true))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false)),
 
   // --- /SETUP-WELCOME COMMAND ---
@@ -980,9 +981,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return interaction.reply({ content: '🎉 Successfully entered the giveaway! Good luck!', ephemeral: true });
     }
 
-    // --- VERIFICATION BUTTON TRIGGERS (WITH RE-VERIFY ALLOWED AFTER CLICK) ---
+    // --- VERIFICATION BUTTON TRIGGERS (WITH RE-VERIFY ALLOWED) ---
     if (interaction.isButton() && interaction.customId.startsWith('btn_verify_guest_')) {
-      // Kapag pinindot nila ulit ang verify button para mag-apply, tinatanggal muna natin ang rejection record para pwedeng mag-apply ulit nang unli-attempt (one-at-a-time / pwedeng ulitin kapag inaddress na)
+      // Tinatanggal ang rejection block para makapag-verify ulit agad kapag inaddress na
       userRejectionReasons.delete(interaction.user.id);
 
       const roleId = interaction.customId.replace('btn_verify_guest_', '');
@@ -1085,11 +1086,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const userAvatar = interaction.user.displayAvatarURL({ extension: 'png', size: 128 });
 
-      // Ginamit ang field layout gaya ng sa reference image mo para sa log panel
+      // May banner na kasama sa verification log container ayon sa hiling mo
       const logContainer = {
         type: 17,
         accent_color: 0x3498db,
         components: [
+          {
+            type: 12,
+            items: [{ media: { url: STANDARD_BANNER_URL } }]
+          },
           {
             type: 12,
             items: [{ media: { url: userAvatar } }]
@@ -1172,6 +1177,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         components: [
           {
             type: 12,
+            items: [{ media: { url: STANDARD_BANNER_URL } }]
+          },
+          {
+            type: 12,
             items: [{ media: { url: userAvatar } }]
           },
           {
@@ -1229,12 +1238,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         userRejectionReasons.delete(data.userId);
 
-        // Pinalitan ang log message para maging "Approved" na walang buttons para hindi na ma-click ulit
-        const userAvatar = interaction.message.embeds?.[0]?.thumbnail?.url || STANDARD_BANNER_URL;
+        const userAvatar = interaction.message.components?.[1]?.items?.[0]?.media?.url || STANDARD_BANNER_URL;
         const approvedContainer = {
           type: 17,
           accent_color: 0x2ecc71,
           components: [
+            {
+              type: 12,
+              items: [{ media: { url: STANDARD_BANNER_URL } }]
+            },
             {
               type: 12,
               items: [{ media: { url: userAvatar } }]
@@ -1292,12 +1304,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       userRejectionReasons.set(data.userId, reason);
 
-      // Pinalitan ang log message para maging "Rejected" na may kasamang Rejection Reason tulad ng reference mo at tinanggal ang mga buttons
-      const userAvatar = interaction.message.embeds?.[0]?.thumbnail?.url || STANDARD_BANNER_URL;
+      const userAvatar = interaction.message.components?.[1]?.items?.[0]?.media?.url || STANDARD_BANNER_URL;
       const rejectedContainer = {
         type: 17,
         accent_color: 0xe74c3c,
         components: [
+          {
+            type: 12,
+            items: [{ media: { url: STANDARD_BANNER_URL } }]
+          },
           {
             type: 12,
             items: [{ media: { url: userAvatar } }]
@@ -1321,7 +1336,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       try {
         const member = await interaction.guild.members.fetch(data.userId).catch(() => null);
         if (member) {
-          await member.send(`❌ Your verification for **${interaction.guild.name}** was **Rejected**. \n**Reason:** ${reason}\n\nYou may now address this reason and attempt to verify again.`).catch(() => {});
+          await member.send(`❌ Your verification for **${interaction.guild.name}** was **Rejected**. \n**Reason:** ${reason}\n\nPlease address this reason and attempt to verify again.`).catch(() => {});
         }
       } catch {}
 
@@ -1376,7 +1391,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    // STEP 1: Category Selected (Dropdown Menu Restored!)
+    // STEP 1: Category Selected (Dropdown Menu with exact sequence & points)
     if (interaction.isStringSelectMenu() && interaction.customId === 'select_ticket_cat') {
       const selectedKey = interaction.values[0];
       const preset = TICKET_PRESETS[selectedKey] || { label: 'Ticket', max: 6, points: 1, pingRoleIds: [HELPER_ROLE_ID] };
@@ -1389,12 +1404,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setMaxValues(7)
           .addOptions(
             new StringSelectMenuOptionBuilder().setLabel('Champion Drakath').setValue('Champion Drakath').setEmoji({ id: '1534544989009477754', name: 'drakath' }),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Drago').setValue('Ultra Drago').setEmoji({ id: '1534545063915290694', name: 'drago' }),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Nulgath').setValue('Ultra Nulgath').setEmoji({ id: '1534545036102995988', name: 'nulgath' }),
             new StringSelectMenuOptionBuilder().setLabel('Ultra Dage').setValue('Ultra Dage').setEmoji({ id: '1534544956713209877', name: 'dage' }),
             new StringSelectMenuOptionBuilder().setLabel('Ultra Darkon').setValue('Ultra Darkon').setEmoji({ id: '1534545103350272131', name: 'darkon' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Drago').setValue('Ultra Drago').setEmoji({ id: '1534545063915290694', name: 'drago' }),
             new StringSelectMenuOptionBuilder().setLabel('Ultra Gramiel').setValue('Ultra Gramiel').setEmoji({ id: '1534545007468613662', name: 'gramiel' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Speaker').setValue('Ultra Speaker').setEmoji({ id: '1534545145016352778', name: 'malgor' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Nulgath').setValue('Ultra Nulgath').setEmoji({ id: '1534545036102995988', name: 'nulgath' })
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Speaker').setValue('Ultra Speaker').setEmoji({ id: '1534545145016352778', name: 'malgor' })
           );
 
         return await interaction.update({
@@ -1640,12 +1655,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setMaxValues(7)
           .addOptions(
             new StringSelectMenuOptionBuilder().setLabel('Champion Drakath').setValue('Champion Drakath').setEmoji({ id: '1534544989009477754', name: 'drakath' }),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Drago').setValue('Ultra Drago').setEmoji({ id: '1534545063915290694', name: 'drago' }),
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Nulgath').setValue('Ultra Nulgath').setEmoji({ id: '1534545036102995988', name: 'nulgath' }),
             new StringSelectMenuOptionBuilder().setLabel('Ultra Dage').setValue('Ultra Dage').setEmoji({ id: '1534544956713209877', name: 'dage' }),
             new StringSelectMenuOptionBuilder().setLabel('Ultra Darkon').setValue('Ultra Darkon').setEmoji({ id: '1534545103350272131', name: 'darkon' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Drago').setValue('Ultra Drago').setEmoji({ id: '1534545063915290694', name: 'drago' }),
             new StringSelectMenuOptionBuilder().setLabel('Ultra Gramiel').setValue('Ultra Gramiel').setEmoji({ id: '1534545007468613662', name: 'gramiel' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Speaker').setValue('Ultra Speaker').setEmoji({ id: '1534545145016352778', name: 'malgor' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Nulgath').setValue('Ultra Nulgath').setEmoji({ id: '1534545036102995988', name: 'nulgath' })
+            new StringSelectMenuOptionBuilder().setLabel('Ultra Speaker').setValue('Ultra Speaker').setEmoji({ id: '1534545145016352778', name: 'malgor' })
           );
       } else if (tType === 'ultra_dailies') {
         bossMenu = new StringSelectMenuBuilder()
@@ -2473,7 +2488,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (commandName === 'stats') {
         const customMessage = options.getString('custom_message');
-        const defaultFooterMessage = "A huge thank you to each and every one of you who made this possible! ❤️";
+        const defaultFooterMessage = "The ticket status is updated automatically whenever a ticket is completed.";
 
         const statsEmbed = new EmbedBuilder()
           .setTitle(`Ticket stats`)
@@ -2497,7 +2512,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setDescription(
             `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed.\n` +
             `🏅 **\`${globalStats.totalPointsGiven}\`** points given out.\n\n` +
-            "A huge thank you to each and every one of you who made this possible! ❤️"
+            "The ticket status is updated automatically whenever a ticket is completed."
           )
           .setColor('#3498db')
           .setTimestamp();
@@ -2848,7 +2863,7 @@ async function executeTicketCompletion(interaction, ticketData, completedBosses)
     const categoryPreset = TICKET_PRESETS[ticketData?.type] || {};
     const accentColor = categoryPreset.accentColor || 0x2ecc71;
 
-    let detailContent = '⚠️ **No helpers joined this ticket.***';
+    let detailContent = '⚠️ **No helpers joined this ticket.**';
     if (ticketData && ticketData.type === 'server_ticket') {
       detailContent = '🛠️ **Support ticket handled and resolved by staff.**';
     } else if (ticketData && ticketData.helpers.length > 0) {
