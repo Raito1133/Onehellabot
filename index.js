@@ -864,7 +864,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
 
   const container = {
     type: 17,
-    accent_color: #98FB98,
+    accent_color: 0x98FB98,
     components: [
       {
         type: 12,
