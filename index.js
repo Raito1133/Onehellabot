@@ -109,7 +109,7 @@ const TICKET_PRESETS = {
   seven_man_dailies: { 
     label: '7-Man Dailies', 
     max: 6, 
-    points: 2, 
+    points: 3, 
     pingRoleIds: [ULTRA_HELPER_ROLE_ID, HELPER_ROLE_ID],
     bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961238180626622/3.png?ex=6a76078d&is=6a74b60d&hm=5060584863f037151aada431ad3fba73ab18e43cf5ed3782182f5d9615b7de3d&=&format=webp&quality=lossless&width=2048&height=1024',
     accentColor: 0xFCD748 
@@ -141,7 +141,7 @@ const TICKET_PRESETS = {
   spamming: { 
     label: 'Spamming', 
     max: 6, 
-    points: 1, 
+    points: 5, 
     pingRoleIds: [HELPER_ROLE_ID],
     bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961239157899527/5.png?ex=6a76078d&is=6a74b60d&hm=b94b6cf605487010f0cd4f6f14a7e37603127fc8fdd6f333934947aab42f255f&=&format=webp&quality=lossless&width=2048&height=1024',
     accentColor: 0xEFBF04 
