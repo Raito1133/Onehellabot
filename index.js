@@ -908,7 +908,7 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     if (!channel) return;
 
     const boostData = cfg.boostData || {
-      title: 'Server Boosted! 🚀',
+      title: 'Server Boosts! 🚀',
       description: 'Thank you {user} for boosting {server}!',
       bannerUrl: STANDARD_BANNER_URL
     };
@@ -1254,7 +1254,28 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .setColor('#2ecc71')
           .setTimestamp();
 
-        await interaction.update({ content: '✅ **Approved Successfully!**', components: [] });
+        // Pinalitan ang log message para maging "Approved" na walang buttons para hindi na ma-click ulit
+        const userAvatar = interaction.message.embeds?.[0]?.thumbnail?.url || STANDARD_BANNER_URL;
+        const approvedContainer = {
+          type: 17,
+          accent_color: 0x2ecc71,
+          components: [
+            {
+              type: 12,
+              items: [{ media: { url: userAvatar } }]
+            },
+            {
+              type: 10,
+              content: `✅ **Verification Request Approved**\n\n` +
+                       `**User:** <@${data.userId}>\n` +
+                       `**AQW Username:** [${data.ign}](${data.charPageUrl})\n` +
+                       `**Verification Type:** ${data.type}\n` +
+                       `**Approved By:** ${interaction.user}`
+            }
+          ]
+        };
+
+        await interaction.update({ components: [approvedContainer], flags: MessageFlags.IsComponentsV2 });
         await interaction.channel.send({ embeds: [approvedEmbed] });
 
         if (member) {
@@ -1309,13 +1330,36 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setColor('#e74c3c')
         .setTimestamp();
 
-      await interaction.editReply({ content: '❌ **Request Rejected.**', components: [] });
+      // Dito natin binabago ang log message para maging "Rejected" status card at tinatanggal ang mga buttons
+      const userAvatar = interaction.message.embeds?.[0]?.thumbnail?.url || STANDARD_BANNER_URL;
+      const rejectedContainer = {
+        type: 17,
+        accent_color: 0xe74c3c,
+        components: [
+          {
+            type: 12,
+            items: [{ media: { url: userAvatar } }]
+          },
+          {
+            type: 10,
+            content: `❌ **Verification Request Rejected**\n\n` +
+                     `**User:** <@${data.userId}>\n` +
+                     `**AQW Username:** [${data.ign}](${data.charPageUrl})\n` +
+                     `**Verification Type:** ${data.type}\n` +
+                     `**Rejected By:** ${interaction.user}\n` +
+                     `**Status:** Rejected\n` +
+                     `**Reason:** ${reason}`
+          }
+        ]
+      };
+
+      await interaction.editReply({ components: [rejectedContainer], flags: MessageFlags.IsComponentsV2 });
       await interaction.channel.send({ embeds: [rejectedEmbed] });
 
       try {
         const member = await interaction.guild.members.fetch(data.userId).catch(() => null);
         if (member) {
-          await member.send(`❌ Your verification for **${interaction.guild.name}** was **Rejected**. \n**Reason:** ${reason}`).catch(() => {});
+          await member.send(`❌ Your verification for **${interaction.guild.name}** was **Rejected**. \n**Reason:** ${reason}\n\nYou may now address this issue and apply for verification again.`).catch(() => {});
         }
       } catch {}
 
