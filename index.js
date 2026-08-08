@@ -29,7 +29,7 @@ const HELPER_ROLE_ID = '1529499059596038285'; // Standard Helper / Farming Role 
 const SUPPORT_ROLE_ID = '1529498802149392614'; // Support Role ID
 
 const TICKET_GUIDE_URL = 'https://discord.com'; 
-const STANDARD_BANNER_URL = 'https://media.discordapp.net/attachments/1527957392523005972/1529507159262494812/cca68503-0ea7-44c1-a1bd-7c2a43f99589.png?ex=6a77f0cb&is=6a769f4b&hm=7435d239d560d6f18204a9c7e3e9d0d6afc4ca929d13496642067432590aa6a6&=&format=webp&quality=lossless&width=2048&height=1024';
+const STANDARD_BANNER_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
 
 const AQW_SERVERS = [
   { label: 'Twilly', emoji: { id: '1534938699190763542', name: 'sadtwilly', animated: false } },
@@ -849,7 +849,7 @@ client.once(Events.ClientReady, async () => {
   await registerCommands();
 });
 
-// --- WELCOME & BOOST EVENT LISTENERS (UPDATED WELCOME MESSAGE) ---
+// --- WELCOME & BOOST EVENT LISTENERS ---
 client.on(Events.GuildMemberAdd, async (member) => {
   if (member.guild.id !== GUILD_ID) return;
   
@@ -871,30 +871,25 @@ client.on(Events.GuildMemberAdd, async (member) => {
         items: [{ media: { url: customBannerUrl } }]
       },
       {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `**Welcome to ${member.guild.name}!**\n\n` +
-                     `Hey there, <@${member.id}>! We are thrilled to have you here.\n\n` +
-                     `🔓 **Get Verified to Unlock the Server!**\n` +
-                     `You currently have access to:\n\n` +
-                     `📍 **Read through our rule and community guidelines.** (<#1531294593780416743>)\n` +
-                     `📍 **Head over to <#1531294593780416743> to get Verified.**\n\n` +
-                     `You'll be asked to provide the following details:\n` +
-                     `> **AQW IGN:**\n` +
-                     `> **GUILD:**\n\n` +
-                     `📍 **Grab your roles in <#1529492494583337237> to customize your profile.**\n` +
-                     `📍 **Chat and hang out in <#1371775027258855467>.**\n\n` +
-                     `Once verified, you'll have full access! If you're stuck, just mention a mod at <#1371775027258855467>.`
-          }
-        ]
+        type: 10,
+        content: `**Welcome to ${member.guild.name}!**\n\n` +
+                 `Hey there, <@${member.id}>! We are thrilled to have you here.\n\n` +
+                 `🔓 **Get Verified to Unlock the Server!**\n` +
+                 `You currently have access to:\n\n` +
+                 `📍 **Read through our rule and community guidelines.** (<#1531294593780416743>)\n` +
+                 `📍 **Head over to <#1531294593780416743> to get Verified.**\n\n` +
+                 `You'll be asked to provide the following details:\n` +
+                 `> **AQW IGN:**\n` +
+                 `> **GUILD:**\n\n` +
+                 `📍 **Grab your roles in <#1529492494583337237> to customize your profile.**\n` +
+                 `📍 **Chat and hang out in <#1371775027258855467>.**\n\n` +
+                 `Once verified, you'll have full access! If you're stuck, just mention a mod at <#1371775027258855467>.`
       }
     ]
   };
 
   await channel.send({
-    content: `Hey there, <@${member.id}>! We're glad to have to here.`,
+    content: `Hey there, <@${member.id}>! We're glad to have you here.`,
     components: [container],
     flags: MessageFlags.IsComponentsV2
   }).catch(console.error);
