@@ -862,71 +862,37 @@ client.on(Events.GuildMemberAdd, async (member) => {
 
   const customBannerUrl = 'https://media.discordapp.net/attachments/1527957392523005972/1529507159262494812/cca68503-0ea7-44c1-a1bd-7c2a43f99589.png?ex=6a77f0cb&is=6a769f4b&hm=7435d239d560d6f18204a9c7e3e9d0d6afc4ca929d13496642067432590aa6a6&=&format=webp&quality=lossless&width=2048&height=1024';
 
-  const welcomeText = `**Welcome to ${member.guild.name}!**\n\n` +
-                      `Hey there, <@${member.id}>! We are thrilled to have you here.\n\n` +
-                      `🔓 **Get Verified to Unlock the Server!**\n` +
-                      `You currently have access to:\n\n` +
-                      `📍 **Read through our rule and community guidelines.** (<#1531294593780416743>)\n` +
-                      `📍 **Head over to <#1531294593780416743> to get Verified.**\n\n` +
-                      `You'll be asked to provide the following details:\n` +
-                      `> **AQW IGN:**\n` +
-                      `> **GUILD:**\n\n` +
-                      `📍 **Grab your roles in <#1529492494583337237> to customize your profile.**\n` +
-                      `📍 **Chat and hang out in <#1371775027258855467>.**\n\n` +
-                      `Once verified, you'll have full access! If you're stuck, just mention a mod at <#1371775027258855467>.`;
+  const container = {
+    type: 17,
+    accent_color: 0x8b0000,
+    components: [
+      {
+        type: 12,
+        items: [{ media: { url: customBannerUrl } }]
+      },
+      {
+        type: 10,
+        content: `**Welcome to ${member.guild.name}!**\n\n` +
+                 `Hey there, <@${member.id}>! We are thrilled to have you here.\n\n` +
+                 `🔓 **Get Verified to Unlock the Server!**\n` +
+                 `You currently have access to:\n\n` +
+                 `📍 **Read through our rule and community guidelines.** (<#1531294593780416743>)\n` +
+                 `📍 **Head over to <#1531294593780416743> to get Verified.**\n\n` +
+                 `You'll be asked to provide the following details:\n` +
+                 `> **AQW IGN:**\n` +
+                 `> **GUILD:**\n\n` +
+                 `📍 **Grab your roles in <#1529492494583337237> to customize your profile.**\n` +
+                 `📍 **Chat and hang out in <#1371775027258855467>.**\n\n` +
+                 `Once verified, you'll have full access! If you're stuck, just mention a mod at <#1371775027258855467>.`
+      }
+    ]
+  };
 
-  // Ginamit natin ang simpleng format na may kasamang image URL sa ibaba o sa content para hindi mag-error ang API
   await channel.send({
-    content: `Hey there, <@${member.id}>! We're glad to have you here.\n\n${welcomeText}\n\n${customBannerUrl}`
+    content: `Hey there, <@${member.id}>! We're glad to have you here.`,
+    components: [container],
+    flags: MessageFlags.IsComponentsV2
   }).catch(console.error);
-});
-
-client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
-  if (newMember.guild.id !== GUILD_ID) return;
-  const wasBoosting = oldMember.premiumSince;
-  const isBoosting = newMember.premiumSince;
-
-  if (!wasBoosting && isBoosting) {
-    const cfg = guildSettings.get(newMember.guild.id) || {};
-    if (!cfg.boostChannelId) return;
-
-    const channel = newMember.guild.channels.cache.get(cfg.boostChannelId);
-    if (!channel) return;
-
-    const boostData = cfg.boostData || {
-      title: 'Server Boosts! 🚀',
-      description: 'Thank you {user} for boosting {server}!',
-      bannerUrl: STANDARD_BANNER_URL
-    };
-
-    const parsedTitle = parseVariables(boostData.title, newMember, newMember.guild);
-    const parsedDesc = parseVariables(boostData.description, newMember, newMember.guild);
-
-    const container = {
-      type: 17,
-      accent_color: 0xf47fff,
-      components: [
-        {
-          type: 12,
-          items: [{ media: { url: boostData.bannerUrl } }]
-        },
-        {
-          type: 9,
-          components: [
-            {
-              type: 10,
-              content: `**${parsedTitle}**\n\n${parsedDesc}`
-            }
-          ]
-        }
-      ]
-    };
-
-    await channel.send({
-      components: [container],
-      flags: MessageFlags.IsComponentsV2
-    }).catch(console.error);
-  }
 });
 
 // --- INTERACTION LISTENER ---
