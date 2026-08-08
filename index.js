@@ -109,7 +109,7 @@ const TICKET_PRESETS = {
   seven_man_dailies: { 
     label: '7-Man Dailies', 
     max: 6, 
-    points: 3, 
+    points: 2, 
     pingRoleIds: [ULTRA_HELPER_ROLE_ID, HELPER_ROLE_ID],
     bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961238180626622/3.png?ex=6a76078d&is=6a74b60d&hm=5060584863f037151aada431ad3fba73ab18e43cf5ed3782182f5d9615b7de3d&=&format=webp&quality=lossless&width=2048&height=1024',
     accentColor: 0xFCD748 
@@ -141,7 +141,7 @@ const TICKET_PRESETS = {
   spamming: { 
     label: 'Spamming', 
     max: 6, 
-    points: 5, 
+    points: 1, 
     pingRoleIds: [HELPER_ROLE_ID],
     bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961239157899527/5.png?ex=6a76078d&is=6a74b60d&hm=b94b6cf605487010f0cd4f6f14a7e37603127fc8fdd6f333934947aab42f255f&=&format=webp&quality=lossless&width=2048&height=1024',
     accentColor: 0xEFBF04 
@@ -647,7 +647,7 @@ const commands = [
         .addChannelOption(opt => opt.setName('channel').setDescription('Channel to post giveaway').setRequired(true))
         .addStringOption(opt => opt.setName('prize').setDescription('Prize of the giveaway').setRequired(true))
         .addStringOption(opt => opt.setName('title').setDescription('Giveaway embed/card title').setRequired(true))
-        .addStringOption(opt => opt.setName('description').setDescription('Giveaway description details').setRequired(true))
+        .addStringOption(opt => opt.setDescription('Giveaway description details').setRequired(true))
         .addIntegerOption(opt => opt.setName('duration').setDescription('Duration in minutes').setRequired(true))
         .addIntegerOption(opt => opt.setName('winners').setDescription('Number of winners').setRequired(true))
         .addRoleOption(opt => opt.setName('role1').setDescription('Required Role 1 (Optional)').setRequired(false))
@@ -745,7 +745,7 @@ const commands = [
     .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
     .addChannelOption(opt => opt.setName('channel').setDescription('Where to post the panel').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Panel title').setRequired(true))
-    .addStringOption(opt => opt.setDescription('Panel description').setRequired(true))
+    .addStringOption(opt => opt.setName('description').setDescription('Panel description').setRequired(true))
     .addRoleOption(opt => opt.setName('role1').setDescription('Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('desc1').setDescription('Description for Role 1').setRequired(true))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false))
@@ -983,7 +983,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     // --- VERIFICATION BUTTON TRIGGERS (WITH RE-VERIFY ALLOWED) ---
     if (interaction.isButton() && interaction.customId.startsWith('btn_verify_guest_')) {
-      // Tinatanggal ang rejection block para makapag-verify ulit agad kapag inaddress na
       userRejectionReasons.delete(interaction.user.id);
 
       const roleId = interaction.customId.replace('btn_verify_guest_', '');
@@ -1086,7 +1085,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const userAvatar = interaction.user.displayAvatarURL({ extension: 'png', size: 128 });
 
-      // May banner na kasama sa verification log container ayon sa hiling mo
       const logContainer = {
         type: 17,
         accent_color: 0x3498db,
@@ -1391,7 +1389,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       });
     }
 
-    // STEP 1: Category Selected (Dropdown Menu with exact sequence & points)
+    // STEP 1: Category Selected (Dropdown Menu with custom exact sequence)
     if (interaction.isStringSelectMenu() && interaction.customId === 'select_ticket_cat') {
       const selectedKey = interaction.values[0];
       const preset = TICKET_PRESETS[selectedKey] || { label: 'Ticket', max: 6, points: 1, pingRoleIds: [HELPER_ROLE_ID] };
