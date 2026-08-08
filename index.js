@@ -682,7 +682,7 @@ const commands = [
     .addChannelOption(opt => opt.setName('channel').setDescription('Welcome announcement channel').setRequired(true))
     .addStringOption(opt => opt.setName('outer_message').setDescription('Message outside container').setRequired(true))
     .addStringOption(opt => opt.setName('title').setDescription('Welcome card title').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Welcome description (supports variables)').setRequired(true))
+    .addStringOption(opt => opt.setDescription('Welcome description (supports variables)').setRequired(true))
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false)),
 
   // --- /VIEWPOINTS COMMAND ---
@@ -908,7 +908,7 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     if (!channel) return;
 
     const boostData = cfg.boostData || {
-      title: 'Server Boosts! 🚀',
+      title: 'Server Boosted! 🚀',
       description: 'Thank you {user} for boosting {server}!',
       bannerUrl: STANDARD_BANNER_URL
     };
@@ -1096,6 +1096,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const userAvatar = interaction.user.displayAvatarURL({ extension: 'png', size: 128 });
 
+      // Ginamit ang field layout gaya ng sa reference image mo para sa log panel
       const logContainer = {
         type: 17,
         accent_color: 0x3498db,
@@ -1106,13 +1107,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
           },
           {
             type: 10,
-            content: `🛡️ **New Verification Request (GUEST)**\n\n` +
-                     `**User:** <@${interaction.user.id}>\n` +
-                     `**AQW Username:** [${ign}](${charPageUrl})\n` +
-                     `**Verification Type:** GUEST\n` +
-                     `**Guild:** ${guildName}\n` +
-                     `**Role To Give:** <@&${roleId}>\n` +
-                     `**Invited By:** ${invitedBy}`
+            content: `📋 **New GUEST Verification Request**\n\n` +
+                     `**User** | **AQW Username** | **Verification Type**\n` +
+                     `<@${interaction.user.id}> | [${ign}](${charPageUrl}) | GUEST\n\n` +
+                     `**Guild** | **Role To Give** | **Invited By**\n` +
+                     `${guildName} | <@&${roleId}> | ${invitedBy}`
           },
           {
             type: 1,
@@ -1188,13 +1187,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
           },
           {
             type: 10,
-            content: `🛡️ **New Verification Request (MEMBER)**\n\n` +
-                     `**User:** <@${interaction.user.id}>\n` +
-                     `**AQW Username:** [${ign}](${charPageUrl})\n` +
-                     `**Verification Type:** MEMBER\n` +
-                     `**Guild:** Main Guild\n` +
-                     `**Role To Give:** <@&${roleId}>\n` +
-                     `**Invited By:** ${invitedBy}`
+            content: `📋 **New MEMBER Verification Request**\n\n` +
+                     `**User** | **AQW Username** | **Verification Type**\n` +
+                     `<@${interaction.user.id}> | [${ign}](${charPageUrl}) | MEMBER\n\n` +
+                     `**Guild** | **Role To Give** | **Invited By**\n` +
+                     `Main Guild | <@&${roleId}> | ${invitedBy}`
           },
           {
             type: 1,
@@ -1241,20 +1238,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
           await member.setNickname(data.ign).catch(err => console.log('Failed to set nickname:', err));
         }
 
+        // Kapag na-approve, tinatanggal na ang rejection record para malinis
         userRejectionReasons.delete(data.userId);
 
-        const approvedEmbed = new EmbedBuilder()
-          .setTitle('✅ Verification Approved')
-          .setDescription(`Approved by ${interaction.user}\n\n` +
-                        `**User:** <@${data.userId}>\n` +
-                        `**AQW Username:** [${data.ign}](${data.charPageUrl})\n` +
-                        `**Verification Type:** ${data.type}\n` +
-                        `**Role Given:** <@&${data.roleId}>\n` +
-                        `**Nickname Updated:** \`${data.ign}\``)
-          .setColor('#2ecc71')
-          .setTimestamp();
-
-        // Pinalitan ang log message para maging "Approved" na walang buttons para hindi na ma-click ulit
         const userAvatar = interaction.message.embeds?.[0]?.thumbnail?.url || STANDARD_BANNER_URL;
         const approvedContainer = {
           type: 17,
@@ -1266,17 +1252,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
             },
             {
               type: 10,
-              content: `✅ **Verification Request Approved**\n\n` +
-                       `**User:** <@${data.userId}>\n` +
-                       `**AQW Username:** [${data.ign}](${data.charPageUrl})\n` +
-                       `**Verification Type:** ${data.type}\n` +
-                       `**Approved By:** ${interaction.user}`
+              content: `📋 **Verification Approved**\n\n` +
+                       `**User** | **AQW Username** | **Verification Type**\n` +
+                       `<@${data.userId}> | [${data.ign}](${data.charPageUrl}) | ${data.type}\n\n` +
+                       `Approved by ${interaction.user} • <t:${Math.floor(Date.now() / 1000)}:R>`
             }
           ]
         };
 
         await interaction.update({ components: [approvedContainer], flags: MessageFlags.IsComponentsV2 });
-        await interaction.channel.send({ embeds: [approvedEmbed] });
 
         if (member) {
           await member.send(`🎉 Your verification for **${interaction.guild.name}** has been **Approved**! Your nickname has been updated to **${data.ign}** and you have been given the role.`).catch(() => {});
@@ -1317,20 +1301,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return interaction.followUp({ content: '⚠️ Request data not found.', ephemeral: true });
       }
 
+      // Sine-save ang reason para ma-block ang user, pero kapag nag-submit sila ulit ng form, matatanggal ito para pwedeng mag-verify ulit (one-at-a-time fix)
       userRejectionReasons.set(data.userId, reason);
 
-      const rejectedEmbed = new EmbedBuilder()
-        .setTitle('❌ Verification Rejected')
-        .setDescription(`Rejected by ${interaction.user}\n\n` +
-                      `**User:** <@${data.userId}>\n` +
-                      `**AQW Username:** [${data.ign}](${data.charPageUrl})\n` +
-                      `**Verification Type:** ${data.type}\n` +
-                      `**Status:** Rejected\n` +
-                      `**Reason:** ${reason}`)
-        .setColor('#e74c3c')
-        .setTimestamp();
-
-      // Dito natin binabago ang log message para maging "Rejected" status card at tinatanggal ang mga buttons
       const userAvatar = interaction.message.embeds?.[0]?.thumbnail?.url || STANDARD_BANNER_URL;
       const rejectedContainer = {
         type: 17,
@@ -1342,24 +1315,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
           },
           {
             type: 10,
-            content: `❌ **Verification Request Rejected**\n\n` +
-                     `**User:** <@${data.userId}>\n` +
-                     `**AQW Username:** [${data.ign}](${data.charPageUrl})\n` +
-                     `**Verification Type:** ${data.type}\n` +
-                     `**Rejected By:** ${interaction.user}\n` +
-                     `**Status:** Rejected\n` +
-                     `**Reason:** ${reason}`
+            content: `📋 **Verification Rejected**\n\n` +
+                     `**User** | **AQW Username** | **Verification Type**\n` +
+                     `<@${data.userId}> | [${data.ign}](${data.charPageUrl}) | ${data.type}\n\n` +
+                     `**Rejection Reason**\n` +
+                     `${reason}\n\n` +
+                     `Rejected by ${interaction.user} • <t:${Math.floor(Date.now() / 1000)}:R>`
           }
         ]
       };
 
       await interaction.editReply({ components: [rejectedContainer], flags: MessageFlags.IsComponentsV2 });
-      await interaction.channel.send({ embeds: [rejectedEmbed] });
 
       try {
         const member = await interaction.guild.members.fetch(data.userId).catch(() => null);
         if (member) {
-          await member.send(`❌ Your verification for **${interaction.guild.name}** was **Rejected**. \n**Reason:** ${reason}\n\nYou may now address this issue and apply for verification again.`).catch(() => {});
+          await member.send(`❌ Your verification for **${interaction.guild.name}** was **Rejected**. \n**Reason:** ${reason}\n\nPlease address this reason and attempt to verify again.`).catch(() => {});
         }
       } catch {}
 
@@ -1840,7 +1811,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         const cfg = guildSettings.get(interaction.guild.id) || {};
-        
+         
         ticketCounter += 1;
         const formattedNum = String(ticketCounter).padStart(4, '0');
         const chName = `ticket-${formattedNum}`;
@@ -1854,7 +1825,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         const isServerTicket = ticketType === 'server_ticket';
-        
+         
         let permissionOverwrites = [
           { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages] },
           { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
@@ -1893,7 +1864,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const validRoleIds = pingRoleIds.filter(id => id && /^\d+$/.test(id));
         const helperRolePings = validRoleIds.length > 0 ? validRoleIds.map(id => `<@&${id}>`).join(' ') : '@Staff';
-        
+         
         await ticketChannel.send({ 
           content: `${helperRolePings} assistance requested!`,
           allowedMentions: validRoleIds.length > 0 ? { roles: validRoleIds } : { parse: ['users', 'roles'] }
@@ -2148,7 +2119,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
 
         if (!member) return await interaction.reply({ content: '❌ User not found in this server.', ephemeral: true });
-        
+         
         await member.kick(reason).catch(err => {
           return interaction.reply({ content: `❌ Failed to kick user: ${err.message}`, ephemeral: true });
         });
@@ -2529,7 +2500,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       if (commandName === 'setup-stats') {
         await interaction.deferReply({ ephemeral: true });
         const channel = options.getChannel('channel');
-        
+         
         const statsEmbed = new EmbedBuilder()
           .setTitle(`Ticket stats`)
           .setDescription(
@@ -2618,7 +2589,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         for (let i = 1; i <= 7; i++) {
           const role = options.getRole(`role${i}`);
           const desc = options.getString(`desc${i}`);
-          
+           
           if (role && desc) {
             if (usedRoleIds.has(role.id)) continue;
             usedRoleIds.add(role.id);
@@ -2904,7 +2875,7 @@ async function executeTicketCompletion(interaction, ticketData, completedBosses)
 
     activeTickets.delete(interaction.channel.id);
     setTimeout(() => {
-      interaction.channel.delete().catch(() => {});
+      interaction.channel.id.delete().catch(() => {});
     }, 5000);
   } catch (err) {
     console.error('Error during ticket completion execution:', err);
