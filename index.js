@@ -751,22 +751,22 @@ const commands = [
     .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false))
     .addStringOption(opt => opt.setName('emoji1').setDescription('Emoji for Button 1').setRequired(false))
     .addRoleOption(opt => opt.setName('role2').setDescription('Role 2').setRequired(false))
-    .addStringOption(opt => opt.setName('desc2').setDescription('Description for Role 2').setRequired(true))
+    .addStringOption(opt => opt.setName('desc2').setDescription('Description for Role 2').setRequired(false))
     .addStringOption(opt => opt.setName('emoji2').setDescription('Emoji for Button 2').setRequired(false))
     .addRoleOption(opt => opt.setName('role3').setDescription('Role 3').setRequired(false))
-    .addStringOption(opt => opt.setName('desc3').setDescription('Description for Role 3').setRequired(true))
+    .addStringOption(opt => opt.setName('desc3').setDescription('Description for Role 3').setRequired(false))
     .addStringOption(opt => opt.setName('emoji3').setDescription('Emoji for Button 3').setRequired(false))
     .addRoleOption(opt => opt.setName('role4').setDescription('Role 4').setRequired(false))
-    .addStringOption(opt => opt.setName('desc4').setDescription('Description for Role 4').setRequired(true))
+    .addStringOption(opt => opt.setName('desc4').setDescription('Description for Role 4').setRequired(false))
     .addStringOption(opt => opt.setName('emoji4').setDescription('Emoji for Button 4').setRequired(false))
     .addRoleOption(opt => opt.setName('role5').setDescription('Role 5').setRequired(false))
-    .addStringOption(opt => opt.setName('desc5').setDescription('Description for Role 5').setRequired(true))
+    .addStringOption(opt => opt.setName('desc5').setDescription('Description for Role 5').setRequired(false))
     .addStringOption(opt => opt.setName('emoji5').setDescription('Emoji for Button 5').setRequired(false))
     .addRoleOption(opt => opt.setName('role6').setDescription('Role 6').setRequired(false))
-    .addStringOption(opt => opt.setName('desc6').setDescription('Description for Role 6').setRequired(true))
+    .addStringOption(opt => opt.setName('desc6').setDescription('Description for Role 6').setRequired(false))
     .addStringOption(opt => opt.setName('emoji6').setDescription('Emoji for Button 6').setRequired(false))
     .addRoleOption(opt => opt.setName('role7').setDescription('Role 7').setRequired(false))
-    .addStringOption(opt => opt.setName('desc7').setDescription('Description for Role 7').setRequired(true))
+    .addStringOption(opt => opt.setName('desc7').setDescription('Description for Role 7').setRequired(false))
     .addStringOption(opt => opt.setName('emoji7').setDescription('Emoji for Button 7').setRequired(false)),
 
   new SlashCommandBuilder()
@@ -981,14 +981,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return interaction.reply({ content: '🎉 Successfully entered the giveaway! Good luck!', ephemeral: true });
     }
 
-    // --- VERIFICATION BUTTON TRIGGERS (WITH EPHEMERAL REJECTION REASON DISPLAY) ---
+    // --- VERIFICATION BUTTON TRIGGERS (WITH EPHEMERAL REJECTION MESSAGE) ---
     if (interaction.isButton() && interaction.customId.startsWith('btn_verify_guest_')) {
-      // Dito natin chinecheck kung may nakatalang rejection reason. Kung meron, ipapakita ito sa ephemeral message sa user para malaman nila kung bakit sila na-reject, tapos pwede na silang mag-apply ulit kapag clinick ulit nila.
       if (userRejectionReasons.has(interaction.user.id)) {
         const reason = userRejectionReasons.get(interaction.user.id);
-        userRejectionReasons.delete(interaction.user.id); // Tatanggalin na para makapag-submit na sila ng bagong form ngayon
+        userRejectionReasons.delete(interaction.user.id); // Alisin para pwedeng mag-apply ulit
         return interaction.reply({ 
-          content: `❌ **Your previous verification was rejected.**\n\n**Reason:** ${reason}\n\nPlease address the reason above and submit your verification form again.`, 
+          content: `❌ **Your previous verification was rejected:**\n\n**Reason:** ${reason}\n\nPlease address the reason above and submit your verification form again.`, 
           ephemeral: true 
         });
       }
@@ -1031,9 +1030,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isButton() && interaction.customId.startsWith('btn_verify_member_')) {
       if (userRejectionReasons.has(interaction.user.id)) {
         const reason = userRejectionReasons.get(interaction.user.id);
-        userRejectionReasons.delete(interaction.user.id); // Tatanggalin para makapag-apply ulit
+        userRejectionReasons.delete(interaction.user.id); // Alisin para pwedeng mag-apply ulit
         return interaction.reply({ 
-          content: `❌ **Your previous verification was rejected.**\n\n**Reason:** ${reason}\n\nPlease address the reason above and submit your verification form again.`, 
+          content: `❌ **Your previous verification was rejected:**\n\n**Reason:** ${reason}\n\nPlease address the reason above and submit your verification form again.`, 
           ephemeral: true 
         });
       }
@@ -2599,7 +2598,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
 
         const title = options.getString('title');
-        const description = options.getString('description').replace(/\\n/g, '\n');
+        const description = options.getString('description');
         const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
 
         const sections = [];
