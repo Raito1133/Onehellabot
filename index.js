@@ -849,13 +849,16 @@ client.once(Events.ClientReady, async () => {
   await registerCommands();
 });
 
-// --- WELCOME & BOOST EVENT LISTENERS ---
+// --- WELCOME & BOOST EVENT LISTENERS (FIXED WITH HARDCODED CHANNEL ID) ---
 client.on(Events.GuildMemberAdd, async (member) => {
   if (member.guild.id !== GUILD_ID) return;
+  
+  // Direktang naka-hardcode ang iyong welcome channel ID para sigurado kahit mag-restart ang bot
+  const FIXED_WELCOME_CHANNEL_ID = '1529491496187724017';
   const cfg = guildSettings.get(member.guild.id) || {};
-  if (!cfg.welcomeChannelId) return;
+  const channelId = cfg.welcomeChannelId || FIXED_WELCOME_CHANNEL_ID;
 
-  const channel = member.guild.channels.cache.get(cfg.welcomeChannelId);
+  const channel = member.guild.channels.cache.get(channelId);
   if (!channel) return;
 
   const welcomeData = cfg.welcomeData || {
@@ -985,7 +988,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isButton() && interaction.customId.startsWith('btn_verify_guest_')) {
       if (userRejectionReasons.has(interaction.user.id)) {
         const reason = userRejectionReasons.get(interaction.user.id);
-        userRejectionReasons.delete(interaction.user.id); // Alisin para pwedeng mag-apply ulit
+        userRejectionReasons.delete(interaction.user.id); 
         return interaction.reply({ 
           content: `❌ **Your previous verification was rejected:**\n\n**Reason:** ${reason}\n\nPlease address the reason above and submit your verification form again.`, 
           ephemeral: true 
@@ -1030,7 +1033,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (interaction.isButton() && interaction.customId.startsWith('btn_verify_member_')) {
       if (userRejectionReasons.has(interaction.user.id)) {
         const reason = userRejectionReasons.get(interaction.user.id);
-        userRejectionReasons.delete(interaction.user.id); // Alisin para pwedeng mag-apply ulit
+        userRejectionReasons.delete(interaction.user.id); 
         return interaction.reply({ 
           content: `❌ **Your previous verification was rejected:**\n\n**Reason:** ${reason}\n\nPlease address the reason above and submit your verification form again.`, 
           ephemeral: true 
