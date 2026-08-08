@@ -874,16 +874,16 @@ client.on(Events.GuildMemberAdd, async (member) => {
         type: 10,
         content: `**Welcome to ${member.guild.name}!**\n\n` +
                  `Hey there, <@${member.id}>! We are thrilled to have you here.\n\n` +
-                 `🔓 **Get Verified to Unlock the Server!**\n` +
+                 ` **Get Verified to Unlock the Server!**\n` +
                  `You currently have access to:\n\n` +
-                 `📍 **Read through our rule and community guidelines.** (<#1531294593780416743>)\n` +
-                 `📍 **Head over to <#1531294593780416743> to get Verified.**\n\n` +
+                 ` **Read through our rule and community guidelines.** (<#1529492085848412303>)\n` +
+                 ` **Head over to <#1531294593780416743> to get Verified.**\n\n` +
                  `You'll be asked to provide the following details:\n` +
-                 `> **AQW IGN:**\n` +
+                 `> **AQW USERNAME:**\n` +
                  `> **GUILD:**\n\n` +
-                 `📍 **Grab your roles in <#1529492494583337237> to customize your profile.**\n` +
-                 `📍 **Chat and hang out in <#1371775027258855467>.**\n\n` +
-                 `Once verified, you'll have full access! If you're stuck, just mention a mod at <#1371775027258855467>.`
+                 ` **Grab your roles in <#1529492494583337237> to customize your profile.**\n` +
+                 ` **Chat and hang out in <#1371775027258855467>.**\n\n` +
+                 `Once verified, you'll have full access!`
       }
     ]
   };
