@@ -981,9 +981,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return interaction.reply({ content: '🎉 Successfully entered the giveaway! Good luck!', ephemeral: true });
     }
 
-    // --- VERIFICATION BUTTON TRIGGERS (WITH RE-VERIFY ALLOWED) ---
+    // --- VERIFICATION BUTTON TRIGGERS (WITH EPHEMERAL REJECTION REASON DISPLAY) ---
     if (interaction.isButton() && interaction.customId.startsWith('btn_verify_guest_')) {
-      userRejectionReasons.delete(interaction.user.id);
+      // Dito natin chinecheck kung may nakatalang rejection reason. Kung meron, ipapakita ito sa ephemeral message sa user para malaman nila kung bakit sila na-reject, tapos pwede na silang mag-apply ulit kapag clinick ulit nila.
+      if (userRejectionReasons.has(interaction.user.id)) {
+        const reason = userRejectionReasons.get(interaction.user.id);
+        userRejectionReasons.delete(interaction.user.id); // Tatanggalin na para makapag-submit na sila ng bagong form ngayon
+        return interaction.reply({ 
+          content: `❌ **Your previous verification was rejected.**\n\n**Reason:** ${reason}\n\nPlease address the reason above and submit your verification form again.`, 
+          ephemeral: true 
+        });
+      }
 
       const roleId = interaction.customId.replace('btn_verify_guest_', '');
       const modal = new ModalBuilder()
@@ -1021,7 +1029,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (interaction.isButton() && interaction.customId.startsWith('btn_verify_member_')) {
-      userRejectionReasons.delete(interaction.user.id);
+      if (userRejectionReasons.has(interaction.user.id)) {
+        const reason = userRejectionReasons.get(interaction.user.id);
+        userRejectionReasons.delete(interaction.user.id); // Tatanggalin para makapag-apply ulit
+        return interaction.reply({ 
+          content: `❌ **Your previous verification was rejected.**\n\n**Reason:** ${reason}\n\nPlease address the reason above and submit your verification form again.`, 
+          ephemeral: true 
+        });
+      }
 
       const roleId = interaction.customId.replace('btn_verify_member_', '');
       const modal = new ModalBuilder()
