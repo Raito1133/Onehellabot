@@ -11,7 +11,8 @@ const {
   Client, GatewayIntentBits, Partials, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
   StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ModalBuilder, TextInputBuilder, TextInputStyle,
   PermissionFlagsBits, REST, Routes, SlashCommandBuilder, ChannelType, AttachmentBuilder,
-  AuditLogEvent, OverwriteType, MessageFlagsfunction defer(...)
+  AuditLogEvent, OverwriteType, MessageFlags
+} = require('discord.js');
 function send(...)
 function noteError(...)
 } = require('discord.js');
@@ -2107,33 +2108,39 @@ async function musicGet(i) {
   return q;
 }
 
+
 H.play = async i => {
   const bad = musicNeeds(i);
   if (bad) return send(i, bad);
 
   await defer(i, false);
 
+  let timeoutId;
   try {
     const query = i.options.getString('query')?.trim();
-
     if (!query) return send(i, '❌ Please provide a song name or link.');
 
     const tracks = await Promise.race([
       musicResolve(query, i.user.id),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Music search timed out. Please try again later.')), 25000)
-      )
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error('Music search timed out. YouTube may be rate-limiting the bot (HTTP 429). Please wait a little and try again.')),
+          20000
+        );
+      })
     ]);
 
     if (!tracks.length) return send(i, '❌ Nothing found.');
 
     const q = await musicGet(i);
     const wasEmpty = q.queue.length === 0;
-
     q.queue.push(...tracks);
 
     if (wasEmpty) {
-      await musicNext(i.guild.id);
+      musicNext(i.guild.id).catch(e => {
+        noteError(e);
+        q.text?.send(`❌ Music playback failed: ${trunc(e.message, 200)}`).catch(() => {});
+      });
     }
 
     return send(i, {
@@ -2146,16 +2153,14 @@ H.play = async i => {
             )
       ]
     });
-
   } catch (e) {
     noteError(e);
-
-    return send(
-      i,
-      `❌ ${trunc(e.message, 300)}`
-    );
+    return send(i, `❌ ${trunc(e.message, 300)}`);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 };
+
 
 H.pause = withQ((i, q) => { q.player.pause(); return send(i, '⏸️ Paused.', false); });
 H.resume = withQ((i, q) => { q.player.unpause(); return send(i, '▶️ Resumed.', false); });
