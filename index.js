@@ -2077,10 +2077,21 @@ async function musicNext(gid) {
   }
 }
 const musicEmbed = (title, t) => { const e = emb(title, `**[${trunc(t.title, 200)}](${t.url || 'https://discord.com'})**\n${t.duration ? `⏱️ ${clock(t.duration)} • ` : ''}Requested by <@${t.by}>`, COLORS.main); if (t.thumb) e.setThumbnail(t.thumb); return e; };
-function musicNeeds(i) {
-  if (!Voice || !playdl) return '❌ Music isn\'t set up on this bot yet. The owner must run: `npm i @discordjs/voice @snazzah/davey play-dl ffmpeg-static opusscript libsodium-wrappers` and restart.';
-  if (!i.member.voice?.channel) return '❌ Join a voice channel first.';
-  const q = musicQ.get(i.guild.id); if (q && q.channelId !== i.member.voice.channelId) return `❌ I'm already playing in <#${q.channelId}>.`;
+unction musicNeeds(i) {
+  if (!Voice || !playdl) {
+    return '❌ Music isn\'t set up on this bot yet. The owner must run: `npm i @discordjs/voice @snazzah/davey play-dl ffmpeg-static opusscript libsodium-wrappers` and restart.';
+  }
+
+  if (!i.member.voice?.channel) {
+    return '❌ Join a voice channel first.';
+  }
+
+  const q = musicQ.get(i.guild.id);
+
+  if (q && q.channelId !== i.member.voice.channelId) {
+    return `❌ I'm already playing in <#${q.channelId}>.`;
+  }
+
   return null;
 }
 async function musicGet(i) {
