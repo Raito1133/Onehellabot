@@ -11,7 +11,9 @@ const {
   Client, GatewayIntentBits, Partials, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
   StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ModalBuilder, TextInputBuilder, TextInputStyle,
   PermissionFlagsBits, REST, Routes, SlashCommandBuilder, ChannelType, AttachmentBuilder,
-  AuditLogEvent, OverwriteType, MessageFlags
+  AuditLogEvent, OverwriteType, MessageFlagsfunction defer(...)
+function send(...)
+function noteError(...)
 } = require('discord.js');
 const http = require('http');
 const fs = require('fs');
@@ -2104,23 +2106,57 @@ async function musicGet(i) {
   });
   return q;
 }
+
 H.play = async i => {
-  const bad = musicNeeds(i); if (bad) return send(i, bad);
+  const bad = musicNeeds(i);
+  if (bad) return send(i, bad);
+
   await defer(i, false);
+
   try {
-    const tracks = await musicResolve(i.options.getString('query').trim(), i.user.id);
+    const query = i.options.getString('query')?.trim();
+
+    if (!query) return send(i, '❌ Please provide a song name or link.');
+
+    const tracks = await Promise.race([
+      musicResolve(query, i.user.id),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Music search timed out. Please try again later.')), 25000)
+      )
+    ]);
+
     if (!tracks.length) return send(i, '❌ Nothing found.');
-    const q = await musicGet(i), wasEmpty = q.queue.length === 0;
+
+    const q = await musicGet(i);
+    const wasEmpty = q.queue.length === 0;
+
     q.queue.push(...tracks);
-    if (wasEmpty) musicNext(i.guild.id);
-    return send(i, { embeds: [tracks.length > 1 ? emb('➕ Added to queue', `Added **${tracks.length}** tracks.`, COLORS.ok) : musicEmbed(wasEmpty ? '▶️ Starting' : `➕ Added to queue (#${q.queue.length})`, tracks[0])] });
-  } catch (e) { noteError(e); return send(i, `❌ ${trunc(e.message, 300)}`); }
+
+    if (wasEmpty) {
+      await musicNext(i.guild.id);
+    }
+
+    return send(i, {
+      embeds: [
+        tracks.length > 1
+          ? emb('➕ Added to queue', `Added **${tracks.length}** tracks.`, COLORS.ok)
+          : musicEmbed(
+              wasEmpty ? '▶️ Starting' : `➕ Added to queue (#${q.queue.length})`,
+              tracks[0]
+            )
+      ]
+    });
+
+  } catch (e) {
+    noteError(e);
+
+    return send(
+      i,
+      `❌ ${trunc(e.message, 300)}`
+    );
+  }
 };
-const withQ = fn => async i => {
-  const bad = musicNeeds(i); if (bad) return send(i, bad);
-  const q = musicQ.get(i.guild.id); if (!q) return send(i, '❌ Nothing is playing.');
-  return fn(i, q);
-};
+
 H.pause = withQ((i, q) => { q.player.pause(); return send(i, '⏸️ Paused.', false); });
 H.resume = withQ((i, q) => { q.player.unpause(); return send(i, '▶️ Resumed.', false); });
 H.skip = withQ((i, q) => { if (!q.current) return send(i, '❌ Nothing to skip.'); const t = q.current; if (q.loop === 'track') q.loop = 'off'; q.player.stop(true); return send(i, `⏭️ Skipped **${trunc(t.title, 80)}**.`, false); });
