@@ -13,7 +13,6 @@ const {
   PermissionFlagsBits, REST, Routes, SlashCommandBuilder, ChannelType, AttachmentBuilder,
   AuditLogEvent, OverwriteType, MessageFlags
 } = require('discord.js');
-
 const http = require('http');
 const fs = require('fs');
 const util = require('util');
@@ -1988,11 +1987,14 @@ async function scheduleTick() {
 // ---------------------------------------------------------------------
 //  5. MUSIC   /play /pause /resume /skip /stop /queue /nowplaying /volume /loop
 //     Needs:  npm i @discordjs/voice @snazzah/davey play-dl ffmpeg-static opusscript libsodium-wrappers
-//     Works with: YouTube links/playlists, YouTube search (song name), SoundCloud links,
+//     Best YouTube reliability: also install the `yt-dlp` program on your host (optional, auto-detected).
+//         - set YTDLP_PATH if it is not on PATH, YTDLP_COOKIES=/path/cookies.txt if YouTube asks to sign in
+//     Works with: YouTube links/playlists, song names (YouTube search), SoundCloud links,
 //                 Spotify track links (matched on YouTube), direct .mp3/.ogg/.wav links.
 //     Optional env: SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_REFRESH_TOKEN (Spotify albums/playlists)
-//                   YT_COOKIE (helps when YouTube blocks the server)
+//                   YT_COOKIE (play-dl cookie, helps when YouTube blocks the server)
 // ---------------------------------------------------------------------
+const cp = require('child_process');
 let Voice = null, playdl = null;
 try { Voice = require('@discordjs/voice'); } catch (e) { console.warn('[music] @discordjs/voice not installed — music disabled.'); }
 try {
@@ -2000,8 +2002,13 @@ try {
   const tok = {};
   if (process.env.YT_COOKIE) tok.youtube = { cookie: process.env.YT_COOKIE };
   if (process.env.SPOTIFY_CLIENT_ID) tok.spotify = { client_id: process.env.SPOTIFY_CLIENT_ID, client_secret: process.env.SPOTIFY_CLIENT_SECRET, refresh_token: process.env.SPOTIFY_REFRESH_TOKEN, market: 'PH' };
-  if (Object.keys(tok).length) playdl.setToken(tok).catch?.(() => {});
-} catch (e) { console.warn('[music] play-dl not installed — music disabled.'); }
+  if (Object.keys(tok).length) Promise.resolve(playdl.setToken(tok)).catch(() => {});
+} catch (e) { console.warn('[music] play-dl not installed — falling back to yt-dlp only if available.'); }
+const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
+let hasYtdlp = false;
+try { hasYtdlp = cp.spawnSync(YTDLP, ['--version'], { timeout: 8000 }).status === 0; } catch (e) { hasYtdlp = false; }
+console.log(`[music] voice: ${!!Voice} • play-dl: ${!!playdl} • yt-dlp: ${hasYtdlp}`);
+const ytdlpBase = () => ['--no-warnings', '-q', ...(process.env.YTDLP_COOKIES ? ['--cookies', process.env.YTDLP_COOKIES] : [])];
 
 def('play', '🎵 Play a song (name, YouTube/Spotify/SoundCloud link, or direct link)', null, [S('query', 'Song name or link', true)]);
 def('pause', '⏸️ Pause the music');
@@ -2017,9 +2024,28 @@ const musicQ = new Map();
 const clock = s => { s = Math.max(0, Math.floor(s || 0)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? `${h}:${String(m).padStart(2, '0')}` : `${m}`) + `:${String(x).padStart(2, '0')}`; };
 const unHtml = s => (s || '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, '\'').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
 const ytTrack = (v, by) => ({ title: v.title || 'Unknown', url: v.url, duration: v.durationInSec || 0, thumb: v.thumbnails?.[v.thumbnails.length - 1]?.url || v.thumbnails?.[0]?.url, by });
+const AUDIO_FILE_RE = /\.(mp3|ogg|oga|wav|flac|m4a|aac|opus|webm)(\?|$)/i;
+
+// ---- yt-dlp helpers (most reliable for YouTube) ----
+function ytdlpJson(args) {
+  return new Promise((resolve, reject) => {
+    cp.execFile(YTDLP, [...ytdlpBase(), '-J', ...args], { maxBuffer: 64 * 1024 * 1024, timeout: 30000 }, (err, out, errOut) => {
+      if (err) return reject(new Error(trunc(String(errOut || err.message).split('\n').filter(Boolean).pop() || 'yt-dlp failed', 200)));
+      try { resolve(JSON.parse(out)); } catch (e) { reject(new Error('yt-dlp returned invalid data.')); }
+    });
+  });
+}
+async function ytdlpResolve(query, by) {
+  const isUrl = /^https?:\/\//i.test(query), playlistOnly = isUrl && /(\/playlist|[?&]list=)/.test(query) && !/[?&]v=/.test(query);
+  const j = await ytdlpJson([...(playlistOnly ? ['--flat-playlist'] : ['--no-playlist', '--flat-playlist']), isUrl ? query : `ytsearch1:${query}`]);
+  const one = e => ({ title: e.title || 'Unknown', url: e.webpage_url || (e.url && /^https?:/.test(e.url) ? e.url : `https://www.youtube.com/watch?v=${e.id}`), duration: e.duration || 0, thumb: e.thumbnail || e.thumbnails?.[e.thumbnails.length - 1]?.url, by });
+  if (j.entries) { const list = j.entries.filter(Boolean).slice(0, 100).map(one); if (!list.length) throw new Error('No results found.'); return isUrl ? list : [list[0]]; }
+  return [one(j)];
+}
 
 async function spotifyQueries(url) {
   try {
+    if (!playdl) throw 0;
     const sp = await playdl.spotify(url);
     const name = t => `${t.name} ${(t.artists || []).map(a => a.name).join(' ')}`;
     if (sp.type === 'track') return [name(sp)];
@@ -2033,7 +2059,12 @@ async function spotifyQueries(url) {
   throw new Error('Spotify albums/playlists need SPOTIFY_CLIENT_ID / SECRET / REFRESH_TOKEN set. Single track links work without them.');
 }
 async function musicResolve(query, by) {
-  if (!/^https?:\/\//i.test(query)) {
+  const isUrl = /^https?:\/\//i.test(query);
+  if (isUrl && /open\.spotify\.com|spotify\.link/i.test(query)) return (await spotifyQueries(query)).map(q => ({ title: q, query: q, duration: 0, by }));
+  if (isUrl && AUDIO_FILE_RE.test(query)) return [{ title: decodeURIComponent(query.split('?')[0].split('/').pop() || query), url: query, direct: true, duration: 0, by }];
+  if (hasYtdlp) return ytdlpResolve(query, by);
+  if (!playdl) throw new Error('No music engine available (install play-dl or yt-dlp).');
+  if (!isUrl) {
     const r = await playdl.search(query, { limit: 1, source: { youtube: 'video' } });
     if (!r[0]) throw new Error('No results found.');
     return [ytTrack(r[0], by)];
@@ -2042,11 +2073,19 @@ async function musicResolve(query, by) {
   if (kind === 'yt_video') return [ytTrack((await playdl.video_basic_info(query)).video_details, by)];
   if (kind === 'yt_playlist') { const pl = await playdl.playlist_info(query, { incomplete: true }); return (await pl.all_videos()).slice(0, 100).map(v => ytTrack(v, by)); }
   if (kind === 'so_track') { const s = await playdl.soundcloud(query); return [{ title: s.name, url: s.url, duration: s.durationInSec, thumb: s.thumbnail, by }]; }
-  if (typeof kind === 'string' && kind.startsWith('sp_')) return (await spotifyQueries(query)).map(q => ({ title: q, query: q, duration: 0, by }));
   return [{ title: decodeURIComponent(query.split('?')[0].split('/').pop() || query), url: query, direct: true, duration: 0, by }];
 }
-async function trackResource(t) {
+async function trackResource(t, q) {
   if (t.direct) return Voice.createAudioResource(t.url, { inlineVolume: true });
+  if (hasYtdlp) {
+    if (!t.url) Object.assign(t, (await ytdlpResolve(t.query, t.by))[0]);
+    const proc = cp.spawn(YTDLP, [...ytdlpBase(), '-f', 'bestaudio/best', '--no-playlist', '-o', '-', t.url], { stdio: ['ignore', 'pipe', 'pipe'] });
+    let err = '', got = false; proc.stderr.on('data', d => { err += d; }); proc.stdout.once('data', () => { got = true; });
+    proc.on('close', code => { if (code && !got && q?.current === t) q.text?.send(`⚠️ yt-dlp: ${trunc(err.trim().split('\n').pop() || 'stream failed', 200)}`).catch(() => {}); });
+    proc.on('error', noteError);
+    const res = Voice.createAudioResource(proc.stdout, { inputType: Voice.StreamType.Arbitrary, inlineVolume: true });
+    res.proc = proc; return res;
+  }
   if (!t.url) {
     const r = await playdl.search(t.query, { limit: 1, source: { youtube: 'video' } });
     if (!r[0]) throw new Error(`No YouTube match for "${t.query}"`);
@@ -2058,18 +2097,21 @@ async function trackResource(t) {
 function musicDestroy(gid) {
   const q = musicQ.get(gid); if (!q) return;
   clearTimeout(q.idle); musicQ.delete(gid);
+  try { q.res?.proc?.kill(); } catch (e) { /* ignore */ }
   try { q.player.stop(true); } catch (e) { /* ignore */ }
   try { q.conn.destroy(); } catch (e) { /* ignore */ }
 }
 async function musicNext(gid) {
   const q = musicQ.get(gid); if (!q) return;
   clearTimeout(q.idle);
+  try { q.res?.proc?.kill(); } catch (e) { /* ignore */ }
   const t = q.queue[0];
-  if (!t) { q.current = null; q.idle = setTimeout(() => musicDestroy(gid), 120000); return; }
+  if (!t) { q.current = null; q.res = null; q.idle = setTimeout(() => musicDestroy(gid), 120000); return; }
   try {
-    const res = await trackResource(t);
+    q.current = t;
+    const res = await trackResource(t, q);
     res.volume?.setVolume(q.volume / 100);
-    q.res = res; q.current = t; q.player.play(res);
+    q.res = res; q.player.play(res);
     q.text?.send({ embeds: [musicEmbed('🎶 Now playing', t)], allowedMentions: { parse: [] } }).catch(() => {});
   } catch (e) {
     noteError(e); q.text?.send(`❌ Couldn't play **${trunc(t.title, 80)}**: ${trunc(e.message, 150)} — skipping.`).catch(() => {});
@@ -2078,14 +2120,10 @@ async function musicNext(gid) {
 }
 const musicEmbed = (title, t) => { const e = emb(title, `**[${trunc(t.title, 200)}](${t.url || 'https://discord.com'})**\n${t.duration ? `⏱️ ${clock(t.duration)} • ` : ''}Requested by <@${t.by}>`, COLORS.main); if (t.thumb) e.setThumbnail(t.thumb); return e; };
 function musicNeeds(i) {
-  if (!Voice || !playdl) return '❌ Music isn\'t set up on this bot yet. The owner must run: `npm i @discordjs/voice @snazzah/davey play-dl ffmpeg-static opusscript libsodium-wrappers` and restart.';
+  if (!Voice || (!playdl && !hasYtdlp)) return '❌ Music isn\'t set up on this bot yet. The owner must run: `npm i @discordjs/voice @snazzah/davey play-dl ffmpeg-static opusscript libsodium-wrappers` and restart.';
   if (!i.member.voice?.channel) return '❌ Join a voice channel first.';
-
   const q = musicQ.get(i.guild.id);
-  if (q && q.channelId !== i.member.voice.channelId) {
-    return `❌ I'm already playing in <#${q.channelId}>.`;
-  }
-
+  if (q && q.channelId !== i.member.voice.channelId) return `❌ I'm already playing in <#${q.channelId}>.`;
   return null;
 }
 async function musicGet(i) {
@@ -2093,7 +2131,7 @@ async function musicGet(i) {
   const vc = i.member.voice.channel;
   if (!vc.joinable || !vc.speakable) throw new Error('I need **Connect** and **Speak** permission in that voice channel.');
   const conn = Voice.joinVoiceChannel({ channelId: vc.id, guildId: i.guild.id, adapterCreator: i.guild.voiceAdapterCreator, selfDeaf: true });
-  await Voice.entersState(conn, Voice.VoiceConnectionStatus.Ready, 20000).catch(e => { conn.destroy(); throw new Error('Could not connect to the voice channel.'); });
+  await Voice.entersState(conn, Voice.VoiceConnectionStatus.Ready, 20000).catch(e => { conn.destroy(); throw new Error('Could not connect to the voice channel (update @discordjs/voice and install @snazzah/davey).'); });
   const player = Voice.createAudioPlayer({ behaviors: { noSubscriber: Voice.NoSubscriberBehavior.Play } });
   conn.subscribe(player);
   q = { conn, player, queue: [], current: null, res: null, loop: 'off', volume: 60, text: i.channel, channelId: vc.id, idle: null };
@@ -2103,68 +2141,36 @@ async function musicGet(i) {
     if (cur.loop === 'queue') cur.queue.push(cur.queue.shift()); else if (cur.loop !== 'track') cur.queue.shift();
     musicNext(i.guild.id);
   });
-  player.on('error', e => { noteError(e); });
+  player.on('error', e => noteError(e));
   conn.on(Voice.VoiceConnectionStatus.Disconnected, async () => {
     try { await Promise.race([Voice.entersState(conn, Voice.VoiceConnectionStatus.Signalling, 5000), Voice.entersState(conn, Voice.VoiceConnectionStatus.Connecting, 5000)]); }
     catch (e) { musicDestroy(i.guild.id); }
   });
   return q;
 }
-
-
 H.play = async i => {
-  const bad = musicNeeds(i);
-  if (bad) return send(i, bad);
-
+  const bad = musicNeeds(i); if (bad) return send(i, bad);
   await defer(i, false);
-
-  let timeoutId;
+  let timer;
   try {
-    const query = i.options.getString('query')?.trim();
-    if (!query) return send(i, '❌ Please provide a song name or link.');
-
+    const query = i.options.getString('query').trim();
     const tracks = await Promise.race([
       musicResolve(query, i.user.id),
-      new Promise((_, reject) => {
-        timeoutId = setTimeout(
-          () => reject(new Error('Music search timed out. YouTube may be rate-limiting the bot (HTTP 429). Please wait a little and try again.')),
-          20000
-        );
-      })
+      new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('Search timed out — YouTube may be rate-limiting the bot. Try again in a bit (or install yt-dlp).')), 30000); })
     ]);
-
     if (!tracks.length) return send(i, '❌ Nothing found.');
-
-    const q = await musicGet(i);
-    const wasEmpty = q.queue.length === 0;
+    const q = await musicGet(i), wasEmpty = q.queue.length === 0;
     q.queue.push(...tracks);
-
-    if (wasEmpty) {
-      musicNext(i.guild.id).catch(e => {
-        noteError(e);
-        q.text?.send(`❌ Music playback failed: ${trunc(e.message, 200)}`).catch(() => {});
-      });
-    }
-
-    return send(i, {
-      embeds: [
-        tracks.length > 1
-          ? emb('➕ Added to queue', `Added **${tracks.length}** tracks.`, COLORS.ok)
-          : musicEmbed(
-              wasEmpty ? '▶️ Starting' : `➕ Added to queue (#${q.queue.length})`,
-              tracks[0]
-            )
-      ]
-    });
-  } catch (e) {
-    noteError(e);
-    return send(i, `❌ ${trunc(e.message, 300)}`);
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
-  }
+    if (wasEmpty) musicNext(i.guild.id).catch(noteError);
+    return send(i, { embeds: [tracks.length > 1 ? emb('➕ Added to queue', `Added **${tracks.length}** tracks.`, COLORS.ok) : musicEmbed(wasEmpty ? '▶️ Starting' : `➕ Added to queue (#${q.queue.length})`, tracks[0])] });
+  } catch (e) { noteError(e); return send(i, `❌ ${trunc(e.message, 300)}`); }
+  finally { clearTimeout(timer); }
 };
-
-
+const withQ = fn => async i => {
+  const bad = musicNeeds(i); if (bad) return send(i, bad);
+  const q = musicQ.get(i.guild.id); if (!q) return send(i, '❌ Nothing is playing.');
+  return fn(i, q);
+};
 H.pause = withQ((i, q) => { q.player.pause(); return send(i, '⏸️ Paused.', false); });
 H.resume = withQ((i, q) => { q.player.unpause(); return send(i, '▶️ Resumed.', false); });
 H.skip = withQ((i, q) => { if (!q.current) return send(i, '❌ Nothing to skip.'); const t = q.current; if (q.loop === 'track') q.loop = 'off'; q.player.stop(true); return send(i, `⏭️ Skipped **${trunc(t.title, 80)}**.`, false); });
