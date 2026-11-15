@@ -13,9 +13,7 @@ const {
   PermissionFlagsBits, REST, Routes, SlashCommandBuilder, ChannelType, AttachmentBuilder,
   AuditLogEvent, OverwriteType, MessageFlags
 } = require('discord.js');
-function send(...)
-function noteError(...)
-} = require('discord.js');
+
 const http = require('http');
 const fs = require('fs');
 const util = require('util');
