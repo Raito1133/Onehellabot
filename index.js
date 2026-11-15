@@ -1,2854 +1,1733 @@
+/* =====================================================================
+   ALL-IN-ONE SERVER ADMIN BOT  (discord.js v14, Node 18+)
+   ENV:  DISCORD_TOKEN   (required)
+         BOT_OWNER_IDS   (optional, comma separated user IDs for /bot commands)
+         GUILD_ID        (optional, registers commands instantly in one server)
+         SUPPORT_URL     (optional, used by /support)
+         DATA_FILE       (optional, default ./data.json)
+   Prefix commands: !stick  (sticky message)   !unstick
+   ===================================================================== */
 const {
-  Client,
-  GatewayIntentBits,
-  Partials,
-  Events,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  StringSelectMenuBuilder,
-  StringSelectMenuOptionBuilder,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-  PermissionsBitField,
-  REST,
-  Routes,
-  SlashCommandBuilder,
-  ChannelType,
-  MessageFlags,
-  ActivityType
+  Client, GatewayIntentBits, Partials, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
+  StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ModalBuilder, TextInputBuilder, TextInputStyle,
+  PermissionFlagsBits, REST, Routes, SlashCommandBuilder, ChannelType, AttachmentBuilder,
+  AuditLogEvent, OverwriteType, MessageFlags
 } = require('discord.js');
 const http = require('http');
+const fs = require('fs');
+const util = require('util');
 
-// --- ⚠️ CONFIGURATION ⚠️ ---
-const GUILD_ID = '1371775026264670228'; // Server ID
-const ULTRA_HELPER_ROLE_ID = '1529499021884919858'; // Ultra Helper Role ID
-const HELPER_ROLE_ID = '1529499059596038285'; // Standard Helper / Farming Role ID
-const SUPPORT_ROLE_ID = '1529498802149392614'; // Support Role ID
-
-const TICKET_GUIDE_URL = 'https://discord.com'; 
-const STANDARD_BANNER_URL = 'https://i.pinimg.com/originals/5d/d8/0f/5dd80fe00a06651f3200aea753987f50.gif';
-
-const AQW_SERVERS = [
-  { label: 'Twilly', emoji: { id: '1534938699190763542', name: 'sadtwilly', animated: false } },
-  { label: 'Twig', emoji: { id: '1534938798545305711', name: 'twighappy', animated: false } },
-  { label: 'Artix', emoji: { id: '1534938821974556854', name: 'artixkek', animated: false } },
-  { label: 'Gravelyn', emoji: '⚔️' },
-  { label: 'Sir Ver', emoji: '⚔️' },
-  { label: 'Galanoth', emoji: '⚔️' },
-  { label: 'Yorumi', emoji: '⚔️' },
-  { label: 'Espada', emoji: '⚔️' },
-  { label: 'Sepulchure', emoji: { id: '1534938847518130247', name: 'toocloseSeppy', animated: false } },
-  { label: 'Safiria', emoji: '⚔️' },
-  { label: 'Swordhaven (EU)', emoji: '⚔️' },
-  { label: 'Alteon', emoji: '⚔️' },
-  { label: 'Yokai (SEA)', emoji: '⚔️' }
-];
+// --- CONFIGURATION ---
+const PREFIX = '!';
+const GUILD_ID = process.env.GUILD_ID || null;
+const OWNER_IDS = (process.env.BOT_OWNER_IDS || '').split(',').map(s => s.trim()).filter(Boolean);
+const SUPPORT_URL = process.env.SUPPORT_URL || 'https://discord.com';
+const DATA_FILE = process.env.DATA_FILE || './data.json';
+const START = Date.now();
+const EPH = MessageFlags.Ephemeral;
+const P = PermissionFlagsBits;
+const COLORS = { main: 0x5865F2, ok: 0x2ecc71, err: 0xe74c3c, warn: 0xf1c40f };
+const TEXTISH = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
+const VOICEISH = [ChannelType.GuildVoice, ChannelType.GuildStageVoice];
+const LOG_CATS = ['member', 'message', 'channel', 'role', 'voice', 'moderation', 'server', 'bot', 'webhook', 'security'];
+const DEFAULT_PRESENCE = { status: 'idle', activities: [{ name: 'Sindria On Top', type: 5 }] }; // status retained
 
 const client = new Client({
   intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildModeration,
+    GatewayIntentBits.GuildWebhooks, GatewayIntentBits.GuildVoiceStates, GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMessageReactions, GatewayIntentBits.MessageContent
   ],
-  partials: [Partials.Channel, Partials.Message]
+  partials: [Partials.Channel, Partials.Message, Partials.Reaction, Partials.User]
 });
 
-// --- IN-MEMORY DATA STORES ---
-const activeTickets = new Map();
-const helperPoints = new Map();
-const userRequestCounts = new Map();
-const guildSettings = new Map();
-const roleRewards = new Map();
-const tempTicketCache = new Map();
-const pendingVerifications = new Map();
-const userRejectionReasons = new Map();
-const activeGiveaways = new Map();
-const snipeCache = new Map(); // Store deleted messages for snipe command
+// --- PERSISTENT STORAGE (JSON file) ---
+let db = { global: {}, guilds: {} };
+try { if (fs.existsSync(DATA_FILE)) db = Object.assign(db, JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'))); } catch (e) { console.error('Failed to load data:', e); }
+db.global = Object.assign({ blacklist: { users: [], guilds: [] }, maintenance: false, presence: null, config: {}, reminders: [] }, db.global);
+db.guilds = db.guilds || {};
+let dirty = false;
+const save = () => { dirty = true; };
+setInterval(() => { if (!dirty) return; dirty = false; fs.writeFile(DATA_FILE, JSON.stringify(db), err => err && console.error(err)); }, 15000);
 
-let ticketCounter = 0;
-
-const globalStats = {
-  totalTicketsCompleted: 0,
-  totalPointsGiven: 0,
-  totalBossesSlain: 0
-};
-
-// --- SNIPE EVENT LISTENER ---
-client.on(Events.MessageDelete, (message) => {
-  if (!message.guild || message.guild.id !== GUILD_ID || message.author?.bot) return;
-  snipeCache.set(message.channel.id, {
-    content: message.content || '[No text content / Embed / Image]',
-    author: message.author,
-    image: message.attachments.first()?.proxyURL || null,
-    createdAt: message.createdAt
-  });
+const defaults = () => ({
+  settings: {}, welcome: {}, goodbye: {}, logs: { enabled: true, disabled: [] },
+  automod: { enabled: false, rules: {}, badwords: [], blacklistWords: [], blacklistUsers: [], whitelistRoles: [], whitelistUsers: [] },
+  security: { antiRaid: false, raidThreshold: 5, raidAction: 'lockdown', raidMode: false, minAccountDays: 0, accountAction: 'kick', antiBot: false, antiNuke: false, quarantineRole: null, quarantined: {}, trusted: [], verifyMode: null, verifyRole: null },
+  warnings: {}, warnSeq: 0, cases: [], tempbans: [],
+  xp: {}, levelRoles: {}, level: { enabled: true, multiplier: 1, announce: true, channel: null },
+  tickets: { counter: 0, open: {}, ratings: [], supportRole: null, category: null, logChannel: null, cooldowns: {} },
+  panels: {}, giveaways: {}, giveawayHistory: [],
+  apps: { counter: 0, questions: {}, roles: {}, list: {}, reviewChannel: null },
+  staff: {}, afk: {}, suggestions: {}, suggestSeq: 0, stickies: {}, backup: null, rules: '', mutedRole: null, activity: {},
+  tempVoice: { lobby: null, category: null, channels: {} }
 });
-
-// --- ⚙️ ORIGINAL CUSTOM TICKET PRESETS & BANNERS ---
-const TICKET_PRESETS = {
-  farming: { 
-    label: 'Farming Assistance', 
-    max: 6, 
-    points: 3, 
-    pingRoleIds: [HELPER_ROLE_ID],
-    bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961239598432368/6.png?ex=6a76078d&is=6a74b60d&hm=8f0ef43ee15c9a77eb4db7a93f72a13ed220524e73fa9bd105894b9e47e40208&=&format=webp&quality=lossless&width=2048&height=1024',
-    accentColor: 0xFDE37C 
-  },
-  ultra_weeklies: { 
-    label: 'Ultra Weeklies', 
-    max: 3, 
-    points: 3, 
-    pingRoleIds: [ULTRA_HELPER_ROLE_ID],
-    bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961237132050705/1.png?ex=6a76078d&is=6a74b60d&hm=c653e9de44bf6517cf997847ec6dbc9987387aed4dea2ea0823059f54f83a956&=&format=webp&quality=lossless&width=2048&height=1024',
-    accentColor: 0xFCDD62 
-  },
-  seven_man_dailies: { 
-    label: '7-Man Dailies', 
-    max: 6, 
-    points: 2, 
-    pingRoleIds: [ULTRA_HELPER_ROLE_ID, HELPER_ROLE_ID],
-    bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961238180626622/3.png?ex=6a76078d&is=6a74b60d&hm=5060584863f037151aada431ad3fba73ab18e43cf5ed3782182f5d9615b7de3d&=&format=webp&quality=lossless&width=2048&height=1024',
-    accentColor: 0xFCD748 
-  },
-  ultra_dailies: { 
-    label: 'Ultra Dailies', 
-    max: 3, 
-    points: 2, 
-    pingRoleIds: [ULTRA_HELPER_ROLE_ID],
-    bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961237597753374/2.png?ex=6a76078d&is=6a74b60d&hm=647568baa92f754e4dc7e20d48763f641a55322a976cd0d8b678093beab79343&=&format=webp&quality=lossless&width=2048&height=1024',
-    accentColor: 0xFBD12D 
-  },
-  server_ticket: { 
-    label: 'Server Ticket / Support', 
-    max: 2, 
-    points: 0, 
-    pingRoleIds: [SUPPORT_ROLE_ID],
-    bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961238772154518/4.png?ex=6a76078d&is=6a74b60d&hm=93e443b70e802d77bfe911218676839568cfa0a0361724e865be80233fdd415c&=&format=webp&quality=lossless&width=2048&height=1024',
-    accentColor: 0xFBCC13 
-  },
-  boss_help: { 
-    label: 'General Boss Help', 
-    max: 6, 
-    points: 2, 
-    pingRoleIds: [HELPER_ROLE_ID],
-    bannerUrl: STANDARD_BANNER_URL,
-    accentColor: 0x856A02 
-  },
-  spamming: { 
-    label: 'Spamming', 
-    max: 6, 
-    points: 1, 
-    pingRoleIds: [HELPER_ROLE_ID],
-    bannerUrl: 'https://media.discordapp.net/attachments/1258198097293611131/1534961239157899527/5.png?ex=6a76078d&is=6a74b60d&hm=b94b6cf605487010f0cd4f6f14a7e37603127fc8fdd6f333934947aab42f255f&=&format=webp&quality=lossless&width=2048&height=1024',
-    accentColor: 0xEFBF04 
-  }
+const G = id => {
+  if (!db.guilds[id]) db.guilds[id] = defaults();
+  else { const d = defaults(); for (const k of Object.keys(d)) if (db.guilds[id][k] === undefined) db.guilds[id][k] = d[k]; }
+  return db.guilds[id];
 };
 
-// --- LIVE STATS UPDATER ---
-async function updateLiveStatsMessage(guild) {
+// --- HELPERS ---
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const ts = ms => Math.floor(ms / 1000);
+const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const trunc = (s, n = 1000) => (s && s.length > n ? s.slice(0, n - 1) + '…' : s || '');
+const nl = s => (s || '').replace(/\\n/g, '\n');
+const hexColor = (s, d = COLORS.main) => { const m = /^#?([0-9a-f]{6})$/i.exec(s || ''); return m ? parseInt(m[1], 16) : d; };
+const emb = (title, desc, color = COLORS.main) => {
+  const e = new EmbedBuilder().setColor(color).setTimestamp();
+  if (title) e.setTitle(title);
+  if (desc) e.setDescription(String(desc).slice(0, 4000));
+  return e;
+};
+const errors = [];
+const noteError = e => { console.error(e); errors.push(`[${new Date().toISOString()}] ${e?.stack || e}`); if (errors.length > 20) errors.shift(); };
+const isOwner = id => OWNER_IDS.includes(id);
+const isAdmin = m => m.permissions.has(P.Administrator) || m.id === m.guild.ownerId || isOwner(m.id);
+const isStaff = m => {
+  const s = G(m.guild.id).settings;
+  return isAdmin(m) || m.permissions.has(P.ManageGuild) || [s.adminRole, s.modRole, s.staffRole].some(r => r && m.roles.cache.has(r));
+};
+const parseDuration = s => {
+  const m = String(s || '').trim().toLowerCase().match(/^(\d+)\s*(s|m|h|d|w)?$/);
+  if (!m) return null;
+  return +m[1] * { s: 1e3, m: 6e4, h: 36e5, d: 864e5, w: 6048e5 }[m[2] || 'm'];
+};
+const fmtDur = ms => {
+  const d = Math.floor(ms / 864e5), h = Math.floor(ms % 864e5 / 36e5), m = Math.floor(ms % 36e5 / 6e4), s = Math.floor(ms % 6e4 / 1e3);
+  return [d && `${d}d`, h && `${h}h`, m && `${m}m`, (s || (!d && !h && !m)) && `${s}s`].filter(Boolean).join(' ');
+};
+const send = (i, p, eph = true) => {
+  if (typeof p === 'string') p = { content: p };
+  if (i.deferred || i.replied) return i.editReply(p);
+  return i.reply({ ...p, flags: eph ? EPH : undefined });
+};
+const defer = (i, eph = true) => (i.deferred || i.replied) ? null : i.deferReply({ flags: eph ? EPH : undefined });
+const vars = (text, m) => (text || '')
+  .replace(/{user}/g, `<@${m.id}>`).replace(/{username}/g, m.user.username).replace(/{tag}/g, m.user.tag)
+  .replace(/{server}/g, m.guild.name).replace(/{membercount}/g, m.guild.memberCount);
+
+async function logEvent(guild, cat, title, desc, color = COLORS.main, fields = []) {
   try {
-    const cfg = guildSettings.get(guild.id) || {};
-    if (!cfg.statsChannelId || !cfg.statsMessageId) return;
-
-    const channel = guild.channels.cache.get(cfg.statsChannelId);
-    if (!channel) return;
-
-    const msg = await channel.messages.fetch(cfg.statsMessageId).catch(() => null);
-    if (!msg) return;
-
-    const statsEmbed = new EmbedBuilder()
-      .setTitle(`Ticket stats`)
-      .setDescription(
-        `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed.\n` +
-        `🏅 **\`${globalStats.totalPointsGiven}\`** points given out.\n\n` +
-        "The ticket status is updated automatically whenever a ticket is completed."
-      )
-      .setColor('#3498db')
-      .setTimestamp();
-
-    await msg.edit({ embeds: [statsEmbed] });
-  } catch (err) {
-    console.error('Failed to update live stats message:', err);
-  }
+    const g = G(guild.id);
+    if (!g.logs.enabled || g.logs.disabled.includes(cat)) return;
+    const ch = g.settings.logChannel && guild.channels.cache.get(g.settings.logChannel);
+    if (!ch) return;
+    const e = emb(title, desc, color);
+    if (fields.length) e.addFields(fields);
+    await ch.send({ embeds: [e], allowedMentions: { parse: [] } });
+  } catch (e) { /* ignore */ }
 }
-
-// --- HELPER LOGGING FUNCTION ---
-async function sendTicketLog(guild, title, description, color = '#3498db', fields = []) {
-  try {
-    const cfg = guildSettings.get(guild.id) || {};
-    const logChannelId = cfg.logChannelId;
-    if (!logChannelId) return;
-
-    const logChannel = guild.channels.cache.get(logChannelId);
-    if (!logChannel) return;
-
-    const logEmbed = new EmbedBuilder()
-      .setTitle(title)
-      .setDescription(description)
-      .addFields(fields)
-      .setColor(color)
-      .setTimestamp();
-
-    await logChannel.send({ embeds: [logEmbed] });
-  } catch (err) {
-    console.error('Failed to send ticket log:', err);
-  }
+function addCase(guild, type, target, mod, reason, extra = {}) {
+  const g = G(guild.id);
+  const c = { id: g.cases.length + 1, type, target, mod, reason: reason || 'No reason provided', time: Date.now(), ...extra };
+  g.cases.push(c); save();
+  logEvent(guild, 'moderation', `🛡️ Case #${c.id} — ${type}`, `**Target:** <@${target}> (\`${target}\`)\n**Moderator:** <@${mod}>\n**Reason:** ${c.reason}`, COLORS.warn);
+  return c;
 }
-
-function isHelperInActiveTicket(userId) {
-  for (const [channelId, ticket] of activeTickets.entries()) {
-    if (ticket.helpers.some(h => h.id === userId)) {
-      return channelId;
-    }
-  }
+async function notify(user, guild, action, reason) {
+  await user.send({ embeds: [emb(`You were ${action} in ${guild.name}`, `**Reason:** ${reason}`, COLORS.err)] }).catch(() => {});
+}
+function canAct(i, t) {
+  if (t.id === i.user.id) return 'You cannot do that to yourself.';
+  if (t.id === i.guild.ownerId) return 'You cannot target the server owner.';
+  if (t.id === client.user.id) return 'I cannot target myself.';
+  if (i.member.id !== i.guild.ownerId && t.roles.highest.position >= i.member.roles.highest.position) return 'That member has an equal or higher role than you.';
   return null;
 }
-
-function getPointsForTicket(ticketData, completedItems = null) {
-  const type = (ticketData.type || '').toLowerCase();
-  let items = [];
-  if (Array.isArray(completedItems)) {
-    items = completedItems;
-  } else if (typeof completedItems === 'string') {
-    items = completedItems.split(',').map(x => x.trim()).filter(x => x.length > 0);
-  } else {
-    const desc = ticketData.description || '';
-    items = desc.split(',').map(x => x.trim()).filter(x => x.length > 0);
-  }
-
-  const itemCount = items.length > 0 ? items.length : 1;
-
-  if (type === 'ultra_weeklies') {
-    let totalPts = 0;
-    for (const item of items) {
-      const lowerItem = item.toLowerCase();
-      if (lowerItem.includes('speaker')) {
-        totalPts += 5; // Ultra Speaker = 5 pts
-      } else if (lowerItem.includes('gramiel') || lowerItem.includes('darkon')) {
-        totalPts += 4; // Ultra Gramiel & Darkon = 4 pts
-      } else {
-        totalPts += 3; // Ultra Drakath, Dage, Drago, Nulgath = 3 pts
-      }
+function roleBlock(i, role) {
+  if (role.managed) return 'That role is managed by an integration.';
+  if (role.id === i.guild.id) return 'Invalid role.';
+  if (role.position >= i.guild.members.me.roles.highest.position) return 'That role is higher than (or equal to) my highest role.';
+  if (i.member.id !== i.guild.ownerId && role.position >= i.member.roles.highest.position) return 'That role is higher than (or equal to) your highest role.';
+  return null;
+}
+async function ensureMuteRole(guild) {
+  const g = G(guild.id);
+  let role = (g.mutedRole && guild.roles.cache.get(g.mutedRole)) || guild.roles.cache.find(r => r.name === 'Muted');
+  if (!role) {
+    role = await guild.roles.create({ name: 'Muted', color: 0x607d8b, permissions: [], reason: 'Mute role' });
+    for (const ch of guild.channels.cache.values()) {
+      if (ch.permissionOverwrites) await ch.permissionOverwrites.edit(role, { SendMessages: false, AddReactions: false, Speak: false, SendMessagesInThreads: false, CreatePublicThreads: false }, { reason: 'Mute role' }).catch(() => {});
     }
-    return totalPts > 0 ? totalPts : 3 * itemCount;
   }
-
-  if (type === 'ultra_dailies' || type === 'seven_man_dailies') {
-    return 2 * itemCount; 
-  }
-
-  if (ticketData.customPoints !== undefined && ticketData.customPoints >= 0) {
-    return ticketData.customPoints;
-  }
-
-  if (type.includes('farm') || type.includes('farming')) {
-    return 3;
-  }
-  if (type.includes('weekly')) {
-    return 8;
-  }
-  if (type.includes('daily')) {
-    return 5;
-  }
-  return 1;
+  g.mutedRole = role.id; save();
+  return role;
 }
-
-async function checkAndAssignHelperRoles(guild, userId, currentPoints) {
-  try {
-    const member = await guild.members.fetch(userId).catch(() => null);
-    if (!member) return;
-
-    for (const [requiredPts, roleId] of roleRewards.entries()) {
-      if (currentPoints >= requiredPts) {
-        if (!member.roles.cache.has(roleId)) {
-          await member.roles.add(roleId).catch(console.error);
-        }
-      }
+async function setServerLock(guild, lock, reason) {
+  let n = 0;
+  for (const ch of guild.channels.cache.values()) {
+    if ([ChannelType.GuildText, ChannelType.GuildAnnouncement, ChannelType.GuildForum].includes(ch.type)) {
+      try { await ch.permissionOverwrites.edit(guild.roles.everyone, { SendMessages: lock ? false : null }, { reason }); n++; } catch (e) { /* skip */ }
     }
-  } catch (err) {
-    console.error('Failed to assign helper auto-role:', err);
   }
+  return n;
+}
+async function buildTranscript(channel) {
+  let all = [], last;
+  for (let n = 0; n < 10; n++) {
+    const batch = await channel.messages.fetch({ limit: 100, ...(last && { before: last }) });
+    if (!batch.size) break;
+    all.push(...batch.values()); last = batch.last().id;
+    if (batch.size < 100) break;
+  }
+  all.reverse();
+  const lines = all.map(m => `[${new Date(m.createdTimestamp).toISOString()}] ${m.author.tag}: ${m.content}${m.attachments.size ? ' ' + [...m.attachments.values()].map(a => a.url).join(' ') : ''}${m.embeds.length && !m.content ? ' [embed]' : ''}`);
+  return new AttachmentBuilder(Buffer.from(lines.join('\n') || '(empty)'), { name: `transcript-${channel.name}.txt` });
 }
 
-function buildTicketHubPayload(options = {}) {
-  const {
-    imageUrl = STANDARD_BANNER_URL,
-    guideTitle = "TICKET GUIDE",
-    guideDesc = "Read through the ticket rules and guidelines before requesting assistance.",
-    guideUrl = TICKET_GUIDE_URL,
-    createTitle = "MAKE A TICKET",
-    createDesc = "Select a category from the menu to open a new ticket. Our helpers will join shortly!"
-  } = options;
+// --- COMMAND BUILDER HELPERS ---
+const O = type => (n, d, r = false, extra = {}) => ({ type, n, d, r, ...extra });
+const U = O('User'), S = O('String'), I = O('Integer'), C = O('Channel'), R = O('Role'), B = O('Boolean'), M = O('Mentionable'), A = O('Attachment'), N = O('Number');
+const CT = (n, d, r = false) => C(n, d, r, { types: TEXTISH });
+function applyOpts(b, opts) {
+  for (const x of opts) {
+    b[`add${x.type}Option`](o => {
+      o.setName(x.n).setDescription(x.d).setRequired(!!x.r);
+      if (x.choices) o.addChoices(...x.choices.map(c => typeof c === 'string' ? { name: c, value: c } : c));
+      if (x.min != null) o.setMinValue(x.min);
+      if (x.max != null) o.setMaxValue(x.max);
+      if (x.types) o.addChannelTypes(...x.types);
+      return o;
+    });
+  }
+  return b;
+}
+const cmds = [];
+const def = (name, desc, perm, opts = []) => {
+  const b = new SlashCommandBuilder().setName(name).setDescription(desc);
+  if (perm != null) b.setDefaultMemberPermissions(perm);
+  applyOpts(b, opts); cmds.push(b);
+};
+const grp = (name, desc, perm, subs) => {
+  const b = new SlashCommandBuilder().setName(name).setDescription(desc);
+  if (perm != null) b.setDefaultMemberPermissions(perm);
+  for (const [sn, sd, so = []] of subs) b.addSubcommand(s => applyOpts(s.setName(sn).setDescription(sd), so));
+  cmds.push(b);
+};
 
-  const containerComponent = {
-    type: 17,
-    accent_color: 0x8b0000,
-    components: [
-      {
-        type: 12,
-        items: [{ media: { url: imageUrl } }]
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `**${guideTitle.replace(/\\n/g, '\n')}**\n\n${guideDesc.replace(/\\n/g, '\n')}`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 5,
-          url: guideUrl,
-          label: 'Guide'
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `**${createTitle.replace(/\\n/g, '\n')}**\n\n${createDesc.replace(/\\n/g, '\n')}`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_open_ticket_menu',
-          label: 'Create'
-        }
-      }
-    ]
-  };
+// =====================================================================
+//  SLASH COMMAND DEFINITIONS
+// =====================================================================
+// 1. Server administration
+def('serverinfo', 'Display complete server information');
+def('servericon', 'Display or change the server icon', null, [S('url', 'Image URL to set as new icon'), A('image', 'Image file to set as new icon')]);
+def('serverbanner', 'Display or change the server banner', null, [S('url', 'Image URL to set as new banner'), A('image', 'Image file to set as new banner')]);
+def('servername', 'Change the server name', P.ManageGuild, [S('name', 'New server name', true)]);
+def('serverrules', 'Set or display the server rules', null, [S('rules', 'New rules text (leave empty to display)')]);
+def('serverstats', 'Show server statistics');
+def('serverlock', 'Lock the entire server', P.Administrator, [S('reason', 'Reason')]);
+def('serverunlock', 'Unlock the server', P.Administrator, [S('reason', 'Reason')]);
+def('slowmode', 'Set channel slowmode', P.ManageChannels, [I('seconds', 'Seconds (0 disables)', true, { min: 0, max: 21600 }), CT('channel', 'Channel (default: current)')]);
+def('announce', 'Send an announcement', P.ManageGuild, [S('message', 'Announcement text (use \\n for new lines)', true), CT('channel', 'Target channel'), S('title', 'Title'), R('ping_role', 'Role to ping'), B('ping_everyone', 'Ping @everyone'), B('staff_only', 'Send to the staff channel instead')]);
+def('embed', 'Create a custom embed', P.ManageMessages, [S('title', 'Embed title', true), S('description', 'Embed description (use \\n for new lines)', true), CT('channel', 'Target channel'), S('color', 'Hex color e.g. #5865F2'), S('image', 'Image URL'), S('thumbnail', 'Thumbnail URL'), S('footer', 'Footer text')]);
+def('purge', 'Delete multiple messages', P.ManageMessages, [I('amount', 'Number of messages (1-100)', true, { min: 1, max: 100 }), U('user', 'Only delete this user\'s messages')]);
+def('nuke', 'Recreate a channel (wipes all messages)', P.Administrator, [B('confirm', 'Confirm you want to nuke the channel', true), CT('channel', 'Channel (default: current)')]);
+def('backup', 'Create a server configuration backup', P.Administrator);
+def('restore', 'Restore a server configuration backup', P.Administrator, [B('confirm', 'Confirm the restore', true), A('file', 'Backup file (default: last stored backup)')]);
 
-  return {
-    components: [containerComponent],
-    flags: MessageFlags.IsComponentsV2
-  };
+// 2. Moderation
+def('ban', 'Permanently ban a member', P.BanMembers, [U('user', 'User to ban', true), S('reason', 'Reason'), I('delete_days', 'Days of messages to delete (0-7)', false, { min: 0, max: 7 })]);
+def('unban', 'Unban a user', P.BanMembers, [S('user_id', 'User ID to unban', true), S('reason', 'Reason')]);
+def('tempban', 'Temporarily ban a member', P.BanMembers, [U('user', 'User to ban', true), S('duration', 'Duration e.g. 30m, 12h, 7d', true), S('reason', 'Reason')]);
+def('kick', 'Remove a member from the server', P.KickMembers, [U('user', 'Member to kick', true), S('reason', 'Reason')]);
+def('timeout', 'Temporarily restrict a member', P.ModerateMembers, [U('user', 'Member', true), S('duration', 'Duration e.g. 10m, 2h, 1d', true), S('reason', 'Reason')]);
+def('untimeout', 'Remove a timeout', P.ModerateMembers, [U('user', 'Member', true), S('reason', 'Reason')]);
+def('mute', 'Mute a member (Muted role)', P.ModerateMembers, [U('user', 'Member', true), S('reason', 'Reason')]);
+def('unmute', 'Unmute a member', P.ModerateMembers, [U('user', 'Member', true), S('reason', 'Reason')]);
+def('warn', 'Give a warning', P.ModerateMembers, [U('user', 'Member', true), S('reason', 'Reason', true)]);
+def('warnings', 'View a member\'s warnings', P.ModerateMembers, [U('user', 'Member', true)]);
+def('clearwarnings', 'Clear member warnings', P.ModerateMembers, [U('user', 'Member', true), I('id', 'Specific warning ID (default: all)')]);
+def('softban', 'Ban and immediately unban (deletes recent messages)', P.BanMembers, [U('user', 'Member', true), S('reason', 'Reason')]);
+def('massban', 'Ban multiple users by ID', P.BanMembers, [S('ids', 'User IDs separated by spaces/commas (max 25)', true), S('reason', 'Reason')]);
+def('deafen', 'Deafen a member in voice', P.DeafenMembers, [U('user', 'Member', true), S('reason', 'Reason')]);
+def('undeafen', 'Undeafen a member', P.DeafenMembers, [U('user', 'Member', true)]);
+def('disconnect', 'Disconnect a member from voice', P.MoveMembers, [U('user', 'Member', true)]);
+def('move', 'Move a member to another voice channel', P.MoveMembers, [U('user', 'Member', true), C('channel', 'Target voice channel', true, { types: VOICEISH })]);
+def('modlogs', 'View moderation history of a user', P.ModerateMembers, [U('user', 'User', true)]);
+def('case', 'View a specific moderation case', P.ModerateMembers, [I('number', 'Case number', true, { min: 1 })]);
+def('clear', 'Clear messages', P.ManageMessages, [I('amount', 'Number of messages (1-100)', true, { min: 1, max: 100 }), U('user', 'Only delete this user\'s messages')]);
+
+// 3. Roles
+grp('role', 'Role management', P.ManageRoles, [
+  ['add', 'Give a role to a member', [U('user', 'Member', true), R('role', 'Role', true)]],
+  ['remove', 'Remove a role from a member', [U('user', 'Member', true), R('role', 'Role', true)]],
+  ['create', 'Create a new role', [S('name', 'Role name', true), S('color', 'Hex color'), B('hoist', 'Display separately'), B('mentionable', 'Mentionable')]],
+  ['delete', 'Delete a role', [R('role', 'Role', true)]],
+  ['edit', 'Edit role settings', [R('role', 'Role', true), S('name', 'New name'), B('hoist', 'Display separately'), B('mentionable', 'Mentionable')]],
+  ['color', 'Change role color', [R('role', 'Role', true), S('color', 'Hex color e.g. #ff0000', true)]],
+  ['icon', 'Change role icon (needs boost level 2)', [R('role', 'Role', true), A('image', 'Icon image (omit to remove)')]],
+  ['info', 'Display role information', [R('role', 'Role', true)]],
+  ['members', 'List members with a role', [R('role', 'Role', true)]],
+  ['all', 'Give a role to all members', [R('role', 'Role', true)]],
+  ['bots', 'Give a role to all bots', [R('role', 'Role', true)]],
+  ['humans', 'Give a role to all human members', [R('role', 'Role', true)]],
+  ['bots-remove', 'Remove a role from all bots', [R('role', 'Role', true)]],
+  ['humans-remove', 'Remove a role from all human members', [R('role', 'Role', true)]],
+  ['transfer', 'Transfer a role to another member', [R('role', 'Role', true), U('from', 'Current holder', true), U('to', 'New holder', true)]]
+]);
+
+// 4. Member management
+def('userinfo', 'View complete member information', null, [U('user', 'Member')]);
+def('avatar', 'Display a member avatar', null, [U('user', 'Member')]);
+def('banner', 'Display a member banner', null, [U('user', 'Member')]);
+def('membercount', 'Show total members');
+def('joinedat', 'Show when a member joined', null, [U('user', 'Member')]);
+def('accountage', 'Show account age', null, [U('user', 'Member')]);
+def('nickname', 'Change a member nickname', P.ManageNicknames, [U('user', 'Member', true), S('nickname', 'New nickname (empty resets)')]);
+def('massnick', 'Change multiple member nicknames', P.Administrator, [S('format', 'Format e.g. [Member] {username}', true), R('role', 'Only members with this role'), B('reset', 'Reset nicknames instead')]);
+def('profile', 'Display member profile', null, [U('user', 'Member')]);
+def('inrole', 'List members in a specific role', null, [R('role', 'Role', true)]);
+def('botinfo', 'Display bot information');
+def('bots', 'List all bots in the server');
+
+// 5. Channels
+const CHTYPES = ['text', 'voice', 'announcement', 'forum', 'stage'];
+grp('channel', 'Channel management', P.ManageChannels, [
+  ['create', 'Create a channel', [S('name', 'Channel name', true), S('type', 'Channel type', false, { choices: CHTYPES }), C('category', 'Category', false, { types: [ChannelType.GuildCategory] }), S('topic', 'Topic')]],
+  ['delete', 'Delete a channel', [C('channel', 'Channel', true)]],
+  ['rename', 'Rename a channel', [S('name', 'New name', true), C('channel', 'Channel (default: current)')]],
+  ['topic', 'Change channel description', [S('topic', 'New topic', true), CT('channel', 'Channel (default: current)')]],
+  ['lock', 'Lock a channel', [CT('channel', 'Channel (default: current)'), R('role', 'Role (default: @everyone)')]],
+  ['unlock', 'Unlock a channel', [CT('channel', 'Channel (default: current)'), R('role', 'Role (default: @everyone)')]],
+  ['hide', 'Hide channel from a role/member', [M('target', 'Role or member', true), C('channel', 'Channel (default: current)')]],
+  ['unhide', 'Make channel visible to a role/member', [M('target', 'Role or member', true), C('channel', 'Channel (default: current)')]],
+  ['slowmode', 'Set channel slowmode', [I('seconds', 'Seconds', true, { min: 0, max: 21600 }), CT('channel', 'Channel')]],
+  ['clone', 'Duplicate a channel', [C('channel', 'Channel (default: current)'), S('name', 'Name for the clone')]],
+  ['info', 'Show channel information', [C('channel', 'Channel (default: current)')]],
+  ['permissions', 'Edit channel permissions', [C('channel', 'Channel', true), M('target', 'Role or member', true),
+    S('permission', 'Permission', true, { choices: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'AddReactions', 'AttachFiles', 'EmbedLinks', 'MentionEveryone', 'ManageMessages', 'Connect', 'Speak', 'UseExternalEmojis', 'CreatePublicThreads', 'ManageChannels'] }),
+    S('value', 'Value', true, { choices: ['allow', 'deny', 'reset'] })]]
+]);
+grp('category', 'Category management', P.ManageChannels, [
+  ['create', 'Create a category', [S('name', 'Category name', true)]],
+  ['delete', 'Delete a category', [C('category', 'Category', true, { types: [ChannelType.GuildCategory] })]],
+  ['rename', 'Rename a category', [C('category', 'Category', true, { types: [ChannelType.GuildCategory] }), S('name', 'New name', true)]]
+]);
+
+// 6 & 7. Security + Automod
+grp('security', 'Security & anti-raid configuration', P.Administrator, [
+  ['status', 'View security status'],
+  ['antiraid', 'Configure anti-raid / mass join detection', [B('enabled', 'Enable', true), I('threshold', 'Joins in 10s that trigger a raid', false, { min: 2, max: 50 }), S('action', 'Action during a raid', false, { choices: ['lockdown', 'kick', 'ban', 'quarantine'] })]],
+  ['accountage', 'Minimum account age to join (anti-alt)', [I('days', 'Minimum days (0 disables)', true, { min: 0, max: 365 }), S('action', 'Action', false, { choices: ['kick', 'ban', 'quarantine'] })]],
+  ['antibot', 'Block unauthorized bot additions', [B('enabled', 'Enable', true)]],
+  ['antinuke', 'Detect unauthorized channel/role/webhook/ban actions', [B('enabled', 'Enable', true)]],
+  ['trust', 'Add/remove a trusted user for anti-nuke/anti-bot', [U('user', 'User', true), B('trusted', 'Trusted?', true)]],
+  ['quarantine-role', 'Set the quarantine role', [R('role', 'Role', true)]],
+  ['quarantine', 'Quarantine a member', [U('user', 'Member', true), S('reason', 'Reason')]],
+  ['release', 'Release a member from quarantine', [U('user', 'Member', true)]],
+  ['lockdown', 'Manually start/stop a raid lockdown', [B('enabled', 'Lock down', true)]],
+  ['verification', 'Set up join verification', [S('mode', 'Mode', true, { choices: ['button', 'captcha', 'auto'] }), R('role', 'Verified role', true), CT('channel', 'Channel to post the verification panel')]]
+]);
+const AMRULES = ['antispam', 'links', 'invites', 'caps', 'mentions', 'emoji', 'repeats'];
+grp('automod', 'Auto moderation', P.ManageGuild, [
+  ['enable', 'Enable auto moderation'],
+  ['disable', 'Disable auto moderation'],
+  ...AMRULES.map(r => [r, `Configure ${r} detection`, [B('enabled', 'Enable this rule', true), I('limit', 'Threshold (spam msgs/5s, mentions, emojis, caps %, repeats)', false, { min: 2, max: 100 })]]),
+  ['badwords', 'Configure prohibited words', [S('action', 'Action', true, { choices: ['add', 'remove', 'list', 'clear'] }), S('word', 'Word')]],
+  ['whitelist', 'Exempt members or roles', [S('action', 'Action', true, { choices: ['add', 'remove', 'list'] }), R('role', 'Role'), U('user', 'User')]],
+  ['blacklist', 'Block specified words or users', [S('action', 'Action', true, { choices: ['add', 'remove', 'list'] }), S('word', 'Word'), U('user', 'User')]]
+]);
+
+// 8. Welcome / goodbye
+for (const kind of ['welcome', 'goodbye']) {
+  const extra = kind === 'welcome' ? [B('dm', 'Also DM the message'), R('role', 'Role given automatically on join')] : [];
+  const base = [S('title', 'Embed title'), S('image', 'Banner image URL'), S('color', 'Hex color'), ...extra];
+  grp(kind, `${kind[0].toUpperCase() + kind.slice(1)} system`, P.ManageGuild, [
+    ['setup', `Set up ${kind} messages`, [CT('channel', 'Channel', true), S('message', 'Message. Variables: {user} {username} {tag} {server} {membercount}', true), ...base]],
+    ['test', `Preview the ${kind} message`],
+    ['edit', `Edit the ${kind} message`, [CT('channel', 'Channel'), S('message', 'Message'), ...base]],
+    ['disable', `Disable ${kind} messages`]
+  ]);
 }
 
-function buildTicketControlPayload(ticketData, userMention) {
-  const maxLimit = ticketData.maxHelpers || 3;
-  const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
-  const ticketBanner = categoryPreset.bannerUrl || STANDARD_BANNER_URL;
-  const accentColor = categoryPreset.accentColor || 0x8b0000;
+// 9. Logs
+grp('logs', 'Logging system', P.ManageGuild, [
+  ['setup', 'Set up logging in a channel', [CT('channel', 'Log channel', true)]],
+  ['enable', 'Enable logging (or one category)', [S('category', 'Category', false, { choices: LOG_CATS })]],
+  ['disable', 'Disable logging (or one category)', [S('category', 'Category', false, { choices: LOG_CATS })]],
+  ['channel', 'Change the log channel', [CT('channel', 'Log channel', true)]],
+  ['configuration', 'View logging configuration'],
+  ['test', 'Send a test log']
+]);
 
-  const requesterTag = `<@${ticketData.requesterId}> (${ticketData.ign})`;
-  const helpersFormatted = ticketData.helpers.length > 0
-    ? ticketData.helpers.map(h => `• <@${h.id}>`).join('\n')
-    : '• None';
+// 10. Tickets
+grp('ticket', 'Ticket system', null, [
+  ['setup', 'Post the ticket panel (staff)', [CT('channel', 'Panel channel', true), R('support_role', 'Support role'), C('category', 'Ticket category', false, { types: [ChannelType.GuildCategory] }), CT('log_channel', 'Ticket log channel'), S('title', 'Panel title'), S('description', 'Panel description'), S('image', 'Banner URL')]],
+  ['create', 'Create a support ticket', [S('reason', 'Reason', true)]],
+  ['close', 'Close this ticket', [S('reason', 'Reason')]],
+  ['reopen', 'Reopen this ticket'],
+  ['delete', 'Delete this ticket'],
+  ['claim', 'Claim this ticket'],
+  ['add', 'Add a user to this ticket', [U('user', 'User', true)]],
+  ['remove', 'Remove a user from this ticket', [U('user', 'User', true)]],
+  ['rename', 'Rename this ticket', [S('name', 'New name', true)]],
+  ['transcript', 'Generate a transcript of this ticket']
+]);
 
-  const points = getPointsForTicket(ticketData);
+// 11. Reaction roles & self roles
+const rrOpts = [];
+for (let n = 1; n <= 5; n++) { rrOpts.push(R(`role${n}`, `Role ${n}`, n === 1)); rrOpts.push(S(`emoji${n}`, `Emoji for role ${n}`)); }
+const srOpts = [];
+for (let n = 2; n <= 10; n++) srOpts.push(R(`role${n}`, `Role ${n}`));
+grp('reactionrole', 'Reaction / button role panels', P.ManageRoles, [
+  ['create', 'Create a role panel', [S('title', 'Panel title', true), S('description', 'Panel description', true), R('role1', 'Role 1', true), CT('channel', 'Channel'), S('type', 'Panel type', false, { choices: ['button', 'reaction'] }), S('mode', 'Selection mode', false, { choices: ['multiple', 'single'] }), R('required_role', 'Role required to use panel'), S('emoji1', 'Emoji for role 1'), ...rrOpts.slice(2)]],
+  ['delete', 'Delete a role panel', [S('message_id', 'Panel message ID', true)]],
+  ['edit', 'Edit a role panel text', [S('message_id', 'Panel message ID', true), S('title', 'New title'), S('description', 'New description')]]
+]);
+grp('selfrole', 'Dropdown self-role menus', P.ManageRoles, [
+  ['setup', 'Create a dropdown role menu', [S('category', 'Menu category', true, { choices: ['general', 'color', 'game', 'notification'] }), S('title', 'Title', true), R('role1', 'Role 1', true), CT('channel', 'Channel'), S('mode', 'Selection mode', false, { choices: ['multiple', 'single'] }), R('required_role', 'Role required to use menu'), S('description', 'Description'), ...srOpts]],
+  ['remove', 'Remove a dropdown role menu', [S('message_id', 'Menu message ID', true)]]
+]);
 
-  const containerComponent = {
-    type: 17,
-    accent_color: accentColor,
-    components: [
-      {
-        type: 12,
-        items: [{ media: { url: ticketBanner } }]
-      },
-      {
-        type: 10,
-        content: `<:pointsbt:1534950425080496189> **Points:**\n-# > **${points}**`
-      },
-      {
-        type: 10,
-        content: `<:requestbt:1534950441060798594> **Requester:** ${requesterTag}`
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Selected server:\n-# > **${ticketData.server}**`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_change_server',
-          label: 'Change server',
-          emoji: { id: '1534950290908909749', name: 'changeserverbt', animated: false }
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Monsters:\n-# > **${ticketData.description}**`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_change_bosses',
-          label: 'Change Monsters',
-          emoji: { id: '1534950407003050185', name: 'monstersbt', animated: false }
-        }
-      },
-      {
-        type: 10,
-        content: `Details:\n-# > **${ticketData.details || 'None provided'}**`
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Need more help? **Ping helpers!**`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_pinghelpers',
-          label: 'Ping helpers',
-          emoji: { id: '1534950337167884368', name: 'pinghelpersbt', animated: false }
-        }
-      },
-      {
-        type: 10,
-        content: `Done with the ticket?`
-      },
-      {
-        type: 1,
-        components: [
-          {
-            type: 2,
-            style: 3,
-            custom_id: 'btn_complete',
-            label: 'Complete',
-            emoji: { id: '1534950268679094397', name: 'completebt', animated: false }
-          },
-          {
-            type: 2,
-            style: 4,
-            custom_id: 'btn_cancel',
-            label: 'Cancel',
-            emoji: { id: '1534950219517788170', name: 'cancelbt', animated: false }
-          }
-        ]
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `<:helpersbt:1534950382109986876> **Helpers (${ticketData.helpers.length}/${maxLimit})**\n${helpersFormatted}`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 4,
-          custom_id: 'btn_kick_helper',
-          label: 'Kick Helper'
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Stepped down from helping? Click **Leave!**`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_leave_ticket',
-          label: 'Leave'
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Need the room information again? Click **Room details!**`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_location',
-          label: 'Room details',
-          emoji: { id: '1534950471922483382', name: 'roomdeetsbt', animated: false }
-        }
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Claim this ticket to view room details.`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 3,
-          custom_id: 'btn_claim',
-          label: 'Claim',
-          emoji: { id: '1534950248831516806', name: 'claimbt', animated: false }
-        }
-      }
-    ]
-  };
+// 12. Leveling
+def('rank', 'Show your rank card', null, [U('user', 'Member')]);
+def('leaderboard', 'Show the XP leaderboard');
+def('level', 'Show your level and next reward', null, [U('user', 'Member')]);
+def('setxp', 'Set a member\'s XP', P.ManageGuild, [U('user', 'Member', true), I('amount', 'XP amount', true, { min: 0 })]);
+def('resetxp', 'Reset XP for a member or everyone', P.ManageGuild, [U('user', 'Member (empty = everyone)')]);
+grp('levelrole', 'Level reward roles', P.ManageGuild, [
+  ['add', 'Add a level reward role', [I('level', 'Level', true, { min: 1 }), R('role', 'Role', true)]],
+  ['remove', 'Remove a level reward', [I('level', 'Level', true, { min: 1 })]],
+  ['list', 'List level rewards']
+]);
+def('levelconfig', 'Configure leveling', P.ManageGuild, [N('multiplier', 'XP multiplier (e.g. 1.5)', false, { min: 0.1, max: 10 }), CT('channel', 'Level-up announcement channel'), B('announce', 'Announce level-ups'), B('enabled', 'Enable leveling')]);
 
-  return {
-    components: [containerComponent],
-    flags: MessageFlags.IsComponentsV2
-  };
+// 13. Utility
+def('help', 'Display all available commands');
+def('ping', 'Check bot latency');
+def('uptime', 'Check bot uptime');
+def('invite', 'Get the bot invitation link');
+def('support', 'Get support information');
+def('poll', 'Create a poll', null, [S('question', 'Question', true), S('option1', 'Option 1', true), S('option2', 'Option 2', true), S('option3', 'Option 3'), S('option4', 'Option 4'), S('option5', 'Option 5')]);
+def('remind', 'Set a reminder', null, [S('time', 'When e.g. 10m, 2h, 1d', true), S('message', 'Reminder text', true)]);
+def('translate', 'Translate text', null, [S('text', 'Text', true), S('to', 'Target language code e.g. es, fr, ja', true), S('from', 'Source language code (default: auto)')]);
+def('calculate', 'Calculator', null, [S('expression', 'e.g. (5+3)*2', true)]);
+def('afk', 'Set your AFK status', null, [S('reason', 'Reason')]);
+def('whois', 'Look up a member', null, [U('user', 'Member')]);
+def('suggest', 'Submit a suggestion', null, [S('suggestion', 'Your suggestion', true)]);
+def('suggestions', 'View suggestions (staff can set status)', null, [I('id', 'Suggestion ID'), S('status', 'New status (staff)', false, { choices: ['approved', 'denied', 'considering'] }), S('note', 'Staff note')]);
+def('report', 'Report a member', null, [U('user', 'Member', true), S('reason', 'Reason', true)]);
+def('feedback', 'Submit feedback', null, [S('message', 'Your feedback', true)]);
+def('say', 'Send a message through the bot', P.ManageMessages, [S('message', 'Message (use \\n for new lines)', true), CT('channel', 'Channel (default: current)')]);
+
+// 14. Voice
+grp('vc', 'Voice channel management', null, [
+  ['setup', 'Set up join-to-create voice (staff)', [C('lobby', 'Lobby voice channel', true, { types: VOICEISH }), C('category', 'Category for temp channels', false, { types: [ChannelType.GuildCategory] })]],
+  ['create', 'Create a temporary voice channel', [S('name', 'Channel name', true), I('limit', 'User limit', false, { min: 0, max: 99 })]],
+  ['lock', 'Lock your voice channel'], ['unlock', 'Unlock your voice channel'],
+  ['limit', 'Set user limit', [I('limit', 'Limit (0 = none)', true, { min: 0, max: 99 })]],
+  ['rename', 'Rename your voice channel', [S('name', 'New name', true)]],
+  ['owner', 'Show the voice channel owner'],
+  ['transfer', 'Transfer ownership', [U('user', 'New owner', true)]],
+  ['claim', 'Claim an ownerless voice channel'],
+  ['kick', 'Kick a member from your voice channel', [U('user', 'Member', true)]],
+  ['mute', 'Mute/unmute a member in voice', [U('user', 'Member', true), B('state', 'Muted? (default true)')]],
+  ['deafen', 'Deafen/undeafen a member in voice', [U('user', 'Member', true), B('state', 'Deafened? (default true)')]],
+  ['move', 'Move a member to another voice channel', [U('user', 'Member', true), C('channel', 'Target channel', true, { types: VOICEISH })]],
+  ['afk', 'Set the AFK voice channel (staff)', [C('channel', 'AFK channel', true, { types: VOICEISH }), I('timeout', 'AFK timeout', false, { choices: [{ name: '1 minute', value: 60 }, { name: '5 minutes', value: 300 }, { name: '15 minutes', value: 900 }, { name: '30 minutes', value: 1800 }, { name: '1 hour', value: 3600 }] })]]
+]);
+
+// 15. Giveaways
+grp('giveaway', 'Giveaway system', P.ManageGuild, [
+  ['start', 'Start a giveaway', [S('prize', 'Prize', true), S('duration', 'Duration e.g. 30m, 2h, 1d', true), I('winners', 'Number of winners', true, { min: 1, max: 20 }), CT('channel', 'Channel'), R('role', 'Required role'), I('min_account_days', 'Minimum account age (days)', false, { min: 1 }), S('description', 'Description'), S('image', 'Banner URL')]],
+  ['end', 'End a giveaway early', [S('message_id', 'Giveaway message ID', true)]],
+  ['reroll', 'Reroll a winner', [S('message_id', 'Giveaway message ID', true)]],
+  ['cancel', 'Cancel a giveaway', [S('message_id', 'Giveaway message ID', true)]],
+  ['list', 'List giveaways', [B('history', 'Show history')]]
+]);
+
+// 16. Applications
+const APPTYPES = ['staff', 'moderator', 'membership'];
+grp('application', 'Application system', P.ManageGuild, [
+  ['setup', 'Post the application panel', [CT('channel', 'Panel channel', true), CT('review_channel', 'Review channel', true), S('title', 'Panel title'), S('description', 'Panel description')]],
+  ['questions', 'Set custom questions (max 5)', [S('type', 'Application type', true, { choices: APPTYPES }), S('questions', 'Questions separated by ;', true), R('role', 'Role given on approval')]],
+  ['list', 'List applications', [S('status', 'Status', false, { choices: ['pending', 'approved', 'rejected'] })]],
+  ['approve', 'Approve an application', [I('id', 'Application ID', true), S('note', 'Note to applicant')]],
+  ['reject', 'Reject an application', [I('id', 'Application ID', true), S('reason', 'Reason', true)]],
+  ['interview', 'Schedule an interview', [I('id', 'Application ID', true), S('time', 'When (free text)', true)]],
+  ['transcript', 'Get an application transcript', [I('id', 'Application ID', true)]]
+]);
+
+// 17. Staff
+grp('staff', 'Staff & administration management', null, [
+  ['info', 'Show staff member info', [U('user', 'Staff member')]],
+  ['promote', 'Promote a staff member', [U('user', 'Member', true), R('role', 'New role', true), S('reason', 'Reason')]],
+  ['demote', 'Demote a staff member', [U('user', 'Member', true), R('role', 'Role to remove', true), S('reason', 'Reason')]],
+  ['warn', 'Warn a staff member', [U('user', 'Member', true), S('reason', 'Reason', true)]],
+  ['duty', 'Set your duty status', [S('status', 'Status', true, { choices: ['on', 'off'] })]],
+  ['history', 'View staff record', [U('user', 'Member', true)]],
+  ['activity', 'View staff activity', [U('user', 'Member')]],
+  ['leave', 'Start or end staff leave', [I('days', 'Days of leave (0 = return)', true, { min: 0, max: 90 }), S('reason', 'Reason')]]
+]);
+grp('config', 'Configure the bot for this server', P.Administrator, [
+  ['roles', 'Set staff roles', [R('admin_role', 'Admin role'), R('mod_role', 'Moderator role'), R('staff_role', 'General staff role'), R('auto_role', 'Role given to every new member')]],
+  ['channels', 'Set system channels', [CT('log', 'Log channel'), CT('welcome', 'Welcome channel'), CT('goodbye', 'Goodbye channel'), CT('suggestions', 'Suggestions channel'), CT('reports', 'Reports channel'), CT('feedback', 'Feedback channel'), CT('staff', 'Staff announcement channel'), CT('levels', 'Level-up channel')]],
+  ['restrict', 'Restrict a command to staff only', [S('command', 'Command name', true), B('enabled', 'Restrict?', true)]],
+  ['view', 'View configuration']
+]);
+
+// 18. Bot owner
+grp('bot', 'Bot owner commands', P.Administrator, [
+  ['shutdown', 'Shut down the bot'], ['restart', 'Restart the bot'],
+  ['maintenance', 'Toggle maintenance mode', [B('enabled', 'Enable', true)]],
+  ['status', 'Change bot status', [S('status', 'Status', true, { choices: ['online', 'idle', 'dnd', 'invisible'] })]],
+  ['activity', 'Change bot activity', [S('type', 'Type', true, { choices: [{ name: 'Playing', value: '0' }, { name: 'Streaming', value: '1' }, { name: 'Listening', value: '2' }, { name: 'Watching', value: '3' }, { name: 'Competing', value: '5' }] }), S('text', 'Activity text', true)]],
+  ['servers', 'List servers using the bot'],
+  ['leave', 'Make the bot leave a server', [S('guild_id', 'Server ID', true)]],
+  ['blacklist', 'Blacklist a server or user', [S('type', 'Type', true, { choices: ['user', 'server'] }), S('id', 'ID', true)]],
+  ['unblacklist', 'Remove a blacklist entry', [S('type', 'Type', true, { choices: ['user', 'server'] }), S('id', 'ID', true)]],
+  ['eval', 'Developer-only code evaluation', [S('code', 'Code', true)]],
+  ['debug', 'Debug bot errors'],
+  ['sync', 'Synchronize slash commands'],
+  ['config', 'Configure global bot settings', [S('key', 'Key', true), S('value', 'Value (empty deletes)')]]
+]);
+
+// =====================================================================
+//  COMMAND HANDLERS
+// =====================================================================
+const H = {};
+
+// ---- 1. Server administration ----
+H.serverinfo = async i => {
+  const g = i.guild; await g.fetch(); const owner = await g.fetchOwner();
+  return send(i, { embeds: [emb(g.name).setThumbnail(g.iconURL()).addFields(
+    { name: 'Owner', value: `${owner}`, inline: true }, { name: 'ID', value: g.id, inline: true },
+    { name: 'Created', value: `<t:${ts(g.createdTimestamp)}:R>`, inline: true }, { name: 'Members', value: `${g.memberCount}`, inline: true },
+    { name: 'Channels', value: `${g.channels.cache.size}`, inline: true }, { name: 'Roles', value: `${g.roles.cache.size}`, inline: true },
+    { name: 'Boosts', value: `${g.premiumSubscriptionCount || 0} (Tier ${g.premiumTier})`, inline: true },
+    { name: 'Verification', value: `${g.verificationLevel}`, inline: true })] }, false);
+};
+const imageChange = (label, getUrl, setter) => async i => {
+  const src = i.options.getAttachment('image')?.url || i.options.getString('url');
+  if (src) {
+    if (!i.memberPermissions.has(P.ManageGuild)) return send(i, '❌ You need **Manage Server** to change this.');
+    try { await i.guild[setter](src); return send(i, `✅ Server ${label} updated.`); } catch (e) { return send(i, '❌ ' + e.message); }
+  }
+  const u = getUrl(i.guild);
+  if (!u) return send(i, `This server has no ${label}.`);
+  return send(i, { embeds: [emb(`Server ${label}`).setImage(u)] }, false);
+};
+H.servericon = imageChange('icon', g => g.iconURL({ size: 1024 }), 'setIcon');
+H.serverbanner = imageChange('banner', g => g.bannerURL({ size: 1024 }), 'setBanner');
+H.servername = async i => { await i.guild.setName(i.options.getString('name')); return send(i, '✅ Server name updated.'); };
+H.serverrules = async i => {
+  const g = G(i.guild.id), text = i.options.getString('rules');
+  if (text) {
+    if (!i.memberPermissions.has(P.ManageGuild)) return send(i, '❌ You need **Manage Server** to set the rules.');
+    g.rules = nl(text); save(); return send(i, '✅ Server rules updated.');
+  }
+  if (!g.rules) return send(i, 'No rules have been set yet.');
+  return send(i, { embeds: [emb('📜 Server Rules', g.rules)] }, false);
+};
+H.serverstats = async i => {
+  const g = i.guild; await g.members.fetch().catch(() => {});
+  const bots = g.members.cache.filter(m => m.user.bot).size, today = G(g.id).activity[new Date().toISOString().slice(0, 10)] || 0;
+  const cc = t => g.channels.cache.filter(c => c.type === t).size;
+  return send(i, { embeds: [emb(`📊 ${g.name} Statistics`).addFields(
+    { name: 'Members', value: `${g.memberCount} (${g.memberCount - bots} humans, ${bots} bots)` },
+    { name: 'Channels', value: `${cc(ChannelType.GuildText)} text • ${cc(ChannelType.GuildVoice)} voice • ${cc(ChannelType.GuildCategory)} categories`, inline: true },
+    { name: 'Roles / Emojis', value: `${g.roles.cache.size} / ${g.emojis.cache.size}`, inline: true },
+    { name: 'Boosts', value: `${g.premiumSubscriptionCount || 0} (Tier ${g.premiumTier})`, inline: true },
+    { name: 'Messages today', value: `${today}`, inline: true })] }, false);
+};
+H.serverlock = async i => { await defer(i); const n = await setServerLock(i.guild, true, i.options.getString('reason') || `Locked by ${i.user.tag}`); return send(i, `🔒 Locked **${n}** channel(s).`); };
+H.serverunlock = async i => { await defer(i); const n = await setServerLock(i.guild, false, i.options.getString('reason') || `Unlocked by ${i.user.tag}`); return send(i, `🔓 Unlocked **${n}** channel(s).`); };
+H.slowmode = async i => { const ch = i.options.getChannel('channel') || i.channel; await ch.setRateLimitPerUser(i.options.getInteger('seconds')); return send(i, `✅ Slowmode in ${ch} set to **${i.options.getInteger('seconds')}s**.`); };
+H.announce = async i => {
+  const g = G(i.guild.id), staffOnly = i.options.getBoolean('staff_only');
+  const chId = staffOnly ? g.settings.staffChannel : (i.options.getChannel('channel') || i.channel).id;
+  const ch = chId && i.guild.channels.cache.get(chId);
+  if (!ch) return send(i, '❌ Staff channel not set. Use `/config channels`.');
+  const role = i.options.getRole('ping_role'), everyone = i.options.getBoolean('ping_everyone');
+  const ping = [everyone ? '@everyone' : '', role ? `${role}` : ''].filter(Boolean).join(' ');
+  await ch.send({ content: ping || undefined, embeds: [emb(i.options.getString('title') || '📢 Announcement', nl(i.options.getString('message'))).setFooter({ text: `Announced by ${i.user.tag}` })], allowedMentions: { parse: everyone ? ['everyone'] : [], roles: role ? [role.id] : [] } });
+  return send(i, `✅ Announcement sent in ${ch}.`);
+};
+H.embed = async i => {
+  const ch = i.options.getChannel('channel') || i.channel;
+  const e = new EmbedBuilder().setTitle(i.options.getString('title')).setDescription(nl(i.options.getString('description'))).setColor(hexColor(i.options.getString('color')));
+  const img = i.options.getString('image'), th = i.options.getString('thumbnail'), ft = i.options.getString('footer');
+  if (img) e.setImage(img); if (th) e.setThumbnail(th); if (ft) e.setFooter({ text: ft });
+  await ch.send({ embeds: [e] }); return send(i, `✅ Embed sent in ${ch}.`);
+};
+H.purge = H.clear = async i => {
+  await defer(i);
+  const amount = i.options.getInteger('amount'), user = i.options.getUser('user');
+  let msgs = await i.channel.messages.fetch({ limit: 100 });
+  if (user) msgs = msgs.filter(m => m.author.id === user.id);
+  const del = await i.channel.bulkDelete([...msgs.values()].slice(0, amount), true).catch(() => null);
+  return send(i, del ? `🧹 Deleted **${del.size}** message(s).` : '❌ Failed (messages older than 14 days cannot be bulk deleted).');
+};
+H.nuke = async i => {
+  if (!i.options.getBoolean('confirm')) return send(i, '⚠️ Set `confirm` to true to nuke the channel.');
+  const ch = i.options.getChannel('channel') || i.channel;
+  await send(i, '💥 Nuking channel...');
+  const pos = ch.rawPosition; const nc = await ch.clone({ reason: `Nuked by ${i.user.tag}` });
+  await ch.delete().catch(() => {}); await nc.setPosition(pos).catch(() => {});
+  await nc.send({ embeds: [emb('💥 Channel Nuked', `This channel was recreated by ${i.user}.`, COLORS.err)] });
+};
+H.backup = async i => {
+  await defer(i); const g = i.guild;
+  const ow = ch => [...ch.permissionOverwrites.cache.values()].filter(o => o.type === OverwriteType.Role && g.roles.cache.has(o.id)).map(o => ({ role: g.roles.cache.get(o.id).name, everyone: o.id === g.id, allow: o.allow.bitfield.toString(), deny: o.deny.bitfield.toString() }));
+  const roles = [...g.roles.cache.values()].filter(r => !r.managed && r.id !== g.id).sort((a, b) => a.position - b.position).map(r => ({ name: r.name, color: r.color, hoist: r.hoist, mentionable: r.mentionable, permissions: r.permissions.bitfield.toString() }));
+  const cats = [...g.channels.cache.values()].filter(c => c.type === ChannelType.GuildCategory).sort((a, b) => a.rawPosition - b.rawPosition).map(c => ({ name: c.name, ow: ow(c) }));
+  const chans = [...g.channels.cache.values()].filter(c => c.type !== ChannelType.GuildCategory && !c.isThread()).sort((a, b) => a.rawPosition - b.rawPosition).map(c => ({ name: c.name, type: c.type, parent: c.parent?.name || null, topic: c.topic || null, nsfw: c.nsfw || false, rate: c.rateLimitPerUser || 0, userLimit: c.userLimit || 0, ow: ow(c) }));
+  const data = { name: g.name, time: Date.now(), roles, cats, chans };
+  G(g.id).backup = data; save();
+  return send(i, { content: `✅ Backup created (${roles.length} roles, ${cats.length} categories, ${chans.length} channels).`, files: [new AttachmentBuilder(Buffer.from(JSON.stringify(data, null, 2)), { name: `backup-${g.id}.json` })] });
+};
+H.restore = async i => {
+  if (!i.options.getBoolean('confirm')) return send(i, '⚠️ Set `confirm` to true to restore.');
+  await defer(i); const g = i.guild; let data = G(g.id).backup; const att = i.options.getAttachment('file');
+  if (att) { try { data = await (await fetch(att.url)).json(); } catch (e) { return send(i, '❌ Invalid backup file.'); } }
+  if (!data?.roles) return send(i, '❌ No backup found.');
+  let r = 0, c = 0, h = 0;
+  for (const ro of data.roles) if (!g.roles.cache.find(x => x.name === ro.name)) await g.roles.create({ name: ro.name, color: ro.color, hoist: ro.hoist, mentionable: ro.mentionable, permissions: BigInt(ro.permissions) }).then(() => r++).catch(() => {});
+  const ow = list => list.map(o => { const role = o.everyone ? g.roles.everyone : g.roles.cache.find(x => x.name === o.role); return role ? { id: role.id, allow: BigInt(o.allow), deny: BigInt(o.deny) } : null; }).filter(Boolean);
+  for (const ca of data.cats) if (!g.channels.cache.find(x => x.type === ChannelType.GuildCategory && x.name === ca.name)) await g.channels.create({ name: ca.name, type: ChannelType.GuildCategory, permissionOverwrites: ow(ca.ow) }).then(() => h++).catch(() => {});
+  for (const ch of data.chans) {
+    if (g.channels.cache.find(x => x.name === ch.name && x.type === ch.type)) continue;
+    const parent = ch.parent ? g.channels.cache.find(x => x.type === ChannelType.GuildCategory && x.name === ch.parent) : null;
+    await g.channels.create({ name: ch.name, type: ch.type, parent: parent?.id, topic: ch.topic || undefined, nsfw: ch.nsfw, rateLimitPerUser: ch.rate || undefined, userLimit: ch.userLimit || undefined, permissionOverwrites: ow(ch.ow) }).then(() => c++).catch(() => {});
+  }
+  return send(i, `✅ Restore complete: **${r}** roles, **${h}** categories, **${c}** channels recreated.`);
+};
+
+// ---- 2. Moderation ----
+const modAct = (type, past, color, run, guard) => async i => {
+  const user = i.options.getUser('user'), reason = i.options.getString('reason') || 'No reason provided';
+  const m = await i.guild.members.fetch(user.id).catch(() => null);
+  if (!m) return send(i, '❌ That user is not in this server.');
+  const bad = canAct(i, m); if (bad) return send(i, '❌ ' + bad);
+  const gm = guard && guard(m); if (gm) return send(i, '❌ ' + gm);
+  let extra = '';
+  try { if (past) await notify(user, i.guild, past, reason); extra = (await run(m, reason, i)) || ''; } catch (e) { return send(i, '❌ ' + e.message); }
+  const c = addCase(i.guild, type, user.id, i.user.id, reason);
+  return send(i, { embeds: [emb(`✅ ${type} — ${user.tag}`, `**Reason:** ${reason}${extra}\n**Case:** #${c.id}`, color)] }, false);
+};
+async function banCore(i, user, reason, days, tempMs) {
+  const m = await i.guild.members.fetch(user.id).catch(() => null);
+  if (m) {
+    const bad = canAct(i, m); if (bad) return send(i, '❌ ' + bad);
+    if (!m.bannable) return send(i, '❌ I cannot ban that member.');
+    await notify(user, i.guild, tempMs ? 'temporarily banned' : 'banned', reason);
+  }
+  try { await i.guild.members.ban(user, { reason: `${i.user.tag}: ${reason}`, deleteMessageSeconds: days * 86400 }); } catch (e) { return send(i, '❌ ' + e.message); }
+  if (tempMs) { G(i.guild.id).tempbans.push({ id: user.id, until: Date.now() + tempMs }); save(); }
+  const c = addCase(i.guild, tempMs ? 'TEMPBAN' : 'BAN', user.id, i.user.id, reason, tempMs ? { duration: tempMs } : {});
+  return send(i, { embeds: [emb(`🔨 ${tempMs ? 'Temp-banned' : 'Banned'} — ${user.tag}`, `**Reason:** ${reason}${tempMs ? `\n**Duration:** ${fmtDur(tempMs)}` : ''}\n**Case:** #${c.id}`, COLORS.err)] }, false);
 }
+H.ban = i => banCore(i, i.options.getUser('user'), i.options.getString('reason') || 'No reason provided', i.options.getInteger('delete_days') || 0, 0);
+H.tempban = i => {
+  const d = parseDuration(i.options.getString('duration'));
+  if (!d) return send(i, '❌ Invalid duration. Use e.g. 30m, 12h, 7d.');
+  return banCore(i, i.options.getUser('user'), i.options.getString('reason') || 'No reason provided', 0, d);
+};
+H.unban = async i => {
+  const id = i.options.getString('user_id').trim(), reason = i.options.getString('reason') || 'No reason provided';
+  try { await i.guild.members.unban(id, `${i.user.tag}: ${reason}`); } catch (e) { return send(i, '❌ Could not unban: ' + e.message); }
+  const c = addCase(i.guild, 'UNBAN', id, i.user.id, reason);
+  return send(i, `✅ Unbanned \`${id}\` (Case #${c.id}).`);
+};
+H.softban = async i => {
+  const user = i.options.getUser('user'), reason = i.options.getString('reason') || 'No reason provided';
+  const m = await i.guild.members.fetch(user.id).catch(() => null);
+  if (m) { const bad = canAct(i, m); if (bad) return send(i, '❌ ' + bad); if (!m.bannable) return send(i, '❌ I cannot ban that member.'); await notify(user, i.guild, 'softbanned', reason); }
+  try { await i.guild.members.ban(user, { reason: `Softban: ${reason}`, deleteMessageSeconds: 604800 }); await i.guild.members.unban(user, 'Softban'); } catch (e) { return send(i, '❌ ' + e.message); }
+  const c = addCase(i.guild, 'SOFTBAN', user.id, i.user.id, reason);
+  return send(i, { embeds: [emb(`🧹 Softbanned — ${user.tag}`, `**Reason:** ${reason}\n**Case:** #${c.id}`, COLORS.warn)] }, false);
+};
+H.massban = async i => {
+  await defer(i);
+  const ids = [...new Set(i.options.getString('ids').match(/\d{17,20}/g) || [])].slice(0, 25), reason = i.options.getString('reason') || 'Mass ban';
+  let ok = 0;
+  for (const id of ids) {
+    if (id === i.user.id || id === client.user.id || id === i.guild.ownerId) continue;
+    try { await i.guild.members.ban(id, { reason: `${i.user.tag}: ${reason}` }); addCase(i.guild, 'BAN', id, i.user.id, reason); ok++; } catch (e) { /* skip */ }
+    await sleep(300);
+  }
+  return send(i, `✅ Banned **${ok}/${ids.length}** user(s).`);
+};
+H.kick = modAct('KICK', 'kicked', COLORS.warn, (m, r, i) => m.kick(`${i.user.tag}: ${r}`), m => m.kickable ? null : 'I cannot kick that member.');
+H.timeout = modAct('TIMEOUT', 'timed out', COLORS.warn, async (m, r, i) => {
+  const d = parseDuration(i.options.getString('duration')); if (!d) throw new Error('Invalid duration. Use e.g. 10m, 2h, 1d.');
+  const ms = Math.min(d, 28 * 864e5); await m.timeout(ms, `${i.user.tag}: ${r}`); return `\n**Duration:** ${fmtDur(ms)}`;
+}, m => m.moderatable ? null : 'I cannot timeout that member.');
+H.untimeout = modAct('UNTIMEOUT', null, COLORS.ok, (m, r, i) => m.timeout(null, `${i.user.tag}: ${r}`), m => m.moderatable ? null : 'I cannot modify that member.');
+H.mute = modAct('MUTE', 'muted', COLORS.warn, async (m, r, i) => { const role = await ensureMuteRole(i.guild); await m.roles.add(role, `${i.user.tag}: ${r}`); });
+H.unmute = modAct('UNMUTE', null, COLORS.ok, async (m, r, i) => { const role = await ensureMuteRole(i.guild); await m.roles.remove(role, `${i.user.tag}: ${r}`); });
+H.warn = modAct('WARN', 'warned', COLORS.warn, async (m, r, i) => {
+  const g = G(i.guild.id); const id = ++g.warnSeq;
+  (g.warnings[m.id] ||= []).push({ id, reason: r, mod: i.user.id, time: Date.now() }); save();
+  return `\n**Total warnings:** ${g.warnings[m.id].length}`;
+});
+H.warnings = async i => {
+  const u = i.options.getUser('user'), w = G(i.guild.id).warnings[u.id] || [];
+  if (!w.length) return send(i, `✅ **${u.tag}** has no warnings.`);
+  return send(i, { embeds: [emb(`⚠️ Warnings — ${u.tag}`, w.slice(-15).map(x => `**#${x.id}** • <t:${ts(x.time)}:d> • by <@${x.mod}>\n${x.reason}`).join('\n\n'), COLORS.warn)] });
+};
+H.clearwarnings = async i => {
+  const u = i.options.getUser('user'), id = i.options.getInteger('id'), g = G(i.guild.id);
+  if (id) g.warnings[u.id] = (g.warnings[u.id] || []).filter(w => w.id !== id); else delete g.warnings[u.id];
+  save(); addCase(i.guild, 'CLEARWARNINGS', u.id, i.user.id, id ? `Cleared warning #${id}` : 'Cleared all warnings');
+  return send(i, `✅ Cleared ${id ? `warning #${id}` : 'all warnings'} for **${u.tag}**.`);
+};
+const voiceAct = (name, fn, needVoice = true) => async i => {
+  const m = await i.guild.members.fetch(i.options.getUser('user').id).catch(() => null);
+  if (!m) return send(i, '❌ Member not found.');
+  if (needVoice && !m.voice.channel) return send(i, '❌ That member is not in a voice channel.');
+  try { await fn(m, i); } catch (e) { return send(i, '❌ ' + e.message); }
+  addCase(i.guild, name, m.id, i.user.id, i.options.getString?.('reason') || 'No reason provided');
+  return send(i, `✅ ${name} applied to **${m.user.tag}**.`);
+};
+H.deafen = voiceAct('DEAFEN', m => m.voice.setDeaf(true));
+H.undeafen = voiceAct('UNDEAFEN', m => m.voice.setDeaf(false));
+H.disconnect = voiceAct('DISCONNECT', m => m.voice.disconnect());
+H.move = voiceAct('MOVE', (m, i) => m.voice.setChannel(i.options.getChannel('channel')));
+H.modlogs = async i => {
+  const u = i.options.getUser('user'), cs = G(i.guild.id).cases.filter(c => c.target === u.id);
+  if (!cs.length) return send(i, `No moderation history for **${u.tag}**.`);
+  return send(i, { embeds: [emb(`📁 Mod Logs — ${u.tag}`, cs.slice(-15).reverse().map(c => `**#${c.id}** ${c.type} • <t:${ts(c.time)}:d> • by <@${c.mod}>\n${trunc(c.reason, 150)}`).join('\n\n'))] });
+};
+H.case = async i => {
+  const c = G(i.guild.id).cases[i.options.getInteger('number') - 1];
+  if (!c) return send(i, '❌ Case not found.');
+  return send(i, { embeds: [emb(`Case #${c.id} — ${c.type}`, `**Target:** <@${c.target}> (\`${c.target}\`)\n**Moderator:** <@${c.mod}>\n**Reason:** ${c.reason}\n**Date:** <t:${ts(c.time)}:F>${c.duration ? `\n**Duration:** ${fmtDur(c.duration)}` : ''}`)] });
+};
 
-function buildSupportTicketControlPayload(ticketData, userMention) {
-  const categoryPreset = TICKET_PRESETS.server_ticket;
-  const ticketBanner = categoryPreset.bannerUrl || STANDARD_BANNER_URL;
-  const accentColor = categoryPreset.accentColor || 0x2ecc71;
+// ---- 3. Roles ----
+const bulkRole = (filter, add) => async i => {
+  const role = i.options.getRole('role'), bad = roleBlock(i, role); if (bad) return send(i, '❌ ' + bad);
+  await defer(i); const members = await i.guild.members.fetch(); let n = 0;
+  for (const m of members.values()) {
+    if (!filter(m) || add === m.roles.cache.has(role.id)) continue;
+    try { add ? await m.roles.add(role) : await m.roles.remove(role); n++; } catch (e) { /* skip */ }
+    await sleep(250);
+  }
+  return send(i, `✅ ${add ? 'Added' : 'Removed'} **${role.name}** ${add ? 'to' : 'from'} **${n}** member(s).`);
+};
+H.role = {
+  add: async i => { const r = i.options.getRole('role'), m = i.options.getMember('user'), bad = roleBlock(i, r); if (bad) return send(i, '❌ ' + bad); if (!m) return send(i, '❌ Member not found.'); await m.roles.add(r); return send(i, `✅ Gave **${r.name}** to ${m}.`); },
+  remove: async i => { const r = i.options.getRole('role'), m = i.options.getMember('user'), bad = roleBlock(i, r); if (bad) return send(i, '❌ ' + bad); if (!m) return send(i, '❌ Member not found.'); await m.roles.remove(r); return send(i, `✅ Removed **${r.name}** from ${m}.`); },
+  create: async i => { const r = await i.guild.roles.create({ name: i.options.getString('name'), color: hexColor(i.options.getString('color'), 0), hoist: !!i.options.getBoolean('hoist'), mentionable: !!i.options.getBoolean('mentionable') }); return send(i, `✅ Created ${r}.`); },
+  delete: async i => { const r = i.options.getRole('role'), bad = roleBlock(i, r); if (bad) return send(i, '❌ ' + bad); await r.delete(`By ${i.user.tag}`); return send(i, `✅ Deleted **${r.name}**.`); },
+  edit: async i => { const r = i.options.getRole('role'), bad = roleBlock(i, r); if (bad) return send(i, '❌ ' + bad); const d = {}; const n = i.options.getString('name'), h = i.options.getBoolean('hoist'), mn = i.options.getBoolean('mentionable'); if (n) d.name = n; if (h !== null) d.hoist = h; if (mn !== null) d.mentionable = mn; await r.edit(d); return send(i, `✅ Updated ${r}.`); },
+  color: async i => { const r = i.options.getRole('role'), bad = roleBlock(i, r); if (bad) return send(i, '❌ ' + bad); await r.setColor(hexColor(i.options.getString('color'), 0)); return send(i, `✅ Updated color of ${r}.`); },
+  icon: async i => { const r = i.options.getRole('role'), bad = roleBlock(i, r); if (bad) return send(i, '❌ ' + bad); try { await r.setIcon(i.options.getAttachment('image')?.url || null); } catch (e) { return send(i, '❌ ' + e.message); } return send(i, `✅ Updated icon of ${r}.`); },
+  info: async i => { const r = i.options.getRole('role'); return send(i, { embeds: [emb(`Role: ${r.name}`, null, r.color || COLORS.main).addFields({ name: 'ID', value: r.id, inline: true }, { name: 'Color', value: r.hexColor, inline: true }, { name: 'Members', value: `${r.members.size}`, inline: true }, { name: 'Hoisted', value: r.hoist ? 'Yes' : 'No', inline: true }, { name: 'Mentionable', value: r.mentionable ? 'Yes' : 'No', inline: true }, { name: 'Position', value: `${r.position}`, inline: true }, { name: 'Created', value: `<t:${ts(r.createdTimestamp)}:R>`, inline: true }, { name: 'Key Permissions', value: r.permissions.has(P.Administrator) ? 'Administrator' : trunc(r.permissions.toArray().slice(0, 10).join(', ') || 'None', 500) })] }); },
+  members: async i => { await i.guild.members.fetch(); const r = i.options.getRole('role'); const l = r.members.map(m => `${m}`); return send(i, { embeds: [emb(`Members with ${r.name} (${l.length})`, trunc(l.join(' ') || 'None', 3900))] }); },
+  all: bulkRole(() => true, true), bots: bulkRole(m => m.user.bot, true), humans: bulkRole(m => !m.user.bot, true),
+  'bots-remove': bulkRole(m => m.user.bot, false), 'humans-remove': bulkRole(m => !m.user.bot, false),
+  transfer: async i => {
+    const r = i.options.getRole('role'), bad = roleBlock(i, r); if (bad) return send(i, '❌ ' + bad);
+    const a = i.options.getMember('from'), b = i.options.getMember('to'); if (!a || !b) return send(i, '❌ Member not found.');
+    await a.roles.remove(r); await b.roles.add(r); return send(i, `✅ Transferred **${r.name}** from ${a} to ${b}.`);
+  }
+};
 
-  const requesterTag = `<@${ticketData.requesterId}> (${ticketData.ign})`;
+// ---- 4. Member management ----
+H.userinfo = H.whois = async i => {
+  const user = i.options.getUser('user') || i.user, m = await i.guild.members.fetch(user.id).catch(() => null);
+  const e = emb(`👤 ${user.tag}`).setThumbnail(user.displayAvatarURL({ size: 256 })).addFields({ name: 'ID', value: user.id, inline: true }, { name: 'Bot', value: user.bot ? 'Yes' : 'No', inline: true }, { name: 'Created', value: `<t:${ts(user.createdTimestamp)}:F> (<t:${ts(user.createdTimestamp)}:R>)` });
+  if (m) {
+    e.addFields({ name: 'Joined', value: `<t:${ts(m.joinedTimestamp)}:F> (<t:${ts(m.joinedTimestamp)}:R>)` }, { name: 'Nickname', value: m.nickname || 'None', inline: true }, { name: 'Highest Role', value: `${m.roles.highest}`, inline: true }, { name: `Roles (${m.roles.cache.size - 1})`, value: trunc(m.roles.cache.filter(r => r.id !== i.guild.id).map(r => `${r}`).join(' ') || 'None', 1000) });
+    if (m.premiumSince) e.addFields({ name: 'Boosting since', value: `<t:${ts(m.premiumSinceTimestamp)}:R>`, inline: true });
+    if (m.communicationDisabledUntil) e.addFields({ name: 'Timed out until', value: `<t:${ts(m.communicationDisabledUntilTimestamp)}:R>`, inline: true });
+  }
+  return send(i, { embeds: [e] }, false);
+};
+H.avatar = async i => { const u = i.options.getUser('user') || i.user; return send(i, { embeds: [emb(`${u.tag}'s Avatar`).setImage(u.displayAvatarURL({ size: 1024 }))] }, false); };
+H.banner = async i => { const u = await (i.options.getUser('user') || i.user).fetch(true); const b = u.bannerURL({ size: 1024 }); if (!b) return send(i, `**${u.tag}** has no banner.`); return send(i, { embeds: [emb(`${u.tag}'s Banner`).setImage(b)] }, false); };
+H.membercount = async i => send(i, { embeds: [emb('👥 Member Count', `**${i.guild.memberCount}** members in **${i.guild.name}**`)] }, false);
+H.joinedat = async i => { const u = i.options.getUser('user') || i.user, m = await i.guild.members.fetch(u.id).catch(() => null); if (!m) return send(i, '❌ Member not found.'); return send(i, `📅 **${u.tag}** joined <t:${ts(m.joinedTimestamp)}:F> (<t:${ts(m.joinedTimestamp)}:R>)`, false); };
+H.accountage = async i => { const u = i.options.getUser('user') || i.user; return send(i, `🎂 **${u.tag}**'s account was created <t:${ts(u.createdTimestamp)}:F> (<t:${ts(u.createdTimestamp)}:R>)`, false); };
+H.nickname = async i => {
+  const m = await i.guild.members.fetch(i.options.getUser('user').id).catch(() => null); if (!m) return send(i, '❌ Member not found.');
+  if (m.id !== i.user.id) { const bad = canAct(i, m); if (bad) return send(i, '❌ ' + bad); }
+  if (!m.manageable) return send(i, '❌ I cannot change that member\'s nickname.');
+  const nick = i.options.getString('nickname'); await m.setNickname(nick || null, `By ${i.user.tag}`);
+  return send(i, `✅ Nickname ${nick ? `changed to **${nick}**` : 'reset'} for ${m}.`);
+};
+H.massnick = async i => {
+  await defer(i); const role = i.options.getRole('role'), reset = i.options.getBoolean('reset'), fmt = i.options.getString('format');
+  const members = await i.guild.members.fetch(); let n = 0;
+  for (const m of members.values()) {
+    if (m.user.bot || !m.manageable || (role && !m.roles.cache.has(role.id))) continue;
+    try { await m.setNickname(reset ? null : fmt.replace(/{username}/g, m.user.username).slice(0, 32), `Massnick by ${i.user.tag}`); n++; } catch (e) { /* skip */ }
+    await sleep(300);
+  }
+  return send(i, `✅ Updated **${n}** nickname(s).`);
+};
+H.profile = async i => {
+  const u = i.options.getUser('user') || i.user, m = await i.guild.members.fetch(u.id).catch(() => null), g = G(i.guild.id);
+  const x = g.xp[u.id] || { xp: 0, level: 0, msgs: 0 }, w = (g.warnings[u.id] || []).length, afk = g.afk[u.id];
+  const e = emb(`📇 Profile — ${u.tag}`).setThumbnail(u.displayAvatarURL({ size: 256 })).addFields(
+    { name: 'Level', value: `${x.level} (${x.xp} XP)`, inline: true }, { name: 'Messages', value: `${x.msgs || 0}`, inline: true }, { name: 'Warnings', value: `${w}`, inline: true },
+    { name: 'Joined', value: m ? `<t:${ts(m.joinedTimestamp)}:R>` : 'N/A', inline: true }, { name: 'Created', value: `<t:${ts(u.createdTimestamp)}:R>`, inline: true }, { name: 'AFK', value: afk ? afk.reason : 'No', inline: true });
+  return send(i, { embeds: [e] }, false);
+};
+H.inrole = async i => { await i.guild.members.fetch(); const r = i.options.getRole('role'); return send(i, { embeds: [emb(`Members in ${r.name} (${r.members.size})`, trunc(r.members.map(m => `${m}`).join(' ') || 'None', 3900))] }); };
+H.botinfo = async i => send(i, { embeds: [emb(`🤖 ${client.user.username}`).setThumbnail(client.user.displayAvatarURL()).addFields(
+  { name: 'Servers', value: `${client.guilds.cache.size}`, inline: true }, { name: 'Users', value: `${client.guilds.cache.reduce((a, g) => a + g.memberCount, 0)}`, inline: true },
+  { name: 'Ping', value: `${client.ws.ping}ms`, inline: true }, { name: 'Uptime', value: fmtDur(Date.now() - START), inline: true },
+  { name: 'Memory', value: `${(process.memoryUsage().heapUsed / 1048576).toFixed(1)} MB`, inline: true }, { name: 'Versions', value: `Node ${process.version} • discord.js ${require('discord.js').version}`, inline: true })] }, false);
+H.bots = async i => { const ms = await i.guild.members.fetch(); const l = ms.filter(m => m.user.bot).map(m => `${m} (\`${m.user.tag}\`)`); return send(i, { embeds: [emb(`🤖 Bots (${l.length})`, trunc(l.join('\n') || 'None', 3900))] }); };
 
-  const containerComponent = {
-    type: 17,
-    accent_color: accentColor,
-    components: [
-      {
-        type: 12,
-        items: [{ media: { url: ticketBanner } }]
-      },
-      {
-        type: 10,
-        content: `<:requestbt:1534950441060798594> **User:** ${requesterTag}\n\n**Subject / Concern:**\n-# > **${ticketData.subject}**`
-      },
-      {
-        type: 10,
-        content: `**Details / Report:**\n-# > **${ticketData.description}**`
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `Need staff attention? **Ping staff!**`
-          }
-        ],
-        accessory: {
-          type: 2,
-          style: 2,
-          custom_id: 'btn_pinghelpers',
-          label: 'Ping staff',
-          emoji: { id: '1534950337167884368', name: 'pinghelpersbt', animated: false }
-        }
-      },
-      {
-        type: 1,
-        components: [
-          {
-            type: 2,
-            style: 3,
-            custom_id: 'btn_complete',
-            label: 'Complete',
-            emoji: { id: '1534950268679094397', name: 'completebt', animated: false }
-          },
-          {
-            type: 2,
-            style: 4,
-            custom_id: 'btn_cancel',
-            label: 'Cancel',
-            emoji: { id: '1534950219517788170', name: 'cancelbt', animated: false }
-          }
-        ]
-      }
-    ]
-  };
+// ---- 5. Channels ----
+const CHMAP = { text: ChannelType.GuildText, voice: ChannelType.GuildVoice, announcement: ChannelType.GuildAnnouncement, forum: ChannelType.GuildForum, stage: ChannelType.GuildStageVoice };
+const chOf = i => i.options.getChannel('channel') || i.channel;
+H.channel = {
+  create: async i => { const cat = i.options.getChannel('category'), topic = i.options.getString('topic'); const ch = await i.guild.channels.create({ name: i.options.getString('name'), type: CHMAP[i.options.getString('type') || 'text'], parent: cat?.id, topic: topic || undefined }); return send(i, `✅ Created ${ch}.`); },
+  delete: async i => { const ch = i.options.getChannel('channel'); await send(i, `✅ Deleting **${ch.name}**...`); await ch.delete(`By ${i.user.tag}`); },
+  rename: async i => { const ch = chOf(i); await ch.setName(i.options.getString('name')); return send(i, `✅ Renamed to ${ch}.`); },
+  topic: async i => { const ch = chOf(i); await ch.setTopic(i.options.getString('topic')); return send(i, `✅ Topic updated for ${ch}.`); },
+  lock: async i => { const ch = chOf(i), r = i.options.getRole('role') || i.guild.roles.everyone; await ch.permissionOverwrites.edit(r, { SendMessages: false }); return send(i, `🔒 Locked ${ch} for ${r.name}.`); },
+  unlock: async i => { const ch = chOf(i), r = i.options.getRole('role') || i.guild.roles.everyone; await ch.permissionOverwrites.edit(r, { SendMessages: null }); return send(i, `🔓 Unlocked ${ch} for ${r.name}.`); },
+  hide: async i => { const ch = chOf(i); await ch.permissionOverwrites.edit(i.options.getMentionable('target'), { ViewChannel: false }); return send(i, `🙈 Hidden ${ch}.`); },
+  unhide: async i => { const ch = chOf(i); await ch.permissionOverwrites.edit(i.options.getMentionable('target'), { ViewChannel: null }); return send(i, `👁️ ${ch} is visible again.`); },
+  slowmode: async i => { const ch = chOf(i); await ch.setRateLimitPerUser(i.options.getInteger('seconds')); return send(i, `✅ Slowmode set in ${ch}.`); },
+  clone: async i => { const ch = chOf(i), n = await ch.clone({ name: i.options.getString('name') || undefined }); return send(i, `✅ Cloned to ${n}.`); },
+  info: async i => { const ch = chOf(i); return send(i, { embeds: [emb(`Channel: ${ch.name}`).addFields({ name: 'ID', value: ch.id, inline: true }, { name: 'Type', value: ChannelType[ch.type], inline: true }, { name: 'Category', value: ch.parent?.name || 'None', inline: true }, { name: 'Created', value: `<t:${ts(ch.createdTimestamp)}:R>`, inline: true }, { name: 'Topic', value: ch.topic || 'None' }, { name: 'Slowmode', value: `${ch.rateLimitPerUser || 0}s`, inline: true }, { name: 'NSFW', value: ch.nsfw ? 'Yes' : 'No', inline: true })] }); },
+  permissions: async i => {
+    const ch = i.options.getChannel('channel'), v = i.options.getString('value');
+    await ch.permissionOverwrites.edit(i.options.getMentionable('target'), { [i.options.getString('permission')]: v === 'allow' ? true : v === 'deny' ? false : null });
+    return send(i, `✅ Permission updated on ${ch}.`);
+  }
+};
+H.category = {
+  create: async i => { const c = await i.guild.channels.create({ name: i.options.getString('name'), type: ChannelType.GuildCategory }); return send(i, `✅ Created category **${c.name}**.`); },
+  delete: async i => { const c = i.options.getChannel('category'); await c.delete(); return send(i, `✅ Deleted category **${c.name}**.`); },
+  rename: async i => { const c = i.options.getChannel('category'); await c.setName(i.options.getString('name')); return send(i, '✅ Category renamed.'); }
+};
 
-  return {
-    components: [containerComponent],
-    flags: MessageFlags.IsComponentsV2
-  };
+// ---- 6/7. Security + Automod ----
+async function quarantine(member, reason) {
+  const sec = G(member.guild.id).security;
+  sec.quarantined[member.id] = member.roles.cache.filter(r => r.id !== member.guild.id && !r.managed).map(r => r.id); save();
+  const keep = member.roles.cache.filter(r => r.managed).map(r => r.id);
+  await member.roles.set(sec.quarantineRole ? [...keep, sec.quarantineRole] : keep, reason).catch(() => {});
+  if (!sec.quarantineRole) await member.timeout(7 * 864e5, reason).catch(() => {});
 }
-
-async function updateTicketEmbed(channel, ticketData) {
+H.security = {
+  status: async i => { const s = G(i.guild.id).security; const on = v => v ? '✅' : '❌'; return send(i, { embeds: [emb('🛡️ Security Status', `Anti-raid: ${on(s.antiRaid)} (threshold ${s.raidThreshold}/10s → ${s.raidAction})${s.raidMode ? ' 🚨 RAID MODE' : ''}\nMin account age: ${s.minAccountDays ? `${s.minAccountDays}d → ${s.accountAction}` : '❌'}\nAnti-bot: ${on(s.antiBot)}\nAnti-nuke: ${on(s.antiNuke)}\nQuarantine role: ${s.quarantineRole ? `<@&${s.quarantineRole}>` : 'None (uses timeout)'}\nVerification: ${s.verifyMode ? `${s.verifyMode} → <@&${s.verifyRole}>` : '❌'}\nTrusted users: ${s.trusted.map(id => `<@${id}>`).join(' ') || 'None'}`)] }); },
+  antiraid: async i => { const s = G(i.guild.id).security; s.antiRaid = i.options.getBoolean('enabled'); s.raidThreshold = i.options.getInteger('threshold') || s.raidThreshold; s.raidAction = i.options.getString('action') || s.raidAction; save(); return send(i, `✅ Anti-raid ${s.antiRaid ? 'enabled' : 'disabled'} (threshold ${s.raidThreshold}, action ${s.raidAction}).`); },
+  accountage: async i => { const s = G(i.guild.id).security; s.minAccountDays = i.options.getInteger('days'); s.accountAction = i.options.getString('action') || s.accountAction; save(); return send(i, `✅ Minimum account age: **${s.minAccountDays}** day(s) (${s.accountAction}).`); },
+  antibot: async i => { G(i.guild.id).security.antiBot = i.options.getBoolean('enabled'); save(); return send(i, '✅ Anti-bot protection updated.'); },
+  antinuke: async i => { G(i.guild.id).security.antiNuke = i.options.getBoolean('enabled'); save(); return send(i, '✅ Anti-nuke protection updated.'); },
+  trust: async i => { const s = G(i.guild.id).security, u = i.options.getUser('user'); s.trusted = s.trusted.filter(x => x !== u.id); if (i.options.getBoolean('trusted')) s.trusted.push(u.id); save(); return send(i, `✅ ${u} is now ${i.options.getBoolean('trusted') ? 'trusted' : 'untrusted'}.`); },
+  'quarantine-role': async i => { G(i.guild.id).security.quarantineRole = i.options.getRole('role').id; save(); return send(i, '✅ Quarantine role set.'); },
+  quarantine: async i => { const m = i.options.getMember('user'); if (!m) return send(i, '❌ Member not found.'); const bad = canAct(i, m); if (bad) return send(i, '❌ ' + bad); await quarantine(m, i.options.getString('reason') || 'Quarantined'); addCase(i.guild, 'QUARANTINE', m.id, i.user.id, i.options.getString('reason')); return send(i, `🔒 ${m} quarantined.`); },
+  release: async i => { const m = i.options.getMember('user'), s = G(i.guild.id).security; if (!m || !s.quarantined[m.id]) return send(i, '❌ That member is not quarantined.'); await m.roles.set(s.quarantined[m.id]).catch(() => {}); await m.timeout(null).catch(() => {}); delete s.quarantined[m.id]; save(); return send(i, `🔓 ${m} released.`); },
+  lockdown: async i => { await defer(i); const on = i.options.getBoolean('enabled'), n = await setServerLock(i.guild, on, 'Manual lockdown'); G(i.guild.id).security.raidMode = on; save(); return send(i, `${on ? '🔒 Lockdown enabled' : '🔓 Lockdown lifted'} (${n} channels).`); },
+  verification: async i => {
+    const s = G(i.guild.id).security, role = i.options.getRole('role'), mode = i.options.getString('mode'), ch = i.options.getChannel('channel');
+    s.verifyMode = mode; s.verifyRole = role.id; save();
+    if (mode !== 'auto') {
+      if (!ch) return send(i, '❌ Provide a `channel` to post the verification panel.');
+      await ch.send({ embeds: [emb('✅ Verification', `Click the button below to verify${mode === 'captcha' ? ' (captcha required)' : ''} and gain access to the server.`)], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('verify_start').setLabel('Verify').setStyle(ButtonStyle.Success))] });
+    }
+    return send(i, `✅ Verification set to **${mode}** (role ${role}).`);
+  }
+};
+H.automod = {
+  enable: async i => { G(i.guild.id).automod.enabled = true; save(); return send(i, '✅ AutoMod enabled.'); },
+  disable: async i => { G(i.guild.id).automod.enabled = false; save(); return send(i, '✅ AutoMod disabled.'); },
+  badwords: async i => {
+    const a = G(i.guild.id).automod, act = i.options.getString('action'), w = (i.options.getString('word') || '').toLowerCase().trim();
+    if (act === 'list') return send(i, `📝 Prohibited words: ${a.badwords.map(x => `||${x}||`).join(', ') || 'None'}`);
+    if (act === 'clear') { a.badwords = []; save(); return send(i, '✅ Cleared all prohibited words.'); }
+    if (!w) return send(i, '❌ Provide a `word`.');
+    a.badwords = a.badwords.filter(x => x !== w); if (act === 'add') a.badwords.push(w); save(); return send(i, `✅ ${act === 'add' ? 'Added' : 'Removed'} \`${w}\`.`);
+  },
+  whitelist: async i => {
+    const a = G(i.guild.id).automod, act = i.options.getString('action'), r = i.options.getRole('role'), u = i.options.getUser('user');
+    if (act === 'list') return send(i, `Whitelisted roles: ${a.whitelistRoles.map(x => `<@&${x}>`).join(' ') || 'None'}\nWhitelisted users: ${a.whitelistUsers.map(x => `<@${x}>`).join(' ') || 'None'}`);
+    if (r) { a.whitelistRoles = a.whitelistRoles.filter(x => x !== r.id); if (act === 'add') a.whitelistRoles.push(r.id); }
+    if (u) { a.whitelistUsers = a.whitelistUsers.filter(x => x !== u.id); if (act === 'add') a.whitelistUsers.push(u.id); }
+    save(); return send(i, '✅ Whitelist updated.');
+  },
+  blacklist: async i => {
+    const a = G(i.guild.id).automod, act = i.options.getString('action'), w = (i.options.getString('word') || '').toLowerCase().trim(), u = i.options.getUser('user');
+    if (act === 'list') return send(i, `Blacklisted words: ${a.blacklistWords.map(x => `||${x}||`).join(', ') || 'None'}\nBlacklisted users: ${a.blacklistUsers.map(x => `<@${x}>`).join(' ') || 'None'}`);
+    if (w) { a.blacklistWords = a.blacklistWords.filter(x => x !== w); if (act === 'add') a.blacklistWords.push(w); }
+    if (u) { a.blacklistUsers = a.blacklistUsers.filter(x => x !== u.id); if (act === 'add') a.blacklistUsers.push(u.id); }
+    save(); return send(i, '✅ Blacklist updated.');
+  }
+};
+for (const r of AMRULES) H.automod[r] = async i => {
+  const a = G(i.guild.id).automod, old = a.rules[r] || {};
+  a.rules[r] = { enabled: i.options.getBoolean('enabled'), limit: i.options.getInteger('limit') ?? old.limit };
+  save(); return send(i, `✅ AutoMod **${r}** ${a.rules[r].enabled ? 'enabled' : 'disabled'}${a.rules[r].limit ? ` (limit ${a.rules[r].limit})` : ''}.${a.enabled ? '' : '\n⚠️ AutoMod is currently disabled — use `/automod enable`.'}`);
+};
+const INVITE_RE = /(discord\.gg|discord(app)?\.com\/invite)\/[\w-]+/i, LINK_RE = /(https?:\/\/|www\.)\S+/i;
+const spamMap = new Map(), repMap = new Map(), strikes = new Map();
+async function runAutomod(message) {
+  const g = G(message.guild.id), a = g.automod, member = message.member; if (!member) return false;
+  const bl = a.blacklistUsers.includes(message.author.id);
+  if (!a.enabled && !bl) return false;
+  if (!bl && (isStaff(member) || member.permissions.has(P.ManageMessages) || a.whitelistUsers.includes(member.id) || member.roles.cache.some(r => a.whitelistRoles.includes(r.id)))) return false;
+  const c = message.content, rules = a.rules, on = k => rules[k]?.enabled, lim = (k, d) => rules[k]?.limit || d, key = `${message.guild.id}:${message.author.id}`;
+  let why = null;
+  if (bl) why = 'Blacklisted user';
+  else if ([...a.badwords, ...a.blacklistWords].some(w => new RegExp(`(^|\\W)${escRe(w)}(\\W|$)`, 'i').test(c))) why = 'Prohibited word';
+  else if (on('invites') && INVITE_RE.test(c)) why = 'Discord invite';
+  else if (on('links') && LINK_RE.test(c)) why = 'Link';
+  else if (on('mentions') && message.mentions.users.size + message.mentions.roles.size + (message.mentions.everyone ? 1 : 0) >= lim('mentions', 5)) why = 'Mass mention';
+  else if (on('emoji') && ((c.match(/\p{Extended_Pictographic}/gu) || []).length + (c.match(/<a?:\w+:\d+>/g) || []).length) >= lim('emoji', 10)) why = 'Excessive emojis';
+  else if (on('caps')) { const letters = c.replace(/[^a-zA-Z]/g, ''); if (letters.length >= 10 && (letters.replace(/[^A-Z]/g, '').length / letters.length) * 100 >= lim('caps', 70)) why = 'Excessive caps'; }
+  if (!why && on('repeats')) { const r = repMap.get(key) || { c: '', n: 0 }; r.n = r.c === c.toLowerCase() ? r.n + 1 : 1; r.c = c.toLowerCase(); repMap.set(key, r); if (c && r.n >= lim('repeats', 3)) { why = 'Repeated messages'; repMap.delete(key); } }
+  if (!why && on('antispam')) { const arr = (spamMap.get(key) || []).filter(t => Date.now() - t < 5000); arr.push(Date.now()); spamMap.set(key, arr); if (arr.length >= lim('antispam', 5)) { why = 'Spam / flood'; spamMap.delete(key); } }
+  if (!why) return false;
+  await message.delete().catch(() => {});
+  const s = strikes.get(key) || { n: 0, t: 0 }; if (Date.now() - s.t > 600000) s.n = 0; s.n++; s.t = Date.now(); strikes.set(key, s);
+  const note = await message.channel.send({ content: `⚠️ ${message.author}, your message was removed: **${why}** (strike ${s.n}/3)`, allowedMentions: { users: [message.author.id] } }).catch(() => null);
+  setTimeout(() => note?.delete().catch(() => {}), 6000);
+  logEvent(message.guild, 'moderation', '🤖 AutoMod', `**User:** ${message.author} • **Channel:** ${message.channel}\n**Rule:** ${why}\n**Content:** ${trunc(c, 500) || '(none)'}`, COLORS.warn);
+  if (s.n >= 3 && member.moderatable) { await member.timeout(10 * 60000, 'AutoMod: repeated violations').catch(() => {}); addCase(message.guild, 'AUTOTIMEOUT', member.id, client.user.id, `AutoMod: ${why}`); s.n = 0; }
+  return true;
+}
+const joins = new Map();
+async function punishJoin(member, action, reason) {
+  logEvent(member.guild, 'security', '🛡️ Join Blocked', `${member.user.tag} (\`${member.id}\`) → **${action}**\n${reason}`, COLORS.err);
+  if (action === 'ban') await member.ban({ reason }).catch(() => {});
+  else if (action === 'quarantine') await quarantine(member, reason);
+  else await member.kick(reason).catch(() => {});
+}
+async function joinSecurity(member) {
+  const guild = member.guild, sec = G(guild.id).security, age = (Date.now() - member.user.createdTimestamp) / 864e5;
+  if (sec.minAccountDays && age < sec.minAccountDays) { await punishJoin(member, sec.accountAction || 'kick', `Account younger than ${sec.minAccountDays} day(s)`); return true; }
+  if (age < 7 && !member.user.avatar) logEvent(guild, 'security', '🕵️ Suspicious Account', `${member} — ${age.toFixed(1)} days old with no avatar.`, COLORS.warn);
+  if (sec.antiRaid) {
+    const arr = (joins.get(guild.id) || []).filter(t => Date.now() - t < 10000); arr.push(Date.now()); joins.set(guild.id, arr);
+    if (!sec.raidMode && arr.length >= sec.raidThreshold) {
+      sec.raidMode = true; save();
+      logEvent(guild, 'security', '🚨 Raid Detected', `${arr.length} joins in 10 seconds. Raid mode active for 5 minutes (action: ${sec.raidAction}).`, COLORS.err);
+      if (sec.raidAction === 'lockdown') setServerLock(guild, true, 'Raid detected');
+      setTimeout(() => { sec.raidMode = false; save(); if (sec.raidAction === 'lockdown') setServerLock(guild, false, 'Raid mode ended'); }, 300000);
+    }
+    if (sec.raidMode && sec.raidAction !== 'lockdown') { await punishJoin(member, sec.raidAction, 'Raid protection'); return true; }
+  }
+  return false;
+}
+const actionCounts = new Map();
+async function guardAudit(guild, type, label, targetId) {
+  const sec = G(guild.id).security; if (!sec.antiNuke) return;
   try {
-    const pinnedMessages = await channel.messages.fetchPinned();
-    const panelMsg = pinnedMessages.first();
-    if (!panelMsg) return;
+    const e = (await guild.fetchAuditLogs({ type, limit: 1 })).entries.first();
+    if (!e || Date.now() - e.createdTimestamp > 8000 || (targetId && e.targetId !== targetId)) return;
+    const ex = e.executor;
+    if (!ex || ex.id === client.user.id || ex.id === guild.ownerId || isOwner(ex.id) || sec.trusted.includes(ex.id)) return;
+    const key = `${guild.id}:${ex.id}`, arr = (actionCounts.get(key) || []).filter(t => Date.now() - t < 10000); arr.push(Date.now()); actionCounts.set(key, arr);
+    logEvent(guild, 'security', '🚨 Unauthorized Action', `${ex} performed **${label}**`, COLORS.err);
+    if (arr.length >= 3) { const m = await guild.members.fetch(ex.id).catch(() => null); if (m) { await quarantine(m, `Anti-nuke: mass ${label}`); logEvent(guild, 'security', '🔒 Executor Quarantined', `${ex} was quarantined for repeated **${label}**.`, COLORS.err); } }
+  } catch (e) { /* missing audit log perms */ }
+}
 
-    const payload = ticketData.type === 'server_ticket'
-      ? buildSupportTicketControlPayload(ticketData, `<@${ticketData.requesterId}>`)
-      : buildTicketControlPayload(ticketData, `<@${ticketData.requesterId}>`);
+// ---- 8. Welcome & goodbye ----
+const buildWelcome = (cfg, m, kind) => {
+  const e = emb(vars(cfg.title || (kind === 'welcome' ? 'Welcome!' : 'Goodbye!'), m), vars(cfg.message || (kind === 'welcome' ? 'Welcome {user} to **{server}**!' : '**{tag}** has left **{server}**.'), m), cfg.color || (kind === 'welcome' ? COLORS.ok : COLORS.err)).setThumbnail(m.user.displayAvatarURL());
+  if (cfg.image) e.setImage(cfg.image);
+  return e;
+};
+for (const kind of ['welcome', 'goodbye']) {
+  const apply = (i, cfg) => {
+    const ch = i.options.getChannel('channel'); if (ch) cfg.channel = ch.id;
+    const msg = i.options.getString('message'); if (msg) cfg.message = nl(msg);
+    for (const k of ['title', 'image']) { const v = i.options.getString(k); if (v) cfg[k] = v; }
+    const c = i.options.getString('color'); if (c) cfg.color = hexColor(c);
+    if (kind === 'welcome') { const dm = i.options.getBoolean('dm'); if (dm !== null) cfg.dm = dm; const r = i.options.getRole('role'); if (r) cfg.role = r.id; }
+    save();
+  };
+  H[kind] = {
+    setup: async i => { const cfg = G(i.guild.id)[kind]; cfg.enabled = true; apply(i, cfg); return send(i, `✅ ${kind} configured in <#${cfg.channel}>.`); },
+    edit: async i => { const cfg = G(i.guild.id)[kind]; if (!cfg.channel) return send(i, `❌ Run \`/${kind} setup\` first.`); apply(i, cfg); return send(i, `✅ ${kind} updated.`); },
+    test: async i => { const cfg = G(i.guild.id)[kind]; return send(i, { content: cfg.channel ? `Preview (channel <#${cfg.channel}>):` : '⚠️ Not configured yet — default preview:', embeds: [buildWelcome(cfg, i.member, kind)] }); },
+    disable: async i => { G(i.guild.id)[kind].enabled = false; save(); return send(i, `✅ ${kind} messages disabled.`); }
+  };
+}
 
-    await panelMsg.edit(payload);
-  } catch (err) {
-    console.error('Failed to update ticket embed in real-time:', err);
+// ---- 9. Logs ----
+H.logs = {
+  setup: async i => { const g = G(i.guild.id); g.settings.logChannel = i.options.getChannel('channel').id; g.logs.enabled = true; save(); return send(i, `✅ Logging enabled in <#${g.settings.logChannel}>.`); },
+  channel: async i => { G(i.guild.id).settings.logChannel = i.options.getChannel('channel').id; save(); return send(i, '✅ Log channel updated.'); },
+  enable: async i => { const l = G(i.guild.id).logs, c = i.options.getString('category'); if (c) l.disabled = l.disabled.filter(x => x !== c); else { l.enabled = true; l.disabled = []; } save(); return send(i, `✅ Logging ${c ? `category **${c}**` : ''} enabled.`); },
+  disable: async i => { const l = G(i.guild.id).logs, c = i.options.getString('category'); if (c) { if (!l.disabled.includes(c)) l.disabled.push(c); } else l.enabled = false; save(); return send(i, `✅ Logging ${c ? `category **${c}**` : ''} disabled.`); },
+  configuration: async i => { const g = G(i.guild.id); return send(i, { embeds: [emb('📜 Logging Configuration', `**Channel:** ${g.settings.logChannel ? `<#${g.settings.logChannel}>` : 'Not set'}\n**Enabled:** ${g.logs.enabled ? 'Yes' : 'No'}\n**Categories:**\n${LOG_CATS.map(c => `${g.logs.disabled.includes(c) ? '❌' : '✅'} ${c}`).join('\n')}`)] }); },
+  test: async i => { await logEvent(i.guild, 'server', '🧪 Test Log', `Test log triggered by ${i.user}.`); return send(i, '✅ Test log sent (if a log channel is configured).'); }
+};
+
+// ---- 10. Tickets ----
+const ticketStaff = m => isStaff(m) || (G(m.guild.id).tickets.supportRole && m.roles.cache.has(G(m.guild.id).tickets.supportRole));
+async function ticketLog(guild, embed, files) {
+  const t = G(guild.id).tickets, g = G(guild.id), id = t.logChannel || g.settings.logChannel, ch = id && guild.channels.cache.get(id);
+  if (ch) await ch.send({ embeds: [embed], files: files || [] }).catch(() => {});
+}
+const tkButtons = closed => new ActionRowBuilder().addComponents(...(closed
+  ? [new ButtonBuilder().setCustomId('tk_reopen').setLabel('Reopen').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('tk_transcript').setLabel('Transcript').setStyle(ButtonStyle.Secondary), new ButtonBuilder().setCustomId('tk_delete').setLabel('Delete').setStyle(ButtonStyle.Danger)]
+  : [new ButtonBuilder().setCustomId('tk_close').setLabel('Close').setStyle(ButtonStyle.Danger), new ButtonBuilder().setCustomId('tk_claim').setLabel('Claim').setStyle(ButtonStyle.Success)]));
+async function openTicket(i, reason) {
+  const g = G(i.guild.id), t = g.tickets, guild = i.guild;
+  const ex = Object.entries(t.open).find(([cid, v]) => v.owner === i.user.id && !v.closed && guild.channels.cache.has(cid));
+  if (ex) return send(i, `⚠️ You already have an open ticket: <#${ex[0]}>`);
+  const wait = 60000 - (Date.now() - (t.cooldowns[i.user.id] || 0));
+  if (wait > 0) return send(i, `⏳ Please wait ${Math.ceil(wait / 1000)}s before opening another ticket.`);
+  t.counter++; const num = t.counter, name = `ticket-${String(num).padStart(4, '0')}`;
+  const staffRoles = [t.supportRole, g.settings.adminRole, g.settings.modRole, g.settings.staffRole].filter(Boolean);
+  const allow = [P.ViewChannel, P.SendMessages, P.ReadMessageHistory, P.AttachFiles, P.EmbedLinks];
+  const ch = await guild.channels.create({
+    name, type: ChannelType.GuildText, parent: t.category || undefined, topic: `Ticket #${num} | ${i.user.tag} | ${i.user.id}`,
+    permissionOverwrites: [{ id: guild.id, deny: [P.ViewChannel] }, { id: i.user.id, allow }, { id: client.user.id, allow: [...allow, P.ManageChannels, P.ManageMessages] }, ...staffRoles.map(id => ({ id, allow }))]
+  });
+  t.open[ch.id] = { num, owner: i.user.id, reason, claimedBy: null, closed: false, createdAt: Date.now() };
+  t.cooldowns[i.user.id] = Date.now(); save();
+  await ch.send({ content: `${i.user} ${staffRoles.map(r => `<@&${r}>`).join(' ')}`, embeds: [emb(`🎫 Ticket #${num}`, `**Opened by:** ${i.user}\n**Reason:** ${trunc(reason, 1500)}\n\nA staff member will be with you shortly.`)], components: [tkButtons(false)] });
+  ticketLog(guild, emb('🎫 Ticket Opened', `**Ticket:** ${ch} (#${num})\n**User:** ${i.user}\n**Reason:** ${trunc(reason, 500)}`, COLORS.ok));
+  return send(i, `✅ Ticket created: ${ch}`);
+}
+async function closeTicket(i, reason) {
+  const g = G(i.guild.id), tk = g.tickets.open[i.channel.id];
+  if (!tk) return send(i, '❌ This is not a ticket channel.');
+  if (i.user.id !== tk.owner && !ticketStaff(i.member)) return send(i, '❌ Only the ticket owner or staff can close this ticket.');
+  if (tk.closed) return send(i, '⚠️ This ticket is already closed.');
+  await defer(i, false);
+  tk.closed = true; save();
+  await i.channel.permissionOverwrites.edit(tk.owner, { SendMessages: false }).catch(() => {});
+  await i.channel.setName(`closed-${String(tk.num).padStart(4, '0')}`).catch(() => {});
+  const file = await buildTranscript(i.channel);
+  ticketLog(i.guild, emb('🔒 Ticket Closed', `**Ticket:** #${tk.num}\n**Owner:** <@${tk.owner}>\n**Closed by:** ${i.user}\n**Claimed by:** ${tk.claimedBy ? `<@${tk.claimedBy}>` : 'Nobody'}\n**Reason:** ${reason}`, COLORS.err), [file]);
+  const owner = await client.users.fetch(tk.owner).catch(() => null);
+  if (owner) owner.send({ embeds: [emb(`How was your support in ${i.guild.name}?`, `Your ticket **#${tk.num}** was closed. Please rate your experience:`)], components: [new ActionRowBuilder().addComponents([1, 2, 3, 4, 5].map(n => new ButtonBuilder().setCustomId(`tkrate:${i.guild.id}:${tk.num}:${n}`).setLabel('⭐'.repeat(n)).setStyle(ButtonStyle.Secondary)))] }).catch(() => {});
+  return send(i, { embeds: [emb('🔒 Ticket Closed', `Closed by ${i.user}\n**Reason:** ${reason}`, COLORS.err)], components: [tkButtons(true)] });
+}
+async function reopenTicket(i) {
+  const g = G(i.guild.id), tk = g.tickets.open[i.channel.id];
+  if (!tk) return send(i, '❌ This is not a ticket channel.');
+  if (!ticketStaff(i.member)) return send(i, '❌ Only staff can reopen tickets.');
+  if (!tk.closed) return send(i, '⚠️ This ticket is open.');
+  await defer(i, false); tk.closed = false; save();
+  await i.channel.permissionOverwrites.edit(tk.owner, { SendMessages: true }).catch(() => {});
+  await i.channel.setName(`ticket-${String(tk.num).padStart(4, '0')}`).catch(() => {});
+  return send(i, { embeds: [emb('🔓 Ticket Reopened', `Reopened by ${i.user}`, COLORS.ok)], components: [tkButtons(false)] });
+}
+async function deleteTicket(i) {
+  const g = G(i.guild.id), tk = g.tickets.open[i.channel.id];
+  if (!tk) return send(i, '❌ This is not a ticket channel.');
+  if (!ticketStaff(i.member)) return send(i, '❌ Only staff can delete tickets.');
+  await defer(i, false);
+  const file = await buildTranscript(i.channel);
+  ticketLog(i.guild, emb('🗑️ Ticket Deleted', `**Ticket:** #${tk.num}\n**Owner:** <@${tk.owner}>\n**Deleted by:** ${i.user}`, COLORS.err), [file]);
+  await send(i, '🗑️ Deleting this ticket in 5 seconds...');
+  delete g.tickets.open[i.channel.id]; save();
+  setTimeout(() => i.channel.delete().catch(() => {}), 5000);
+}
+async function claimTicket(i) {
+  const g = G(i.guild.id), tk = g.tickets.open[i.channel.id];
+  if (!tk) return send(i, '❌ This is not a ticket channel.');
+  if (!ticketStaff(i.member)) return send(i, '❌ Only staff can claim tickets.');
+  if (tk.claimedBy) return send(i, `⚠️ Already claimed by <@${tk.claimedBy}>.`);
+  tk.claimedBy = i.user.id; save();
+  return send(i, { embeds: [emb('🙋 Ticket Claimed', `${i.user} will handle this ticket.`, COLORS.ok)] }, false);
+}
+async function ticketTranscript(i) {
+  const tk = G(i.guild.id).tickets.open[i.channel.id];
+  if (!tk) return send(i, '❌ This is not a ticket channel.');
+  if (!ticketStaff(i.member) && i.user.id !== tk.owner) return send(i, '❌ No permission.');
+  await defer(i); const file = await buildTranscript(i.channel);
+  return send(i, { content: '📄 Transcript generated:', files: [file] });
+}
+const ticketOnly = (i, fn) => { const tk = G(i.guild.id).tickets.open[i.channel.id]; if (!tk) return send(i, '❌ This is not a ticket channel.'); if (!ticketStaff(i.member)) return send(i, '❌ Only staff can do that.'); return fn(tk); };
+H.ticket = {
+  setup: async i => {
+    if (!isStaff(i.member)) return send(i, '❌ Staff only.');
+    const t = G(i.guild.id).tickets, ch = i.options.getChannel('channel');
+    t.supportRole = i.options.getRole('support_role')?.id || t.supportRole; t.category = i.options.getChannel('category')?.id || t.category; t.logChannel = i.options.getChannel('log_channel')?.id || t.logChannel; save();
+    const e = emb(i.options.getString('title') || '🎫 Support Tickets', nl(i.options.getString('description') || 'Need help? Click the button below to open a ticket and our staff will assist you.'));
+    const img = i.options.getString('image'); if (img) e.setImage(img);
+    await ch.send({ embeds: [e], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('tk_open').setLabel('Create Ticket').setEmoji('🎫').setStyle(ButtonStyle.Primary))] });
+    return send(i, `✅ Ticket panel posted in ${ch}.`);
+  },
+  create: async i => { await defer(i); return openTicket(i, i.options.getString('reason')); },
+  close: i => closeTicket(i, i.options.getString('reason') || 'No reason provided'),
+  reopen: reopenTicket, delete: deleteTicket, claim: claimTicket, transcript: ticketTranscript,
+  add: i => ticketOnly(i, async () => { const u = i.options.getUser('user'); await i.channel.permissionOverwrites.edit(u, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true }); return send(i, `✅ Added ${u} to the ticket.`, false); }),
+  remove: i => ticketOnly(i, async tk => { const u = i.options.getUser('user'); if (u.id === tk.owner) return send(i, '❌ You cannot remove the ticket owner.'); await i.channel.permissionOverwrites.delete(u); return send(i, `✅ Removed ${u} from the ticket.`, false); }),
+  rename: i => ticketOnly(i, async () => { await i.channel.setName(i.options.getString('name')); return send(i, '✅ Ticket renamed.'); })
+};
+
+// ---- 11. Reaction roles & self roles ----
+const emojiKey = raw => (raw || '').match(/\d{17,}/)?.[0] || (raw || '').trim();
+H.reactionrole = {
+  create: async i => {
+    await defer(i); const ch = i.options.getChannel('channel') || i.channel, type = i.options.getString('type') || 'button', mode = i.options.getString('mode') || 'multiple';
+    const roles = [];
+    for (let n = 1; n <= 5; n++) { const r = i.options.getRole(`role${n}`); if (r && !roles.find(x => x.roleId === r.id)) roles.push({ roleId: r.id, emoji: i.options.getString(`emoji${n}`) || null }); }
+    const bad = roles.map(x => roleBlock({ guild: i.guild, member: i.member }, i.guild.roles.cache.get(x.roleId))).find(Boolean);
+    if (bad) return send(i, '❌ ' + bad);
+    const e = emb(i.options.getString('title'), nl(i.options.getString('description')) + (type === 'reaction' ? '\n\n' + roles.map(x => `${x.emoji || '▫️'} — <@&${x.roleId}>`).join('\n') : ''));
+    const payload = { embeds: [e] };
+    if (type === 'button') payload.components = [new ActionRowBuilder().addComponents(roles.map(x => { const b = new ButtonBuilder().setCustomId(`rr:${x.roleId}`).setLabel(i.guild.roles.cache.get(x.roleId).name.slice(0, 80)).setStyle(ButtonStyle.Secondary); if (x.emoji) { try { b.setEmoji(x.emoji); } catch (er) { /* ignore */ } } return b; }))];
+    const msg = await ch.send(payload);
+    if (type === 'reaction') for (const x of roles) if (x.emoji) await msg.react(x.emoji).catch(() => {});
+    G(i.guild.id).panels[msg.id] = { kind: type, mode, roles, required: i.options.getRole('required_role')?.id || null, channel: ch.id }; save();
+    return send(i, `✅ Role panel posted in ${ch}. (ID: \`${msg.id}\`)`);
+  },
+  delete: async i => {
+    const g = G(i.guild.id), id = i.options.getString('message_id'), p = g.panels[id]; if (!p) return send(i, '❌ Panel not found.');
+    const ch = i.guild.channels.cache.get(p.channel); const msg = ch && await ch.messages.fetch(id).catch(() => null); if (msg) await msg.delete().catch(() => {});
+    delete g.panels[id]; save(); return send(i, '✅ Panel deleted.');
+  },
+  edit: async i => {
+    const g = G(i.guild.id), id = i.options.getString('message_id'), p = g.panels[id]; if (!p) return send(i, '❌ Panel not found.');
+    const ch = i.guild.channels.cache.get(p.channel), msg = ch && await ch.messages.fetch(id).catch(() => null); if (!msg) return send(i, '❌ Panel message not found.');
+    const e = EmbedBuilder.from(msg.embeds[0]), t = i.options.getString('title'), d = i.options.getString('description');
+    if (t) e.setTitle(t); if (d) e.setDescription(nl(d) + (p.kind === 'reaction' ? '\n\n' + p.roles.map(x => `${x.emoji || '▫️'} — <@&${x.roleId}>`).join('\n') : ''));
+    await msg.edit({ embeds: [e] }); return send(i, '✅ Panel updated.');
+  }
+};
+H.selfrole = {
+  setup: async i => {
+    await defer(i); const ch = i.options.getChannel('channel') || i.channel, mode = i.options.getString('mode') || 'multiple', cat = i.options.getString('category');
+    const roles = []; for (let n = 1; n <= 10; n++) { const r = i.options.getRole(`role${n}`); if (r && !roles.find(x => x.roleId === r.id)) roles.push({ roleId: r.id }); }
+    const bad = roles.map(x => roleBlock({ guild: i.guild, member: i.member }, i.guild.roles.cache.get(x.roleId))).find(Boolean); if (bad) return send(i, '❌ ' + bad);
+    const icon = { general: '🎭', color: '🎨', game: '🎮', notification: '🔔' }[cat];
+    const menu = new StringSelectMenuBuilder().setCustomId('sr').setPlaceholder(`${icon} Select your ${cat} roles...`).setMinValues(0).setMaxValues(mode === 'single' ? 1 : roles.length)
+      .addOptions(roles.map(x => new StringSelectMenuOptionBuilder().setLabel(i.guild.roles.cache.get(x.roleId).name.slice(0, 100)).setValue(x.roleId)));
+    const msg = await ch.send({ embeds: [emb(`${icon} ${i.options.getString('title')}`, nl(i.options.getString('description') || 'Pick your roles from the menu below.'))], components: [new ActionRowBuilder().addComponents(menu)] });
+    G(i.guild.id).panels[msg.id] = { kind: 'select', mode, roles, required: i.options.getRole('required_role')?.id || null, channel: ch.id }; save();
+    return send(i, `✅ Self-role menu posted in ${ch}. (ID: \`${msg.id}\`)`);
+  },
+  remove: H.reactionrole.delete
+};
+
+// ---- 12. Leveling ----
+const lvl = xp => Math.floor(Math.sqrt(xp / 100));
+async function applyLevelRoles(guild, userId, level) {
+  const g = G(guild.id), m = await guild.members.fetch(userId).catch(() => null); if (!m) return;
+  for (const [l, r] of Object.entries(g.levelRoles)) if (level >= +l && !m.roles.cache.has(r)) await m.roles.add(r).catch(() => {});
+}
+async function addXp(guild, userId, amount, channel) {
+  const g = G(guild.id); if (!g.level.enabled) return;
+  const u = (g.xp[userId] ||= { xp: 0, level: 0, msgs: 0 }), before = u.level;
+  u.xp += Math.max(1, Math.round(amount * (g.level.multiplier || 1))); u.level = lvl(u.xp); save();
+  if (u.level > before) {
+    applyLevelRoles(guild, userId, u.level);
+    if (g.level.announce) { const ch = (g.level.channel && guild.channels.cache.get(g.level.channel)) || channel; ch?.send({ content: `🎉 <@${userId}> reached **level ${u.level}**!`, allowedMentions: { users: [userId] } }).catch(() => {}); }
   }
 }
+const bar = (p, n = 12) => '█'.repeat(Math.round(p * n)) + '░'.repeat(n - Math.round(p * n));
+H.rank = async i => {
+  const u = i.options.getUser('user') || i.user, g = G(i.guild.id), x = g.xp[u.id] || { xp: 0, level: 0 };
+  const pos = Object.entries(g.xp).sort((a, b) => b[1].xp - a[1].xp).findIndex(([id]) => id === u.id) + 1;
+  const cur = 100 * x.level ** 2, nxt = 100 * (x.level + 1) ** 2, p = (x.xp - cur) / (nxt - cur);
+  return send(i, { embeds: [emb(`🏆 ${u.tag}`, `**Rank:** ${pos ? '#' + pos : 'Unranked'}\n**Level:** ${x.level}\n**XP:** ${x.xp} / ${nxt}\n\`${bar(p)}\` ${Math.round(p * 100)}%`).setThumbnail(u.displayAvatarURL())] }, false);
+};
+H.level = async i => {
+  const u = i.options.getUser('user') || i.user, g = G(i.guild.id), x = g.xp[u.id] || { xp: 0, level: 0 };
+  const next = Object.entries(g.levelRoles).map(([l, r]) => [+l, r]).filter(([l]) => l > x.level).sort((a, b) => a[0] - b[0])[0];
+  return send(i, `📈 **${u.tag}** is level **${x.level}** with **${x.xp} XP**.${next ? `\nNext reward: <@&${next[1]}> at level **${next[0]}**.` : ''}`, false);
+};
+H.leaderboard = async i => {
+  const top = Object.entries(G(i.guild.id).xp).sort((a, b) => b[1].xp - a[1].xp).slice(0, 10);
+  return send(i, { embeds: [emb('🏆 XP Leaderboard', top.map(([id, x], n) => `**${n + 1}.** <@${id}> — Level ${x.level} (${x.xp} XP)`).join('\n') || 'No data yet.')] }, false);
+};
+H.setxp = async i => { const u = i.options.getUser('user'), g = G(i.guild.id), x = (g.xp[u.id] ||= { xp: 0, level: 0, msgs: 0 }); x.xp = i.options.getInteger('amount'); x.level = lvl(x.xp); save(); applyLevelRoles(i.guild, u.id, x.level); return send(i, `✅ Set **${u.tag}** to **${x.xp} XP** (level ${x.level}).`); };
+H.resetxp = async i => { const u = i.options.getUser('user'), g = G(i.guild.id); if (u) delete g.xp[u.id]; else g.xp = {}; save(); return send(i, u ? `✅ Reset XP for **${u.tag}**.` : '✅ Reset XP for everyone.'); };
+H.levelrole = {
+  add: async i => { G(i.guild.id).levelRoles[i.options.getInteger('level')] = i.options.getRole('role').id; save(); return send(i, '✅ Level reward added.'); },
+  remove: async i => { delete G(i.guild.id).levelRoles[i.options.getInteger('level')]; save(); return send(i, '✅ Level reward removed.'); },
+  list: async i => { const l = Object.entries(G(i.guild.id).levelRoles).sort((a, b) => a[0] - b[0]); return send(i, { embeds: [emb('🎖️ Level Rewards', l.map(([lv, r]) => `Level **${lv}** → <@&${r}>`).join('\n') || 'None set.')] }); }
+};
+H.levelconfig = async i => {
+  const l = G(i.guild.id).level, m = i.options.getNumber('multiplier'), c = i.options.getChannel('channel'), a = i.options.getBoolean('announce'), e = i.options.getBoolean('enabled');
+  if (m) l.multiplier = m; if (c) l.channel = c.id; if (a !== null) l.announce = a; if (e !== null) l.enabled = e; save();
+  return send(i, `✅ Leveling: ${l.enabled ? 'on' : 'off'} • multiplier **x${l.multiplier}** • announcements ${l.announce ? 'on' : 'off'}${l.channel ? ` in <#${l.channel}>` : ''}.`);
+};
 
-// --- PARSE VARIABLES HELPER ---
-function parseVariables(text, member, guild) {
-  if (!text) return '';
-  return text
-    .replace(/{user}/g, `<@${member.id}>`)
-    .replace(/{username}/g, member.user.username)
-    .replace(/{server}/g, guild.name)
-    .replace(/{membercount}/g, guild.memberCount);
+// ---- 13. Utility ----
+H.help = async i => send(i, { embeds: [emb('📖 Bot Commands').addFields(
+  { name: '🏠 Server', value: '`/serverinfo` `/servericon` `/serverbanner` `/servername` `/serverrules` `/serverstats` `/serverlock` `/serverunlock` `/slowmode` `/announce` `/embed` `/purge` `/nuke` `/backup` `/restore`' },
+  { name: '🔨 Moderation', value: '`/ban` `/unban` `/tempban` `/kick` `/timeout` `/untimeout` `/mute` `/unmute` `/warn` `/warnings` `/clearwarnings` `/softban` `/massban` `/deafen` `/undeafen` `/disconnect` `/move` `/modlogs` `/case` `/clear`' },
+  { name: '🎭 Roles & Members', value: '`/role` `/userinfo` `/avatar` `/banner` `/membercount` `/joinedat` `/accountage` `/nickname` `/massnick` `/profile` `/inrole` `/botinfo` `/bots`' },
+  { name: '📺 Channels', value: '`/channel` `/category` `/vc`' },
+  { name: '🛡️ Protection', value: '`/security` `/automod` `/logs`' },
+  { name: '👋 Community', value: '`/welcome` `/goodbye` `/ticket` `/reactionrole` `/selfrole` `/giveaway` `/application` `/suggest` `/suggestions` `/report` `/feedback`' },
+  { name: '📈 Leveling', value: '`/rank` `/level` `/leaderboard` `/setxp` `/resetxp` `/levelrole` `/levelconfig`' },
+  { name: '🧰 Utility', value: '`/ping` `/uptime` `/invite` `/support` `/poll` `/remind` `/translate` `/calculate` `/afk` `/whois` `/say`' },
+  { name: '👔 Staff & Config', value: '`/staff` `/config`' },
+  { name: '📌 Prefix', value: '`!stick <text>` — sticky message (or reply to a message with `!stick`)\n`!unstick` — remove the sticky' })] }, false);
+H.ping = async i => { const s = Date.now(); await send(i, '🏓 Pinging...', false); return i.editReply(`🏓 Pong! Roundtrip: **${Date.now() - s}ms** • WebSocket: **${client.ws.ping}ms**`); };
+H.uptime = async i => send(i, `⏱️ Uptime: **${fmtDur(Date.now() - START)}**`, false);
+H.invite = async i => send(i, `🔗 [Invite me](${client.generateInvite({ scopes: ['bot', 'applications.commands'], permissions: [P.Administrator] })})`);
+H.support = async i => send(i, { embeds: [emb('🆘 Support', `Need help? Join our support server or open a ticket.\n${SUPPORT_URL}`)] });
+H.poll = async i => {
+  const opts = [1, 2, 3, 4, 5].map(n => i.options.getString(`option${n}`)).filter(Boolean), nums = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'];
+  await i.reply({ embeds: [emb('📊 ' + i.options.getString('question'), opts.map((o, k) => `${nums[k]} ${o}`).join('\n\n')).setFooter({ text: `Poll by ${i.user.tag}` })] });
+  const m = await i.fetchReply(); for (let k = 0; k < opts.length; k++) await m.react(nums[k]).catch(() => {});
+};
+H.remind = async i => {
+  const d = parseDuration(i.options.getString('time')); if (!d || d < 5000) return send(i, '❌ Invalid time. Use e.g. 10m, 2h, 1d.');
+  db.global.reminders.push({ user: i.user.id, channel: i.channel.id, at: Date.now() + d, text: i.options.getString('message') }); save();
+  return send(i, `⏰ I'll remind you <t:${ts(Date.now() + d)}:R>.`);
+};
+H.translate = async i => {
+  await defer(i);
+  try {
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(i.options.getString('text'))}&langpair=${encodeURIComponent((i.options.getString('from') || 'Autodetect') + '|' + i.options.getString('to'))}`;
+    const j = await (await fetch(url)).json();
+    return send(i, { embeds: [emb('🌐 Translation', `**Original:** ${trunc(i.options.getString('text'), 500)}\n**Translated:** ${j.responseData.translatedText}`)] });
+  } catch (e) { return send(i, '❌ Translation failed.'); }
+};
+H.calculate = async i => {
+  const ex = i.options.getString('expression').replace(/\s+/g, '').replace(/\^/g, '**');
+  if (!/^[\d+\-*/().%]+$/.test(ex) || ex.length > 100) return send(i, '❌ Invalid expression.');
+  try { const r = Function(`"use strict"; return (${ex})`)(); if (!isFinite(r)) throw 0; return send(i, `🧮 \`${i.options.getString('expression')}\` = **${r}**`, false); } catch (e) { return send(i, '❌ Could not calculate that.'); }
+};
+H.afk = async i => { G(i.guild.id).afk[i.user.id] = { reason: i.options.getString('reason') || 'AFK', since: Date.now() }; save(); return send(i, `💤 ${i.user}, you are now AFK: **${i.options.getString('reason') || 'AFK'}**`, false); };
+H.suggest = async i => {
+  const g = G(i.guild.id), ch = g.settings.suggestChannel && i.guild.channels.cache.get(g.settings.suggestChannel);
+  if (!ch) return send(i, '❌ Suggestions channel not set. Ask an admin to use `/config channels`.');
+  const id = ++g.suggestSeq; const msg = await ch.send({ embeds: [emb(`💡 Suggestion #${id}`, i.options.getString('suggestion')).setAuthor({ name: i.user.tag, iconURL: i.user.displayAvatarURL() }).addFields({ name: 'Status', value: '⏳ Pending' })] });
+  await msg.react('👍').catch(() => {}); await msg.react('👎').catch(() => {});
+  g.suggestions[id] = { user: i.user.id, text: i.options.getString('suggestion'), status: 'pending', msg: msg.id, channel: ch.id }; save();
+  return send(i, `✅ Suggestion #${id} submitted in ${ch}.`);
+};
+H.suggestions = async i => {
+  const g = G(i.guild.id), id = i.options.getInteger('id'), st = i.options.getString('status');
+  if (id && st) {
+    if (!isStaff(i.member)) return send(i, '❌ Staff only.');
+    const s = g.suggestions[id]; if (!s) return send(i, '❌ Suggestion not found.');
+    s.status = st; save();
+    const ch = i.guild.channels.cache.get(s.channel), msg = ch && await ch.messages.fetch(s.msg).catch(() => null);
+    if (msg) { const e = EmbedBuilder.from(msg.embeds[0]).setColor(st === 'approved' ? COLORS.ok : st === 'denied' ? COLORS.err : COLORS.warn).setFields({ name: 'Status', value: `${{ approved: '✅ Approved', denied: '❌ Denied', considering: '🤔 Considering' }[st]} by ${i.user.tag}${i.options.getString('note') ? `\n${i.options.getString('note')}` : ''}` }); await msg.edit({ embeds: [e] }).catch(() => {}); }
+    return send(i, `✅ Suggestion #${id} marked **${st}**.`);
+  }
+  const l = Object.entries(g.suggestions).slice(-10).reverse();
+  return send(i, { embeds: [emb('💡 Recent Suggestions', l.map(([k, s]) => `**#${k}** [${s.status}] — ${trunc(s.text, 100)}`).join('\n') || 'No suggestions yet.')] });
+};
+async function routeToChannel(i, key, embed) {
+  const g = G(i.guild.id), ch = (g.settings[key] && i.guild.channels.cache.get(g.settings[key])) || (g.settings.logChannel && i.guild.channels.cache.get(g.settings.logChannel));
+  if (!ch) return false; await ch.send({ embeds: [embed] }); return true;
 }
+H.report = async i => { const u = i.options.getUser('user'); const ok = await routeToChannel(i, 'reportChannel', emb('🚨 New Report', `**Reported:** ${u} (\`${u.id}\`)\n**By:** ${i.user}\n**Channel:** ${i.channel}\n**Reason:** ${i.options.getString('reason')}`, COLORS.err)); return send(i, ok ? '✅ Your report was sent to the staff.' : '❌ No report channel configured.'); };
+H.feedback = async i => { const ok = await routeToChannel(i, 'feedbackChannel', emb('💬 New Feedback', `**From:** ${i.user}\n${i.options.getString('message')}`)); return send(i, ok ? '✅ Thanks for your feedback!' : '❌ No feedback channel configured.'); };
+H.say = async i => { const ch = i.options.getChannel('channel') || i.channel; await ch.send({ content: nl(i.options.getString('message')), allowedMentions: { parse: [] } }); return send(i, `✅ Sent in ${ch}.`); };
 
-// --- SLASH COMMANDS REGISTRATION (Strictly ordered: required before optional) ---
-const commands = [
-  new SlashCommandBuilder()
-    .setName('setup-ticket-hub')
-    .setDescription('Post the unified ticket panel hub')
-    .addChannelOption(opt => opt.setName('channel').setDescription('Channel to post panel').setRequired(true))
-    .addStringOption(opt => opt.setName('banner_url').setDescription('Header banner image URL').setRequired(false))
-    .addStringOption(opt => opt.setName('guide_title').setDescription('Custom guide section title').setRequired(false))
-    .addStringOption(opt => opt.setName('guide_desc').setDescription('Custom guide section description').setRequired(false))
-    .addStringOption(opt => opt.setName('guide_url').setDescription('Custom ticket guide link URL').setRequired(false))
-    .addStringOption(opt => opt.setName('create_title').setDescription('Custom create ticket section title').setRequired(false))
-    .addStringOption(opt => opt.setName('create_desc').setDescription('Custom create ticket section description').setRequired(false))
-    .addChannelOption(opt => 
-      opt.setName('category')
-        .setDescription('Ticket Channel Category')
-        .addChannelTypes(ChannelType.GuildCategory)
-        .setRequired(false)
-    )
-    .addChannelOption(opt => opt.setName('log_channel').setDescription('Channel for Ticket Logs').setRequired(false)),
+// ---- 14. Voice ----
+const vcAuth = (i, vc) => { const o = G(i.guild.id).tempVoice.channels[vc.id]; return o ? (o === i.user.id || isStaff(i.member)) : (i.memberPermissions.has(P.ManageChannels) || isStaff(i.member)); };
+const withVC = fn => async i => {
+  const vc = i.member.voice.channel; if (!vc) return send(i, '❌ Join a voice channel first.');
+  if (!vcAuth(i, vc)) return send(i, '❌ You do not own this voice channel.'); return fn(i, vc);
+};
+const vcTarget = async (i, vc) => { const m = await i.guild.members.fetch(i.options.getUser('user').id).catch(() => null); if (!m || m.voice.channelId !== vc.id) { await send(i, '❌ That member is not in your voice channel.'); return null; } return m; };
+H.vc = {
+  setup: async i => { if (!isStaff(i.member)) return send(i, '❌ Staff only.'); const t = G(i.guild.id).tempVoice; t.lobby = i.options.getChannel('lobby').id; t.category = i.options.getChannel('category')?.id || null; save(); return send(i, `✅ Join-to-create enabled. Joining <#${t.lobby}> creates a private voice room.`); },
+  create: async i => {
+    const g = G(i.guild.id), ch = await i.guild.channels.create({ name: i.options.getString('name'), type: ChannelType.GuildVoice, parent: g.tempVoice.category || undefined, userLimit: i.options.getInteger('limit') || 0, permissionOverwrites: [{ id: i.user.id, allow: [P.ViewChannel, P.Connect, P.Speak] }] });
+    g.tempVoice.channels[ch.id] = i.user.id; save(); if (i.member.voice.channel) await i.member.voice.setChannel(ch).catch(() => {});
+    setTimeout(() => { if (ch.members.size === 0) { ch.delete().catch(() => {}); delete g.tempVoice.channels[ch.id]; save(); } }, 60000);
+    return send(i, `✅ Created ${ch}. It is deleted automatically when empty.`);
+  },
+  lock: withVC(async (i, vc) => { await vc.permissionOverwrites.edit(i.user.id, { Connect: true }); await vc.permissionOverwrites.edit(i.guild.id, { Connect: false }); return send(i, `🔒 ${vc} locked.`); }),
+  unlock: withVC(async (i, vc) => { await vc.permissionOverwrites.edit(i.guild.id, { Connect: null }); return send(i, `🔓 ${vc} unlocked.`); }),
+  limit: withVC(async (i, vc) => { await vc.setUserLimit(i.options.getInteger('limit')); return send(i, `✅ User limit set to **${i.options.getInteger('limit') || 'none'}**.`); }),
+  rename: withVC(async (i, vc) => { await vc.setName(i.options.getString('name')); return send(i, '✅ Renamed.'); }),
+  owner: async i => { const vc = i.member.voice.channel; if (!vc) return send(i, '❌ Join a voice channel first.'); const o = G(i.guild.id).tempVoice.channels[vc.id]; return send(i, o ? `👑 Owner of ${vc}: <@${o}>` : `${vc} is not a temporary channel.`); },
+  transfer: withVC(async (i, vc) => { const m = await vcTarget(i, vc); if (!m) return; G(i.guild.id).tempVoice.channels[vc.id] = m.id; save(); await vc.permissionOverwrites.edit(m.id, { ViewChannel: true, Connect: true, Speak: true }); return send(i, `👑 Ownership transferred to ${m}.`); }),
+  claim: async i => {
+    const vc = i.member.voice.channel, t = G(i.guild.id).tempVoice; if (!vc || !t.channels[vc.id]) return send(i, '❌ Join a temporary voice channel first.');
+    if (vc.members.has(t.channels[vc.id])) return send(i, '❌ The owner is still in the channel.');
+    t.channels[vc.id] = i.user.id; save(); return send(i, `👑 You now own ${vc}.`);
+  },
+  kick: withVC(async (i, vc) => { const m = await vcTarget(i, vc); if (!m) return; await m.voice.disconnect(); return send(i, `✅ Kicked ${m} from voice.`); }),
+  mute: withVC(async (i, vc) => { const m = await vcTarget(i, vc); if (!m) return; const s = i.options.getBoolean('state') ?? true; await m.voice.setMute(s); return send(i, `✅ ${m} ${s ? 'muted' : 'unmuted'}.`); }),
+  deafen: withVC(async (i, vc) => { const m = await vcTarget(i, vc); if (!m) return; const s = i.options.getBoolean('state') ?? true; await m.voice.setDeaf(s); return send(i, `✅ ${m} ${s ? 'deafened' : 'undeafened'}.`); }),
+  move: withVC(async (i, vc) => { const m = await vcTarget(i, vc); if (!m) return; await m.voice.setChannel(i.options.getChannel('channel')); return send(i, `✅ Moved ${m}.`); }),
+  afk: async i => { if (!isStaff(i.member)) return send(i, '❌ Staff only.'); await i.guild.setAFKChannel(i.options.getChannel('channel')); const t = i.options.getInteger('timeout'); if (t) await i.guild.setAFKTimeout(t); return send(i, '✅ AFK voice channel updated.'); }
+};
 
-  new SlashCommandBuilder()
-    .setName('setup-verification')
-    .setDescription('Post a fully customizable Verification and Member Join panel')
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
-    .addChannelOption(opt => opt.setName('channel').setDescription('Target channel to post verification panel').setRequired(true))
-    .addRoleOption(opt => opt.setName('guest_role').setDescription('Guest Role to give upon approval').setRequired(true))
-    .addRoleOption(opt => opt.setName('member_role').setDescription('Member Role to give upon approval').setRequired(true))
-    .addStringOption(opt => opt.setName('panel_title').setDescription('Main Title for the Verification Panel').setRequired(true))
-    .addStringOption(opt => opt.setName('guest_title').setDescription('Title for Guest Section').setRequired(true))
-    .addStringOption(opt => opt.setName('guest_desc').setDescription('Description for Guest Section').setRequired(true))
-    .addStringOption(opt => opt.setName('member_title').setDescription('Title for Member Section').setRequired(true))
-    .addStringOption(opt => opt.setName('member_desc').setDescription('Description for Member Section').setRequired(true))
-    .addStringOption(opt => opt.setName('guest_btn_name').setDescription('Custom button name for Guest').setRequired(false))
-    .addStringOption(opt => opt.setName('member_btn_name').setDescription('Custom button name for Member').setRequired(false))
-    .addStringOption(opt => opt.setName('banner_url').setDescription('Top banner image URL').setRequired(false))
-    .addStringOption(opt => opt.setName('footer_banner_url').setDescription('Bottom footer banner image URL').setRequired(false)),
+// ---- 15. Giveaways ----
+const gwReq = gw => [gw.role && `<@&${gw.role}>`, gw.minDays && `Account ${gw.minDays}+ days old`].filter(Boolean).join(' • ') || 'None';
+const gwEmbed = (gw, ended, winners = []) => {
+  const e = new EmbedBuilder().setColor(ended ? 0x7f8c8d : 0xf1c40f).setTitle(`🎉 ${gw.prize}`).setTimestamp(gw.endsAt)
+    .setDescription(`${gw.description ? gw.description + '\n\n' : ''}**Winners:** ${gw.winners}\n**Hosted by:** <@${gw.host}>\n**Requirements:** ${gwReq(gw)}\n${ended ? `**Ended:** <t:${ts(gw.endsAt)}:R>\n**Winner(s):** ${winners.length ? winners.map(w => `<@${w}>`).join(', ') : 'No valid entries'}` : `**Ends:** <t:${ts(gw.endsAt)}:R>`}`);
+  if (gw.image) e.setImage(gw.image); return e;
+};
+const pick = (arr, n) => [...arr].sort(() => Math.random() - 0.5).slice(0, n);
+async function endGiveaway(guild, id) {
+  const g = G(guild.id), gw = g.giveaways[id]; if (!gw) return false;
+  const winners = pick(gw.entries, gw.winners), ch = guild.channels.cache.get(gw.channel);
+  if (ch) {
+    const msg = await ch.messages.fetch(id).catch(() => null); if (msg) await msg.edit({ embeds: [gwEmbed(gw, true, winners)], components: [] }).catch(() => {});
+    await ch.send(winners.length ? `🎊 Congratulations ${winners.map(w => `<@${w}>`).join(', ')}! You won **${gw.prize}**!` : `❌ No valid entries for **${gw.prize}**.`).catch(() => {});
+  }
+  g.giveawayHistory.unshift({ id, prize: gw.prize, channel: gw.channel, winners, entries: gw.entries, endedAt: Date.now() }); g.giveawayHistory = g.giveawayHistory.slice(0, 25);
+  delete g.giveaways[id]; save(); return true;
+}
+H.giveaway = {
+  start: async i => {
+    await defer(i); const d = parseDuration(i.options.getString('duration')); if (!d || d < 10000) return send(i, '❌ Invalid duration. Use e.g. 30m, 2h, 1d.');
+    const ch = i.options.getChannel('channel') || i.channel;
+    const gw = { prize: i.options.getString('prize'), winners: i.options.getInteger('winners'), channel: ch.id, host: i.user.id, endsAt: Date.now() + d, role: i.options.getRole('role')?.id || null, minDays: i.options.getInteger('min_account_days') || 0, description: nl(i.options.getString('description') || ''), image: i.options.getString('image') || null, entries: [] };
+    const msg = await ch.send({ embeds: [gwEmbed(gw, false)], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('gw:enter').setLabel('Enter Giveaway').setEmoji('🎉').setStyle(ButtonStyle.Success))] });
+    G(i.guild.id).giveaways[msg.id] = gw; save(); return send(i, `✅ Giveaway started in ${ch}! (ID: \`${msg.id}\`)`);
+  },
+  end: async i => { await defer(i); return send(i, (await endGiveaway(i.guild, i.options.getString('message_id'))) ? '✅ Giveaway ended.' : '❌ Active giveaway not found.'); },
+  reroll: async i => {
+    const g = G(i.guild.id), h = g.giveawayHistory.find(x => x.id === i.options.getString('message_id')); if (!h) return send(i, '❌ Ended giveaway not found.');
+    const pool = h.entries.filter(e => !h.winners.includes(e)); if (!pool.length) return send(i, '❌ No other entries to reroll from.');
+    const w = pick(pool, 1)[0]; h.winners.push(w); save();
+    await i.guild.channels.cache.get(h.channel)?.send(`🔄 **Reroll!** Congratulations <@${w}>! You won **${h.prize}**! 🎉`); return send(i, `✅ New winner: <@${w}>`);
+  },
+  cancel: async i => {
+    const g = G(i.guild.id), id = i.options.getString('message_id'), gw = g.giveaways[id]; if (!gw) return send(i, '❌ Active giveaway not found.');
+    const ch = i.guild.channels.cache.get(gw.channel), msg = ch && await ch.messages.fetch(id).catch(() => null); if (msg) await msg.delete().catch(() => {});
+    delete g.giveaways[id]; save(); return send(i, '✅ Giveaway cancelled.');
+  },
+  list: async i => {
+    const g = G(i.guild.id);
+    if (i.options.getBoolean('history')) return send(i, { embeds: [emb('🎉 Giveaway History', g.giveawayHistory.slice(0, 10).map(h => `**${h.prize}** — ${h.winners.map(w => `<@${w}>`).join(', ') || 'No winners'} (<t:${ts(h.endedAt)}:d>)`).join('\n') || 'None.')] });
+    return send(i, { embeds: [emb('🎉 Active Giveaways', Object.entries(g.giveaways).map(([id, gw]) => `**${gw.prize}** — <#${gw.channel}> • ends <t:${ts(gw.endsAt)}:R> • ${gw.entries.length} entries • ID \`${id}\``).join('\n') || 'None.')] });
+  }
+};
 
-  // --- /GIVEAWAY COMMAND ---
-  new SlashCommandBuilder()
-    .setName('giveaway')
-    .setDescription('Manage server giveaways')
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
-    .addSubcommand(sub =>
-      sub.setName('start')
-        .setDescription('Start a new V2 Giveaway')
-        .addChannelOption(opt => opt.setName('channel').setDescription('Channel to post giveaway').setRequired(true))
-        .addStringOption(opt => opt.setName('prize').setDescription('Prize of the giveaway').setRequired(true))
-        .addStringOption(opt => opt.setName('title').setDescription('Giveaway embed/card title').setRequired(true))
-        .addStringOption(opt => opt.setName('description').setDescription('Giveaway description details').setRequired(true))
-        .addIntegerOption(opt => opt.setName('duration').setDescription('Duration in minutes').setRequired(true))
-        .addIntegerOption(opt => opt.setName('winners').setDescription('Number of winners').setRequired(true))
-        .addRoleOption(opt => opt.setName('role1').setDescription('Required Role 1 (Optional)').setRequired(false))
-        .addRoleOption(opt => opt.setName('role2').setDescription('Required Role 2 (Optional)').setRequired(false))
-        .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false))
-    )
-    .addSubcommand(sub =>
-      sub.setName('end')
-        .setDescription('End an active giveaway early')
-        .addStringOption(opt => opt.setName('message_id').setDescription('Giveaway message ID').setRequired(true))
-    )
-    .addSubcommand(sub =>
-      sub.setName('reroll')
-        .setDescription('Reroll a winner for a giveaway')
-        .addStringOption(opt => opt.setName('message_id').setDescription('Giveaway message ID').setRequired(true))
-    ),
+// ---- 16. Applications ----
+const DEFAULT_QS = { staff: ['Why do you want to join the staff team?', 'Do you have previous moderation experience?', 'How many hours per week can you be active?'], moderator: ['Why do you want to be a moderator?', 'How would you handle a heated argument between two members?', 'How many hours per week can you be active?'], membership: ['Why do you want to join?', 'How did you find us?'] };
+const appEmbed = (a, color) => emb(`📝 Application #${a.id} — ${a.type}`, `**Applicant:** <@${a.user}>\n**Status:** ${a.status}\n\n${a.answers.map(x => `**${trunc(x.q, 200)}**\n${trunc(x.a, 700)}`).join('\n\n')}`, color);
+async function decideApp(guild, a, status, by, text) {
+  const g = G(guild.id); a.status = status; a.decidedBy = by; a.note = text; save();
+  const m = await guild.members.fetch(a.user).catch(() => null), role = g.apps.roles[a.type];
+  if (status === 'approved' && m && role) await m.roles.add(role).catch(() => {});
+  const u = await client.users.fetch(a.user).catch(() => null);
+  if (u) u.send({ embeds: [emb(`Your ${a.type} application was ${status}`, `Server: **${guild.name}**${text ? `\n${text}` : ''}`, status === 'approved' ? COLORS.ok : COLORS.err)] }).catch(() => {});
+  const ch = a.reviewMsg && g.apps.reviewChannel && guild.channels.cache.get(g.apps.reviewChannel), msg = ch && await ch.messages.fetch(a.reviewMsg).catch(() => null);
+  if (msg) await msg.edit({ embeds: [appEmbed(a, status === 'approved' ? COLORS.ok : COLORS.err).setFooter({ text: `${status} by ${(await client.users.fetch(by).catch(() => ({ tag: by }))).tag}` })], components: [] }).catch(() => {});
+}
+H.application = {
+  setup: async i => {
+    const ch = i.options.getChannel('channel'), g = G(i.guild.id); g.apps.reviewChannel = i.options.getChannel('review_channel').id; save();
+    await ch.send({ embeds: [emb(i.options.getString('title') || '📝 Applications', nl(i.options.getString('description') || 'Interested? Pick an application below and answer the questions.'))], components: [new ActionRowBuilder().addComponents(APPTYPES.map(t => new ButtonBuilder().setCustomId(`app_open:${t}`).setLabel(t[0].toUpperCase() + t.slice(1)).setStyle(ButtonStyle.Primary)))] });
+    return send(i, `✅ Application panel posted in ${ch}.`);
+  },
+  questions: async i => {
+    const g = G(i.guild.id), t = i.options.getString('type'), qs = i.options.getString('questions').split(';').map(s => s.trim()).filter(Boolean).slice(0, 5);
+    g.apps.questions[t] = qs; const r = i.options.getRole('role'); if (r) g.apps.roles[t] = r.id; save();
+    return send(i, `✅ **${t}** now has ${qs.length} question(s).${r ? ` Approved applicants get ${r}.` : ''}`);
+  },
+  list: async i => { const st = i.options.getString('status'), l = Object.values(G(i.guild.id).apps.list).filter(a => !st || a.status === st).slice(-15).reverse(); return send(i, { embeds: [emb('📝 Applications', l.map(a => `**#${a.id}** ${a.type} — <@${a.user}> [${a.status}]`).join('\n') || 'None.')] }); },
+  approve: async i => { const a = G(i.guild.id).apps.list[i.options.getInteger('id')]; if (!a) return send(i, '❌ Application not found.'); await decideApp(i.guild, a, 'approved', i.user.id, i.options.getString('note')); return send(i, `✅ Application #${a.id} approved.`); },
+  reject: async i => { const a = G(i.guild.id).apps.list[i.options.getInteger('id')]; if (!a) return send(i, '❌ Application not found.'); await decideApp(i.guild, a, 'rejected', i.user.id, i.options.getString('reason')); return send(i, `✅ Application #${a.id} rejected.`); },
+  interview: async i => {
+    const a = G(i.guild.id).apps.list[i.options.getInteger('id')]; if (!a) return send(i, '❌ Application not found.');
+    a.interview = i.options.getString('time'); save(); const u = await client.users.fetch(a.user).catch(() => null);
+    if (u) u.send({ embeds: [emb('📅 Interview Scheduled', `Your **${a.type}** application in **${i.guild.name}** has an interview scheduled:\n**${a.interview}**`)] }).catch(() => {});
+    return send(i, `✅ Interview scheduled for application #${a.id}.`);
+  },
+  transcript: async i => { const a = G(i.guild.id).apps.list[i.options.getInteger('id')]; if (!a) return send(i, '❌ Application not found.'); const txt = `Application #${a.id} (${a.type})\nApplicant: ${a.user}\nStatus: ${a.status}\nSubmitted: ${new Date(a.time).toISOString()}\n\n${a.answers.map(x => `Q: ${x.q}\nA: ${x.a}`).join('\n\n')}`; return send(i, { files: [new AttachmentBuilder(Buffer.from(txt), { name: `application-${a.id}.txt` })] }); }
+};
 
-  // --- /SETUP-BOOST COMMAND ---
-  new SlashCommandBuilder()
-    .setName('setup-boost')
-    .setDescription('Configure Server Boost announcement')
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
-    .addChannelOption(opt => opt.setName('channel').setDescription('Boost announcement channel').setRequired(true))
-    .addStringOption(opt => opt.setName('title').setDescription('Boost message title').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Boost description (supports variables)').setRequired(true))
-    .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false)),
+// ---- 17. Staff & config ----
+const sd = (g, id) => (g.staff[id] ||= { duty: false, dutySince: 0, dutyMs: 0, warnings: [], history: [], leaveUntil: 0, messages: 0 });
+H.staff = {
+  info: async i => { const u = i.options.getUser('user') || i.user, g = G(i.guild.id), s = sd(g, u.id), cases = g.cases.filter(c => c.mod === u.id).length; return send(i, { embeds: [emb(`👔 Staff — ${u.tag}`).setThumbnail(u.displayAvatarURL()).addFields({ name: 'Duty', value: s.duty ? '🟢 On duty' : '🔴 Off duty', inline: true }, { name: 'On leave', value: s.leaveUntil > Date.now() ? `Until <t:${ts(s.leaveUntil)}:D>` : 'No', inline: true }, { name: 'Mod actions', value: `${cases}`, inline: true }, { name: 'Messages', value: `${s.messages}`, inline: true }, { name: 'Warnings', value: `${s.warnings.length}`, inline: true }, { name: 'Records', value: `${s.history.length}`, inline: true })] }, false); },
+  promote: async i => { if (!isAdmin(i.member)) return send(i, '❌ Admins only.'); const m = i.options.getMember('user'), r = i.options.getRole('role'), bad = roleBlock(i, r); if (bad) return send(i, '❌ ' + bad); if (!m) return send(i, '❌ Member not found.'); await m.roles.add(r); sd(G(i.guild.id), m.id).history.push({ type: 'PROMOTION', role: r.name, by: i.user.id, reason: i.options.getString('reason') || 'None', time: Date.now() }); save(); return send(i, `📈 Promoted ${m} to **${r.name}**.`, false); },
+  demote: async i => { if (!isAdmin(i.member)) return send(i, '❌ Admins only.'); const m = i.options.getMember('user'), r = i.options.getRole('role'), bad = roleBlock(i, r); if (bad) return send(i, '❌ ' + bad); if (!m) return send(i, '❌ Member not found.'); await m.roles.remove(r); sd(G(i.guild.id), m.id).history.push({ type: 'DEMOTION', role: r.name, by: i.user.id, reason: i.options.getString('reason') || 'None', time: Date.now() }); save(); return send(i, `📉 Demoted ${m} (removed **${r.name}**).`, false); },
+  warn: async i => { if (!isAdmin(i.member)) return send(i, '❌ Admins only.'); const u = i.options.getUser('user'); sd(G(i.guild.id), u.id).warnings.push({ reason: i.options.getString('reason'), by: i.user.id, time: Date.now() }); save(); return send(i, `⚠️ Staff warning recorded for ${u}.`); },
+  duty: async i => { const s = sd(G(i.guild.id), i.user.id), on = i.options.getString('status') === 'on'; if (on && !s.duty) s.dutySince = Date.now(); if (!on && s.duty) s.dutyMs += Date.now() - s.dutySince; s.duty = on; save(); return send(i, `${on ? '🟢 You are now **on duty**.' : '🔴 You are now **off duty**.'}`); },
+  history: async i => { const u = i.options.getUser('user'), s = sd(G(i.guild.id), u.id); const l = [...s.history.map(h => `<t:${ts(h.time)}:d> **${h.type}** ${h.role} — ${h.reason} (by <@${h.by}>)`), ...s.warnings.map(w => `<t:${ts(w.time)}:d> **WARNING** — ${w.reason} (by <@${w.by}>)`)]; return send(i, { embeds: [emb(`📚 Staff Record — ${u.tag}`, l.join('\n') || 'No records.')] }); },
+  activity: async i => { const u = i.options.getUser('user') || i.user, g = G(i.guild.id), s = sd(g, u.id); return send(i, { embeds: [emb(`📊 Staff Activity — ${u.tag}`, `**Messages:** ${s.messages}\n**Moderation actions:** ${g.cases.filter(c => c.mod === u.id).length}\n**Time on duty:** ${fmtDur(s.dutyMs + (s.duty ? Date.now() - s.dutySince : 0))}`)] }); },
+  leave: async i => { const s = sd(G(i.guild.id), i.user.id), d = i.options.getInteger('days'); s.leaveUntil = d ? Date.now() + d * 864e5 : 0; if (d) s.history.push({ type: 'LEAVE', role: `${d}d`, by: i.user.id, reason: i.options.getString('reason') || 'None', time: Date.now() }); save(); return send(i, d ? `🏖️ Leave recorded until <t:${ts(s.leaveUntil)}:D>.` : '👋 Welcome back!'); }
+};
+H.config = {
+  roles: async i => { const s = G(i.guild.id).settings; for (const [o, k] of [['admin_role', 'adminRole'], ['mod_role', 'modRole'], ['staff_role', 'staffRole'], ['auto_role', 'autoRole']]) { const r = i.options.getRole(o); if (r) s[k] = r.id; } save(); return send(i, '✅ Roles updated.'); },
+  channels: async i => { const g = G(i.guild.id), s = g.settings; for (const [o, k] of [['log', 'logChannel'], ['welcome', 'welcomeChannel'], ['goodbye', 'goodbyeChannel'], ['suggestions', 'suggestChannel'], ['reports', 'reportChannel'], ['feedback', 'feedbackChannel'], ['staff', 'staffChannel']]) { const c = i.options.getChannel(o); if (c) s[k] = c.id; } const lv = i.options.getChannel('levels'); if (lv) g.level.channel = lv.id; const w = i.options.getChannel('welcome'), gb = i.options.getChannel('goodbye'); if (w) g.welcome.channel = w.id; if (gb) g.goodbye.channel = gb.id; save(); return send(i, '✅ Channels updated.'); },
+  restrict: async i => { const s = G(i.guild.id).settings, c = i.options.getString('command').replace('/', '').toLowerCase(); s.restricted = (s.restricted || []).filter(x => x !== c); if (i.options.getBoolean('enabled')) s.restricted.push(c); save(); return send(i, `✅ \`/${c}\` is ${i.options.getBoolean('enabled') ? 'now restricted to staff' : 'no longer restricted'}.`); },
+  view: async i => { const s = G(i.guild.id).settings, ch = id => id ? `<#${id}>` : '—', ro = id => id ? `<@&${id}>` : '—'; return send(i, { embeds: [emb('⚙️ Configuration', `**Admin role:** ${ro(s.adminRole)}\n**Mod role:** ${ro(s.modRole)}\n**Staff role:** ${ro(s.staffRole)}\n**Auto role:** ${ro(s.autoRole)}\n**Log:** ${ch(s.logChannel)}\n**Welcome:** ${ch(s.welcomeChannel)}\n**Goodbye:** ${ch(s.goodbyeChannel)}\n**Suggestions:** ${ch(s.suggestChannel)}\n**Reports:** ${ch(s.reportChannel)}\n**Feedback:** ${ch(s.feedbackChannel)}\n**Staff:** ${ch(s.staffChannel)}\n**Restricted commands:** ${(s.restricted || []).map(c => `\`/${c}\``).join(' ') || 'None'}`)] }); }
+};
 
-  // --- /SETUP-WELCOME COMMAND ---
-  new SlashCommandBuilder()
-    .setName('setup-welcome')
-    .setDescription('Configure Server Welcome announcement')
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
-    .addChannelOption(opt => opt.setName('channel').setDescription('Welcome announcement channel').setRequired(true))
-    .addStringOption(opt => opt.setName('outer_message').setDescription('Message outside container').setRequired(true))
-    .addStringOption(opt => opt.setName('title').setDescription('Welcome card title').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Welcome description (supports variables)').setRequired(true))
-    .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false)),
-
-  // --- /VIEWPOINTS COMMAND ---
-  new SlashCommandBuilder()
-    .setName('viewpoints')
-    .setDescription('Check your points or another user points')
-    .addUserOption(opt => opt.setName('user').setDescription('User to check points for (Optional)').setRequired(false)),
-
-  // --- MODERATION COMMANDS ---
-  new SlashCommandBuilder()
-    .setName('kick')
-    .setDescription('Kick a member from the server')
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.KickMembers)
-    .addUserOption(opt => opt.setName('user').setDescription('User to kick').setRequired(true))
-    .addStringOption(opt => opt.setName('reason').setDescription('Reason for kick').setRequired(false)),
-
-  new SlashCommandBuilder()
-    .setName('mute')
-    .setDescription('Timeout/mute a member')
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.ModerateMembers)
-    .addUserOption(opt => opt.setName('user').setDescription('User to mute').setRequired(true))
-    .addIntegerOption(opt => opt.setName('duration').setDescription('Duration in minutes').setRequired(true))
-    .addStringOption(opt => opt.setName('reason').setDescription('Reason for mute').setRequired(false)),
-
-  new SlashCommandBuilder()
-    .setName('snipe')
-    .setDescription('Retrieve the last deleted message in the channel')
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages),
-
-  new SlashCommandBuilder()
-    .setName('viewprofile')
-    .setDescription('View user profile details')
-    .addUserOption(opt => opt.setName('user').setDescription('User to view profile of').setRequired(false)),
-
-  new SlashCommandBuilder()
-    .setName('stats')
-    .setDescription('Display global ticket stats counter')
-    .addStringOption(opt => opt.setName('custom_message').setDescription('Custom message below stats').setRequired(false)),
-
-  new SlashCommandBuilder()
-    .setName('setup-stats')
-    .setDescription('Post and link a live updating stats message')
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
-    .addChannelOption(opt => opt.setName('channel').setDescription('Channel to post stats').setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName('embed')
-    .setDescription('Create a clean Components V2 panel with title, description, and banners')
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
-    .addChannelOption(opt => opt.setName('channel').setDescription('Target channel').setRequired(true))
-    .addStringOption(opt => opt.setName('title').setDescription('Panel title').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Main text content').setRequired(true))
-    .addStringOption(opt => opt.setName('banner_url').setDescription('Top banner image URL').setRequired(false))
-    .addStringOption(opt => opt.setName('footer_banner_url').setDescription('Bottom footer banner image URL').setRequired(false)),
-
-  new SlashCommandBuilder()
-    .setName('reactionrole')
-    .setDescription('Create a Components V2 reaction role panel with up to 7 buttons')
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
-    .addChannelOption(opt => opt.setName('channel').setDescription('Where to post the panel').setRequired(true))
-    .addStringOption(opt => opt.setName('title').setDescription('Panel title').setRequired(true))
-    .addStringOption(opt => opt.setName('description').setDescription('Panel description').setRequired(true))
-    .addRoleOption(opt => opt.setName('role1').setDescription('Role 1').setRequired(true))
-    .addStringOption(opt => opt.setName('desc1').setDescription('Description for Role 1').setRequired(true))
-    .addStringOption(opt => opt.setName('banner_url').setDescription('Banner image URL').setRequired(false))
-    .addStringOption(opt => opt.setName('emoji1').setDescription('Emoji for Button 1').setRequired(false))
-    .addRoleOption(opt => opt.setName('role2').setDescription('Role 2').setRequired(false))
-    .addStringOption(opt => opt.setName('desc2').setDescription('Description for Role 2').setRequired(false))
-    .addStringOption(opt => opt.setName('emoji2').setDescription('Emoji for Button 2').setRequired(false))
-    .addRoleOption(opt => opt.setName('role3').setDescription('Role 3').setRequired(false))
-    .addStringOption(opt => opt.setName('desc3').setDescription('Description for Role 3').setRequired(false))
-    .addStringOption(opt => opt.setName('emoji3').setDescription('Emoji for Button 3').setRequired(false))
-    .addRoleOption(opt => opt.setName('role4').setDescription('Role 4').setRequired(false))
-    .addStringOption(opt => opt.setName('desc4').setDescription('Description for Role 4').setRequired(false))
-    .addStringOption(opt => opt.setName('emoji4').setDescription('Emoji for Button 4').setRequired(false))
-    .addRoleOption(opt => opt.setName('role5').setDescription('Role 5').setRequired(false))
-    .addStringOption(opt => opt.setName('desc5').setDescription('Description for Role 5').setRequired(false))
-    .addStringOption(opt => opt.setName('emoji5').setDescription('Emoji for Button 5').setRequired(false))
-    .addRoleOption(opt => opt.setName('role6').setDescription('Role 6').setRequired(false))
-    .addStringOption(opt => opt.setName('desc6').setDescription('Description for Role 6').setRequired(false))
-    .addStringOption(opt => opt.setName('emoji6').setDescription('Emoji for Button 6').setRequired(false))
-    .addRoleOption(opt => opt.setName('role7').setDescription('Role 7').setRequired(false))
-    .addStringOption(opt => opt.setName('desc7').setDescription('Description for Role 7').setRequired(false))
-    .addStringOption(opt => opt.setName('emoji7').setDescription('Emoji for Button 7').setRequired(false)),
-
-  new SlashCommandBuilder()
-    .setName('setup-channels')
-    .setDescription('Configure server system channels')
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
-    .addChannelOption(opt => opt.setName('log_channel').setDescription('Log channel').setRequired(false))
-    .addChannelOption(opt => opt.setName('welcome_channel').setDescription('Welcome channel').setRequired(false))
-    .addChannelOption(opt => opt.setName('boost_channel').setDescription('Boost channel').setRequired(false))
-    .addChannelOption(opt => opt.setName('verify_log_channel').setDescription('Verification Log Channel').setRequired(false)),
-
-  new SlashCommandBuilder()
-    .setName('leaderboard')
-    .setDescription('View top 20 helpers and top 20 requesters'),
-
-  new SlashCommandBuilder()
-    .setName('points')
-    .setDescription('Manage helper points')
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
-    .addSubcommand(sub =>
-      sub.setName('add')
-        .setDescription('Add points to helper')
-        .addUserOption(opt => opt.setName('user').setDescription('User').setRequired(true))
-        .addIntegerOption(opt => opt.setName('amount').setDescription('Amount').setRequired(true))
-    )
-    .addSubcommand(sub =>
-      sub.setName('remove')
-        .setDescription('Remove points from helper')
-        .addUserOption(opt => opt.setName('user').setDescription('User').setRequired(true))
-        .addIntegerOption(opt => opt.setName('amount').setDescription('Amount').setRequired(true))
-    )
-    .addSubcommand(sub =>
-      sub.setName('reset')
-        .setDescription('Reset points')
-        .addUserOption(opt => opt.setName('user').setDescription('User (Leave blank for ALL)').setRequired(false))
-    ),
-
-  new SlashCommandBuilder()
-    .setName('helper-roles')
-    .setDescription('Configure role rewards')
-    .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageGuild)
-    .addSubcommand(sub =>
-      sub.setName('add')
-        .setDescription('Set point reward role')
-        .addIntegerOption(opt => opt.setName('points').setDescription('Points required').setRequired(true))
-        .addRoleOption(opt => opt.setName('role').setDescription('Role').setRequired(true))
-    )
-    .addSubcommand(sub =>
-      sub.setName('list')
-        .setDescription('View reward roles')
-    )
-];
-
-const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
-
+// ---- 18. Bot owner ----
+function applyPresence() {
+  const p = db.global.presence;
+  if (!p) return client.user.setPresence(DEFAULT_PRESENCE);
+  client.user.setPresence({ status: p.status || DEFAULT_PRESENCE.status, activities: p.activity ? [{ name: p.activity.name, type: p.activity.type }] : DEFAULT_PRESENCE.activities });
+}
 async function registerCommands() {
+  const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN), body = cmds.map(c => c.toJSON());
   try {
-    await rest.put(
-      Routes.applicationGuildCommands(client.user.id, GUILD_ID),
-      { body: commands }
-    );
-    console.log('✅ Slash commands successfully registered!');
-  } catch (error) {
-    console.error('Error registering commands:', error);
+    await rest.put(GUILD_ID ? Routes.applicationGuildCommands(client.user.id, GUILD_ID) : Routes.applicationCommands(client.user.id), { body });
+    console.log(`✅ ${body.length} slash commands registered!`); return body.length;
+  } catch (e) { noteError(e); return 0; }
+}
+H.bot = {
+  shutdown: async i => { await send(i, '🛑 Shutting down...'); save(); setTimeout(() => process.exit(0), 1000); },
+  restart: async i => { await send(i, '🔄 Restarting...'); fs.writeFileSync(DATA_FILE, JSON.stringify(db)); setTimeout(() => process.exit(0), 1000); },
+  maintenance: async i => { db.global.maintenance = i.options.getBoolean('enabled'); save(); return send(i, `🛠️ Maintenance mode **${db.global.maintenance ? 'ON' : 'OFF'}**.`); },
+  status: async i => { db.global.presence = { ...(db.global.presence || {}), status: i.options.getString('status') }; save(); applyPresence(); return send(i, '✅ Status updated.'); },
+  activity: async i => { db.global.presence = { ...(db.global.presence || {}), activity: { name: i.options.getString('text'), type: +i.options.getString('type') } }; save(); applyPresence(); return send(i, '✅ Activity updated.'); },
+  servers: async i => send(i, { embeds: [emb(`🌐 Servers (${client.guilds.cache.size})`, trunc([...client.guilds.cache.values()].slice(0, 40).map(g => `**${g.name}** — ${g.memberCount} members (\`${g.id}\`)`).join('\n'), 3900))] }),
+  leave: async i => { const g = client.guilds.cache.get(i.options.getString('guild_id')); if (!g) return send(i, '❌ Server not found.'); await g.leave(); return send(i, `✅ Left **${g.name}**.`); },
+  blacklist: async i => { const t = i.options.getString('type') === 'user' ? 'users' : 'guilds', id = i.options.getString('id'); if (!db.global.blacklist[t].includes(id)) db.global.blacklist[t].push(id); save(); if (t === 'guilds') client.guilds.cache.get(id)?.leave().catch(() => {}); return send(i, `✅ Blacklisted \`${id}\`.`); },
+  unblacklist: async i => { const t = i.options.getString('type') === 'user' ? 'users' : 'guilds', id = i.options.getString('id'); db.global.blacklist[t] = db.global.blacklist[t].filter(x => x !== id); save(); return send(i, `✅ Removed \`${id}\` from the blacklist.`); },
+  eval: async i => {
+    await defer(i); const code = i.options.getString('code');
+    try {
+      let r = await eval(`(async()=>{ ${/\breturn\b/.test(code) ? code : `return (${code})`} })()`);
+      if (typeof r !== 'string') r = util.inspect(r, { depth: 1 });
+      r = r.split(process.env.DISCORD_TOKEN || '\u0000').join('[REDACTED]');
+      return send(i, '```js\n' + trunc(r, 1900) + '\n```');
+    } catch (e) { return send(i, '```js\n' + trunc(String(e.stack || e), 1900) + '\n```'); }
+  },
+  debug: async i => send(i, { embeds: [emb('🐞 Debug', `**Ping:** ${client.ws.ping}ms\n**Memory:** ${(process.memoryUsage().rss / 1048576).toFixed(1)} MB\n**Guilds:** ${client.guilds.cache.size}\n**Maintenance:** ${db.global.maintenance}\n**Recent errors (${errors.length}):**\n\`\`\`${trunc(errors.slice(-3).join('\n\n') || 'None', 1500)}\`\`\``)] }),
+  sync: async i => { await defer(i); const n = await registerCommands(); return send(i, n ? `✅ Synced **${n}** commands.` : '❌ Sync failed (see console).'); },
+  config: async i => { const k = i.options.getString('key'), v = i.options.getString('value'); if (v) db.global.config[k] = v; else delete db.global.config[k]; save(); return send(i, `✅ \`${k}\` ${v ? `= \`${v}\`` : 'removed'}.`); }
+};
+
+// =====================================================================
+//  INTERACTION ROUTER
+// =====================================================================
+const ADMIN_LOGGED = new Set(['config', 'servername', 'serverlock', 'serverunlock', 'nuke', 'backup', 'restore', 'role', 'channel', 'category', 'security', 'automod', 'staff', 'purge', 'clear', 'announce', 'massnick', 'setxp', 'resetxp', 'bot']);
+async function runCommand(i) {
+  const name = i.commandName, g = G(i.guild.id);
+  if (db.global.maintenance && !isOwner(i.user.id)) return send(i, '🛠️ The bot is currently in maintenance mode.');
+  if (g.settings.restricted?.includes(name) && !isStaff(i.member)) return send(i, '❌ This command is restricted to staff.');
+  if (name === 'bot' && !isOwner(i.user.id)) return send(i, '❌ Bot owner only.');
+  const h = H[name]; if (!h) return send(i, '❌ Unknown command.');
+  let sub = null;
+  if (typeof h === 'function') await h(i); else { sub = i.options.getSubcommand(); if (!h[sub]) return send(i, '❌ Unknown subcommand.'); await h[sub](i); }
+  if (ADMIN_LOGGED.has(name)) logEvent(i.guild, 'moderation', '🔧 Admin Action', `${i.user} used \`/${name}${sub ? ' ' + sub : ''}\` in ${i.channel}`, COLORS.warn);
+}
+const captchas = new Map();
+async function onButton(i) {
+  const id = i.customId, g = G(i.guild.id);
+  if (id === 'gw:enter') {
+    const gw = g.giveaways[i.message.id]; if (!gw) return send(i, '❌ This giveaway has ended.');
+    if (gw.role && !i.member.roles.cache.has(gw.role)) return send(i, `❌ You need <@&${gw.role}> to enter.`);
+    if (gw.minDays && (Date.now() - i.user.createdTimestamp) / 864e5 < gw.minDays) return send(i, `❌ Your account must be at least ${gw.minDays} days old.`);
+    if (gw.entries.includes(i.user.id)) { gw.entries = gw.entries.filter(e => e !== i.user.id); save(); return send(i, '👋 You left the giveaway.'); }
+    gw.entries.push(i.user.id); save(); return send(i, '🎉 You entered the giveaway! Click again to leave.');
+  }
+  if (id === 'tk_open') {
+    const modal = new ModalBuilder().setCustomId('tk_modal').setTitle('Open a Ticket').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('How can we help you?').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(1000)));
+    return i.showModal(modal);
+  }
+  if (id === 'tk_close') return closeTicket(i, 'Closed via button');
+  if (id === 'tk_reopen') return reopenTicket(i);
+  if (id === 'tk_delete') return deleteTicket(i);
+  if (id === 'tk_claim') return claimTicket(i);
+  if (id === 'tk_transcript') return ticketTranscript(i);
+  if (id.startsWith('rr:')) {
+    const p = g.panels[i.message.id], roleId = id.slice(3), role = i.guild.roles.cache.get(roleId);
+    if (!p || !role) return send(i, '❌ This panel is no longer valid.');
+    if (p.required && !i.member.roles.cache.has(p.required)) return send(i, `❌ You need <@&${p.required}> to use this panel.`);
+    try {
+      if (i.member.roles.cache.has(roleId)) { await i.member.roles.remove(roleId); return send(i, `➖ Removed **${role.name}**.`); }
+      if (p.mode === 'single') for (const x of p.roles) if (x.roleId !== roleId && i.member.roles.cache.has(x.roleId)) await i.member.roles.remove(x.roleId).catch(() => {});
+      await i.member.roles.add(roleId); return send(i, `➕ Added **${role.name}**.`);
+    } catch (e) { return send(i, '❌ Failed to update role. Check my role hierarchy/permissions.'); }
+  }
+  if (id.startsWith('app_open:')) {
+    const t = id.slice(9), qs = g.apps.questions[t] || DEFAULT_QS[t];
+    if (Object.values(g.apps.list).some(a => a.user === i.user.id && a.type === t && a.status === 'pending')) return send(i, '⚠️ You already have a pending application of this type.');
+    const modal = new ModalBuilder().setCustomId(`app_modal:${t}`).setTitle(`${t[0].toUpperCase() + t.slice(1)} Application`);
+    modal.addComponents(qs.map((q, n) => new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId(`q${n}`).setLabel(q.slice(0, 45)).setPlaceholder(q.length > 45 ? q.slice(0, 100) : '').setStyle(TextInputStyle.Paragraph).setRequired(true).setMaxLength(1000))));
+    return i.showModal(modal);
+  }
+  if (id.startsWith('app_ok:') || id.startsWith('app_no:')) {
+    if (!isStaff(i.member)) return send(i, '❌ Staff only.');
+    const a = g.apps.list[id.split(':')[1]]; if (!a) return send(i, '❌ Application not found.');
+    if (id.startsWith('app_no:')) return i.showModal(new ModalBuilder().setCustomId(`app_rej:${a.id}`).setTitle('Reject Application').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('reason').setLabel('Reason').setStyle(TextInputStyle.Paragraph).setRequired(true))));
+    await i.deferUpdate(); return decideApp(i.guild, a, 'approved', i.user.id, 'Congratulations!');
+  }
+  if (id === 'verify_start') {
+    const s = g.security; if (!s.verifyRole) return send(i, '❌ Verification is not configured.');
+    if (i.member.roles.cache.has(s.verifyRole)) return send(i, '✅ You are already verified.');
+    if (s.verifyMode === 'captcha') {
+      const code = Math.random().toString(36).replace(/[^a-z0-9]/g, '').slice(2, 7).toUpperCase(); captchas.set(i.user.id, code);
+      return send(i, { content: `🔐 Your captcha code: \`${code.split('').join(' ')}\``, components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('verify_enter').setLabel('Enter Code').setStyle(ButtonStyle.Primary))] });
+    }
+    await i.member.roles.add(s.verifyRole).catch(() => {}); logEvent(i.guild, 'member', '✅ Member Verified', `${i.user} verified.`, COLORS.ok); return send(i, '✅ You have been verified!');
+  }
+  if (id === 'verify_enter') return i.showModal(new ModalBuilder().setCustomId('verify_modal').setTitle('Captcha').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('code').setLabel('Enter the code shown').setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(10))));
+}
+async function onSelect(i) {
+  if (i.customId !== 'sr') return;
+  const p = G(i.guild.id).panels[i.message.id]; if (!p) return send(i, '❌ This menu is no longer valid.');
+  if (p.required && !i.member.roles.cache.has(p.required)) return send(i, `❌ You need <@&${p.required}> to use this menu.`);
+  await i.deferReply({ flags: EPH });
+  try {
+    for (const x of p.roles) {
+      const want = i.values.includes(x.roleId), has = i.member.roles.cache.has(x.roleId);
+      if (want && !has) await i.member.roles.add(x.roleId); else if (!want && has) await i.member.roles.remove(x.roleId);
+    }
+    return i.editReply(`✅ Roles updated: ${i.values.map(v => `<@&${v}>`).join(' ') || 'none selected'}`);
+  } catch (e) { return i.editReply('❌ Failed to update roles. Check my role hierarchy/permissions.'); }
+}
+async function onModal(i) {
+  const id = i.customId, g = G(i.guild.id);
+  if (id === 'tk_modal') { await defer(i); return openTicket(i, i.fields.getTextInputValue('reason')); }
+  if (id.startsWith('app_modal:')) {
+    await defer(i); const t = id.slice(10), qs = g.apps.questions[t] || DEFAULT_QS[t], ch = g.apps.reviewChannel && i.guild.channels.cache.get(g.apps.reviewChannel);
+    if (!ch) return send(i, '❌ Review channel is not configured.');
+    const a = { id: ++g.apps.counter, user: i.user.id, type: t, status: 'pending', time: Date.now(), answers: qs.map((q, n) => ({ q, a: i.fields.getTextInputValue(`q${n}`) })) };
+    const msg = await ch.send({ embeds: [appEmbed(a, COLORS.warn)], components: [new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`app_ok:${a.id}`).setLabel('Approve').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`app_no:${a.id}`).setLabel('Reject').setStyle(ButtonStyle.Danger))] });
+    a.reviewMsg = msg.id; g.apps.list[a.id] = a; save(); return send(i, `✅ Application **#${a.id}** submitted! You will be notified of the decision.`);
+  }
+  if (id.startsWith('app_rej:')) { await i.deferUpdate(); const a = g.apps.list[id.slice(8)]; if (a) await decideApp(i.guild, a, 'rejected', i.user.id, i.fields.getTextInputValue('reason')); return; }
+  if (id === 'verify_modal') {
+    const ok = captchas.get(i.user.id) === i.fields.getTextInputValue('code').trim().toUpperCase(); captchas.delete(i.user.id);
+    if (!ok) return send(i, '❌ Wrong code. Click **Verify** to try again.');
+    await i.member.roles.add(g.security.verifyRole).catch(() => {}); logEvent(i.guild, 'member', '✅ Member Verified', `${i.user} passed the captcha.`, COLORS.ok); return send(i, '✅ Verified! Welcome.');
   }
 }
+async function rateTicket(i) {
+  const [, gid, num, stars] = i.customId.split(':'), guild = client.guilds.cache.get(gid); if (!guild) return;
+  G(gid).tickets.ratings.push({ num: +num, user: i.user.id, stars: +stars, time: Date.now() }); save();
+  await i.update({ content: `Thanks for rating your support **${stars}/5** ⭐`, embeds: [], components: [] });
+  ticketLog(guild, emb('⭐ Ticket Rated', `**Ticket:** #${num}\n**User:** ${i.user}\n**Rating:** ${'⭐'.repeat(+stars)} (${stars}/5)`, COLORS.warn));
+}
+client.on(Events.InteractionCreate, async i => {
+  try {
+    if (i.isButton() && i.customId.startsWith('tkrate:')) return await rateTicket(i);
+    if (!i.guild) { if (i.isRepliable()) return await i.reply({ content: 'This bot only works inside servers.', flags: EPH }); return; }
+    if (db.global.blacklist.users.includes(i.user.id) && !isOwner(i.user.id)) return await i.reply({ content: '🚫 You are blacklisted from using this bot.', flags: EPH });
+    if (i.isChatInputCommand()) return await runCommand(i);
+    if (i.isButton()) return await onButton(i);
+    if (i.isStringSelectMenu()) return await onSelect(i);
+    if (i.isModalSubmit()) return await onModal(i);
+  } catch (e) {
+    noteError(e);
+    const m = { content: `❌ Something went wrong: ${trunc(e.message, 200)}`, flags: EPH };
+    if (i.isRepliable()) (i.deferred || i.replied ? i.followUp(m) : i.reply(m)).catch(() => {});
+  }
+});
 
-// --- BOT INITIALIZATION ---
+// =====================================================================
+//  PREFIX COMMANDS  (!stick / !unstick)
+// =====================================================================
+const stickyTimers = new Map();
+async function repostSticky(channel) {
+  const g = G(channel.guild.id), s = g.stickies[channel.id]; if (!s) return;
+  if (s.messageId) await channel.messages.delete(s.messageId).catch(() => {});
+  const m = await channel.send({ embeds: [new EmbedBuilder().setColor(COLORS.warn).setTitle('📌 Stickied Message').setDescription(s.content.slice(0, 4000))], allowedMentions: { parse: [] } }).catch(() => null);
+  s.messageId = m?.id || null; save();
+}
+function scheduleSticky(channel) {
+  if (!G(channel.guild.id).stickies[channel.id]) return;
+  clearTimeout(stickyTimers.get(channel.id));
+  stickyTimers.set(channel.id, setTimeout(() => repostSticky(channel).catch(noteError), 2500));
+}
+const tempReply = async (message, text) => { const m = await message.channel.send(text).catch(() => null); setTimeout(() => m?.delete().catch(() => {}), 6000); };
+async function handlePrefix(message) {
+  const cmd = (message.content.slice(PREFIX.length).trim().split(/\s+/)[0] || '').toLowerCase();
+  if (cmd !== 'stick' && cmd !== 'unstick') return false;
+  const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
+  if (!member || !(member.permissions.has(P.ManageMessages) || isStaff(member))) { await tempReply(message, '❌ You need **Manage Messages** to use this command.'); return true; }
+  const g = G(message.guild.id), ch = message.channel;
+  if (cmd === 'unstick') {
+    const s = g.stickies[ch.id];
+    if (!s) await tempReply(message, '⚠️ There is no sticky message in this channel.');
+    else { if (s.messageId) await ch.messages.delete(s.messageId).catch(() => {}); delete g.stickies[ch.id]; save(); await tempReply(message, '✅ Sticky message removed.'); }
+    message.delete().catch(() => {}); return true;
+  }
+  let text = message.content.slice(PREFIX.length + 'stick'.length).trim();
+  if (!text && message.reference?.messageId) { const ref = await ch.messages.fetch(message.reference.messageId).catch(() => null); text = ref?.content || ''; }
+  if (!text) { await tempReply(message, `ℹ️ Usage: \`${PREFIX}stick <message>\` (or reply to a message with \`${PREFIX}stick\`). Remove it with \`${PREFIX}unstick\`.`); return true; }
+  if (g.stickies[ch.id]?.messageId) await ch.messages.delete(g.stickies[ch.id].messageId).catch(() => {});
+  g.stickies[ch.id] = { content: text, messageId: null, by: message.author.id }; save();
+  await repostSticky(ch); message.delete().catch(() => {}); return true;
+}
+
+// =====================================================================
+//  MESSAGE EVENTS
+// =====================================================================
+const xpCooldown = new Map();
+client.on(Events.MessageCreate, async message => {
+  try {
+    if (!message.guild) return;
+    if (message.author.id !== client.user.id) scheduleSticky(message.channel);
+    if (message.author.bot || db.global.blacklist.users.includes(message.author.id)) return;
+    if (!message.member) await message.guild.members.fetch(message.author.id).catch(() => {});
+    if (message.content.startsWith(PREFIX) && await handlePrefix(message)) return;
+    if (await runAutomod(message)) return;
+    const g = G(message.guild.id);
+    // daily activity
+    const day = new Date().toISOString().slice(0, 10); g.activity[day] = (g.activity[day] || 0) + 1;
+    const keys = Object.keys(g.activity); if (keys.length > 14) delete g.activity[keys.sort()[0]];
+    // AFK
+    if (g.afk[message.author.id] && Date.now() - g.afk[message.author.id].since > 10000) {
+      delete g.afk[message.author.id]; save();
+      const m = await message.reply({ content: `👋 Welcome back ${message.author}, I removed your AFK status.`, allowedMentions: { repliedUser: false } }).catch(() => null); setTimeout(() => m?.delete().catch(() => {}), 6000);
+    }
+    for (const u of message.mentions.users.values()) if (g.afk[u.id] && u.id !== message.author.id) message.reply({ content: `💤 **${u.username}** is AFK: ${g.afk[u.id].reason} (<t:${ts(g.afk[u.id].since)}:R>)`, allowedMentions: { repliedUser: false } }).catch(() => {});
+    // XP
+    const k = `${message.guild.id}:${message.author.id}`;
+    if (Date.now() - (xpCooldown.get(k) || 0) > 60000) {
+      xpCooldown.set(k, Date.now());
+      const u = (g.xp[message.author.id] ||= { xp: 0, level: 0, msgs: 0 }); u.msgs = (u.msgs || 0) + 1;
+      await addXp(message.guild, message.author.id, 15 + Math.floor(Math.random() * 11), message.channel);
+    }
+    // Staff activity
+    if (message.member && isStaff(message.member)) { sd(g, message.author.id).messages++; save(); }
+  } catch (e) { noteError(e); }
+});
+
+// =====================================================================
+//  LOGGING & MEMBER EVENTS
+// =====================================================================
+client.on(Events.GuildMemberAdd, async member => {
+  try {
+    const guild = member.guild, g = G(guild.id), sec = g.security;
+    logEvent(guild, 'member', '📥 Member Joined', `${member} (${member.user.tag})\nAccount created <t:${ts(member.user.createdTimestamp)}:R>`, COLORS.ok);
+    if (member.user.bot) {
+      logEvent(guild, 'bot', '🤖 Bot Added', `${member} (${member.user.tag})`, COLORS.warn);
+      if (sec.antiBot) {
+        let ok = false;
+        try { const ex = (await guild.fetchAuditLogs({ type: AuditLogEvent.BotAdd, limit: 1 })).entries.first()?.executor; ok = ex && (ex.id === guild.ownerId || isOwner(ex.id) || sec.trusted.includes(ex.id)); } catch (e) { /* ignore */ }
+        if (!ok) { await member.kick('Anti-bot protection').catch(() => {}); logEvent(guild, 'security', '🛡️ Bot Blocked', `${member.user.tag} was kicked (anti-bot).`, COLORS.err); }
+      }
+      return;
+    }
+    if (await joinSecurity(member)) return;
+    if (g.settings.autoRole) member.roles.add(g.settings.autoRole).catch(() => {});
+    if (sec.verifyMode === 'auto' && sec.verifyRole) member.roles.add(sec.verifyRole).catch(() => {});
+    const w = g.welcome;
+    if (w.enabled) {
+      if (w.role) member.roles.add(w.role).catch(() => {});
+      const ch = guild.channels.cache.get(w.channel || g.settings.welcomeChannel);
+      if (ch) ch.send({ content: `${member}`, embeds: [buildWelcome(w, member, 'welcome')], allowedMentions: { users: [member.id] } }).catch(() => {});
+      if (w.dm) member.send({ embeds: [buildWelcome(w, member, 'welcome')] }).catch(() => {});
+      if (ch && guild.memberCount % 100 === 0) ch.send({ embeds: [emb('🎊 Milestone!', `We just reached **${guild.memberCount}** members! Thanks to everyone — welcome ${member}!`, COLORS.warn)] }).catch(() => {});
+    }
+  } catch (e) { noteError(e); }
+});
+client.on(Events.GuildMemberRemove, async member => {
+  try {
+    const g = G(member.guild.id); logEvent(member.guild, 'member', '📤 Member Left', `${member.user.tag} (\`${member.id}\`)`, COLORS.err);
+    const gb = g.goodbye; if (!gb.enabled) return;
+    const ch = member.guild.channels.cache.get(gb.channel || g.settings.goodbyeChannel);
+    if (ch) ch.send({ embeds: [buildWelcome(gb, member, 'goodbye')] }).catch(() => {});
+  } catch (e) { noteError(e); }
+});
+client.on(Events.GuildMemberUpdate, (o, n) => {
+  try {
+    if (o.nickname !== n.nickname) logEvent(n.guild, 'member', '✏️ Nickname Changed', `${n}\n**Before:** ${o.nickname || 'None'}\n**After:** ${n.nickname || 'None'}`);
+    const added = n.roles.cache.filter(r => !o.roles.cache.has(r.id)), removed = o.roles.cache.filter(r => !n.roles.cache.has(r.id));
+    if (added.size) logEvent(n.guild, 'role', '➕ Role Added', `${n}: ${added.map(r => `${r}`).join(' ')}`, COLORS.ok);
+    if (removed.size) logEvent(n.guild, 'role', '➖ Role Removed', `${n}: ${removed.map(r => `${r}`).join(' ')}`, COLORS.err);
+    if (o.communicationDisabledUntilTimestamp !== n.communicationDisabledUntilTimestamp) logEvent(n.guild, 'moderation', n.communicationDisabledUntilTimestamp ? '⏳ Member Timed Out' : '⏳ Timeout Removed', `${n}${n.communicationDisabledUntilTimestamp ? ` until <t:${ts(n.communicationDisabledUntilTimestamp)}:R>` : ''}`, COLORS.warn);
+  } catch (e) { noteError(e); }
+});
+client.on(Events.GuildBanAdd, ban => { logEvent(ban.guild, 'moderation', '🔨 Member Banned', `${ban.user.tag} (\`${ban.user.id}\`)\n**Reason:** ${ban.reason || 'None'}`, COLORS.err); guardAudit(ban.guild, AuditLogEvent.MemberBanAdd, 'ban', ban.user.id); });
+client.on(Events.GuildBanRemove, ban => logEvent(ban.guild, 'moderation', '♻️ Member Unbanned', `${ban.user.tag} (\`${ban.user.id}\`)`, COLORS.ok));
+client.on(Events.MessageDelete, m => { if (!m.guild || m.author?.bot) return; logEvent(m.guild, 'message', '🗑️ Message Deleted', `**Author:** ${m.author || 'Unknown'}\n**Channel:** ${m.channel}\n**Content:** ${trunc(m.content, 1500) || '(no text / uncached)'}`, COLORS.err); });
+client.on(Events.MessageUpdate, (o, n) => { if (!n.guild || n.author?.bot || o.content === n.content || !o.content) return; logEvent(n.guild, 'message', '✏️ Message Edited', `**Author:** ${n.author} • **Channel:** ${n.channel} • [Jump](${n.url})\n**Before:** ${trunc(o.content, 900)}\n**After:** ${trunc(n.content, 900)}`); });
+client.on(Events.ChannelCreate, ch => {
+  if (!ch.guild) return; logEvent(ch.guild, 'channel', '📁 Channel Created', `${ch} (\`${ch.name}\`)`, COLORS.ok);
+  const g = G(ch.guild.id); if (g.mutedRole && ch.permissionOverwrites) ch.permissionOverwrites.edit(g.mutedRole, { SendMessages: false, AddReactions: false, Speak: false }).catch(() => {});
+});
+client.on(Events.ChannelDelete, ch => {
+  if (!ch.guild) return; logEvent(ch.guild, 'channel', '🗑️ Channel Deleted', `\`#${ch.name}\``, COLORS.err);
+  const g = G(ch.guild.id); if (g.stickies[ch.id]) { delete g.stickies[ch.id]; save(); }
+  guardAudit(ch.guild, AuditLogEvent.ChannelDelete, 'channel deletion', ch.id);
+});
+client.on(Events.ChannelUpdate, (o, n) => {
+  if (!n.guild) return; const d = [];
+  if (o.name !== n.name) d.push(`**Name:** ${o.name} → ${n.name}`);
+  if (o.topic !== n.topic) d.push('**Topic** changed');
+  if (o.permissionOverwrites && !o.permissionOverwrites.cache.equals?.(n.permissionOverwrites.cache) && JSON.stringify([...o.permissionOverwrites.cache.values()].map(x => [x.id, x.allow.bitfield, x.deny.bitfield])) !== JSON.stringify([...n.permissionOverwrites.cache.values()].map(x => [x.id, x.allow.bitfield, x.deny.bitfield]))) d.push('**Permissions** changed');
+  if (d.length) logEvent(n.guild, 'channel', '🔧 Channel Updated', `${n}\n${d.join('\n')}`, COLORS.warn);
+});
+client.on(Events.GuildRoleCreate, r => logEvent(r.guild, 'role', '🆕 Role Created', `${r} (\`${r.name}\`)`, COLORS.ok));
+client.on(Events.GuildRoleDelete, r => { logEvent(r.guild, 'role', '🗑️ Role Deleted', `\`${r.name}\``, COLORS.err); guardAudit(r.guild, AuditLogEvent.RoleDelete, 'role deletion', r.id); });
+client.on(Events.GuildRoleUpdate, (o, n) => {
+  const d = []; if (o.name !== n.name) d.push(`**Name:** ${o.name} → ${n.name}`); if (o.color !== n.color) d.push('**Color** changed');
+  if (o.permissions.bitfield !== n.permissions.bitfield) { d.push('**Permissions** changed'); guardAudit(n.guild, AuditLogEvent.RoleUpdate, 'role permission change', n.id); }
+  if (d.length) logEvent(n.guild, 'role', '🔧 Role Updated', `${n}\n${d.join('\n')}`, COLORS.warn);
+});
+client.on(Events.GuildUpdate, (o, n) => {
+  const d = []; if (o.name !== n.name) d.push(`**Name:** ${o.name} → ${n.name}`); if (o.icon !== n.icon) d.push('**Icon** changed'); if (o.verificationLevel !== n.verificationLevel) d.push(`**Verification:** ${o.verificationLevel} → ${n.verificationLevel}`);
+  if (d.length) { logEvent(n, 'server', '⚙️ Server Updated', d.join('\n'), COLORS.warn); guardAudit(n, AuditLogEvent.GuildUpdate, 'server setting change'); }
+});
+client.on(Events.WebhooksUpdate, ch => { if (!ch.guild) return; logEvent(ch.guild, 'webhook', '🪝 Webhooks Updated', `Webhooks changed in ${ch}`, COLORS.warn); guardAudit(ch.guild, AuditLogEvent.WebhookCreate, 'webhook creation'); });
+client.on(Events.VoiceStateUpdate, async (o, n) => {
+  try {
+    const guild = n.guild || o.guild, g = G(guild.id), m = n.member || o.member; if (!m) return;
+    if (o.channelId !== n.channelId) {
+      if (!o.channelId) logEvent(guild, 'voice', '🔊 Voice Join', `${m} joined <#${n.channelId}>`, COLORS.ok);
+      else if (!n.channelId) logEvent(guild, 'voice', '🔇 Voice Leave', `${m} left <#${o.channelId}>`, COLORS.err);
+      else logEvent(guild, 'voice', '🔀 Voice Move', `${m}: <#${o.channelId}> → <#${n.channelId}>`);
+    }
+    if (n.channelId && n.channelId === g.tempVoice.lobby && !m.user.bot) {
+      const ch = await guild.channels.create({ name: `${m.displayName}'s room`.slice(0, 100), type: ChannelType.GuildVoice, parent: g.tempVoice.category || n.channel?.parentId || undefined, permissionOverwrites: [{ id: m.id, allow: [P.ViewChannel, P.Connect, P.Speak] }] });
+      g.tempVoice.channels[ch.id] = m.id; save(); await m.voice.setChannel(ch).catch(() => {});
+    }
+    if (o.channelId && g.tempVoice.channels[o.channelId] && o.channelId !== n.channelId) {
+      const ch = guild.channels.cache.get(o.channelId);
+      if (!ch || ch.members.size === 0) { await ch?.delete().catch(() => {}); delete g.tempVoice.channels[o.channelId]; save(); }
+    }
+  } catch (e) { noteError(e); }
+});
+const reactionRole = async (reaction, user, add) => {
+  try {
+    if (user.bot) return; if (reaction.partial) await reaction.fetch(); if (reaction.message.partial) await reaction.message.fetch();
+    const guild = reaction.message.guild; if (!guild) return;
+    const p = G(guild.id).panels[reaction.message.id]; if (!p || p.kind !== 'reaction') return;
+    const key = reaction.emoji.id || reaction.emoji.name, x = p.roles.find(r => r.emoji && emojiKey(r.emoji) === key); if (!x) return;
+    const m = await guild.members.fetch(user.id).catch(() => null); if (!m) return;
+    if (add) { if (p.required && !m.roles.cache.has(p.required)) return reaction.users.remove(user.id).catch(() => {}); await m.roles.add(x.roleId).catch(() => {}); } else await m.roles.remove(x.roleId).catch(() => {});
+  } catch (e) { noteError(e); }
+};
+client.on(Events.MessageReactionAdd, (r, u) => reactionRole(r, u, true));
+client.on(Events.MessageReactionRemove, (r, u) => reactionRole(r, u, false));
+client.on(Events.GuildCreate, guild => { if (db.global.blacklist.guilds.includes(guild.id)) guild.leave().catch(() => {}); });
+process.on('unhandledRejection', e => noteError(e));
+
+// =====================================================================
+//  BOT INITIALIZATION
+// =====================================================================
 client.once(Events.ClientReady, async () => {
   console.log(`Logged in as ${client.user.tag}`);
 
-  client.user.setPresence({
-    status: 'idle',
-    activities: [{
-      name: 'Sindria On Top',
-      type: 5
-    }]
-  });
+  applyPresence(); // keeps the original status: idle • Competing in "Sindria On Top"
+
+  try {
+    const app = await client.application.fetch();
+    if (app.owner?.members) app.owner.members.forEach(m => OWNER_IDS.push(m.id));
+    else if (app.owner?.id) OWNER_IDS.push(app.owner.id);
+  } catch (e) { /* ignore */ }
 
   await registerCommands();
+
+  // Background jobs: giveaways, temp bans, reminders, voice XP
+  setInterval(async () => {
+    const now = Date.now();
+    for (const guild of client.guilds.cache.values()) {
+      const g = db.guilds[guild.id]; if (!g) continue;
+      for (const [id, gw] of Object.entries(g.giveaways || {})) if (gw.endsAt <= now) await endGiveaway(guild, id).catch(noteError);
+      const due = (g.tempbans || []).filter(t => t.until <= now);
+      if (due.length) { g.tempbans = g.tempbans.filter(t => t.until > now); save(); for (const t of due) { await guild.members.unban(t.id, 'Temp ban expired').catch(() => {}); addCase(guild, 'UNBAN', t.id, client.user.id, 'Temp ban expired'); } }
+    }
+    const rem = db.global.reminders.filter(r => r.at <= now);
+    if (rem.length) {
+      db.global.reminders = db.global.reminders.filter(r => r.at > now); save();
+      for (const r of rem) {
+        const content = `⏰ <@${r.user}> Reminder: ${r.text}`, ch = r.channel && await client.channels.fetch(r.channel).catch(() => null);
+        if (ch?.isTextBased()) await ch.send({ content, allowedMentions: { users: [r.user] } }).catch(async () => (await client.users.fetch(r.user).catch(() => null))?.send(content).catch(() => {}));
+        else (await client.users.fetch(r.user).catch(() => null))?.send(content).catch(() => {});
+      }
+    }
+  }, 15000);
+  setInterval(() => {
+    for (const guild of client.guilds.cache.values()) {
+      if (!db.guilds[guild.id] || !G(guild.id).level.enabled) continue;
+      for (const vs of guild.voiceStates.cache.values()) {
+        if (!vs.channelId || !vs.member || vs.member.user.bot || vs.selfDeaf || vs.serverDeaf || vs.channelId === guild.afkChannelId) continue;
+        addXp(guild, vs.id, 8, null).catch(() => {});
+      }
+    }
+  }, 60000);
 });
-
-// --- WELCOME EVENT LISTENER (FIXED COMPONENTS V2) ---
-client.on(Events.GuildMemberAdd, async (member) => {
-  if (member.guild.id !== GUILD_ID) return;
-  
-  const FIXED_WELCOME_CHANNEL_ID = '1529491496187724017';
-  const cfg = guildSettings.get(member.guild.id) || {};
-  const channelId = cfg.welcomeChannelId || FIXED_WELCOME_CHANNEL_ID;
-
-  const channel = member.guild.channels.cache.get(channelId);
-  if (!channel) return;
-
-  const customBannerUrl = 'https://media.discordapp.net/attachments/1527957392523005972/1529507159262494812/cca68503-0ea7-44c1-a1bd-7c2a43f99589.png?ex=6a77f0cb&is=6a769f4b&hm=7435d239d560d6f18204a9c7e3e9d0d6afc4ca929d13496642067432590aa6a6&=&format=webp&quality=lossless&width=2048&height=1024';
-
-  const container = {
-    type: 17,
-    accent_color: 0x98FB98,
-    components: [
-      {
-        type: 12,
-        items: [{ media: { url: customBannerUrl } }]
-      },
-      {
-        type: 10,
-        content: `Hey there, <@${member.id}>! We're glad to have you here.\n\n` +
-                 `**Welcome to ${member.guild.name}!**\n\n` +
-                 ` **Get Verified to Unlock the Server!**\n` +
-                 `You currently have access to:\n\n` +
-                 ` **Read through our rule and community guidelines.** (<#1529492085848412303>)\n` +
-                 ` **Head over to <#1531294593780416743> to get Verified.**\n\n` +
-                 `You'll be asked to provide the following details:\n` +
-                 `> **AQW USERNAME:**\n` +
-                 `> **GUILD:**\n\n` +
-                 ` **Grab your roles in <#1529492494583337237> to customize your profile.**\n` +
-                 ` **Chat and hang out in <#1371775027258855467>.**\n\n` +
-                 `Once verified, you'll have full access!`
-      }
-    ]
-  };
-
-  await channel.send({
-    components: [container],
-    flags: MessageFlags.IsComponentsV2
-  }).catch(console.error);
-});
-// --- INTERACTION LISTENER ---
-client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.guild || interaction.guild.id !== GUILD_ID) return;
-
-  try {
-    // --- GIVEAWAY ENTER BUTTON ---
-    if (interaction.isButton() && interaction.customId.startsWith('gw_enter_')) {
-      const gwId = interaction.customId.replace('gw_enter_', '');
-      const giveaway = activeGiveaways.get(gwId);
-
-      if (!giveaway || giveaway.ended) {
-        return interaction.reply({ content: '❌ This giveaway has already ended or no longer exists.', ephemeral: true });
-      }
-
-      const role1 = giveaway.role1;
-      const role2 = giveaway.role2;
-
-      if (role1 || role2) {
-        const hasRole1 = role1 ? interaction.member.roles.cache.has(role1) : true;
-        const hasRole2 = role2 ? interaction.member.roles.cache.has(role2) : true;
-
-        if (!hasRole1 && !hasRole2) {
-          let reqNames = [];
-          if (role1) reqNames.push(`<@&${role1}>`);
-          if (role2) reqNames.push(`<@&${role2}>`);
-          return interaction.reply({ content: `❌ You do not have the required role(s) to enter this giveaway: ${reqNames.join(' or ')}`, ephemeral: true });
-        }
-      }
-
-      if (giveaway.entries.has(interaction.user.id)) {
-        return interaction.reply({ content: '⚠️ You have already entered this giveaway!', ephemeral: true });
-      }
-
-      giveaway.entries.add(interaction.user.id);
-      return interaction.reply({ content: '🎉 Successfully entered the giveaway! Good luck!', ephemeral: true });
-    }
-
-    // --- VERIFICATION BUTTON TRIGGERS (WITH EPHEMERAL REJECTION MESSAGE) ---
-    if (interaction.isButton() && interaction.customId.startsWith('btn_verify_guest_')) {
-      if (userRejectionReasons.has(interaction.user.id)) {
-        const reason = userRejectionReasons.get(interaction.user.id);
-        userRejectionReasons.delete(interaction.user.id); 
-        return interaction.reply({ 
-          content: `❌ **Your previous verification was rejected:**\n\n**Reason:** ${reason}\n\nPlease address the reason above and submit your verification form again.`, 
-          ephemeral: true 
-        });
-      }
-
-      const roleId = interaction.customId.replace('btn_verify_guest_', '');
-      const modal = new ModalBuilder()
-        .setCustomId(`modal_verify_guest_${roleId}`)
-        .setTitle('Verify as Guest');
-
-      const ignInput = new TextInputBuilder()
-        .setCustomId('ign')
-        .setLabel('AQW IGN')
-        .setPlaceholder('Enter your exact AQW username...')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      const guildInput = new TextInputBuilder()
-        .setCustomId('guild_name')
-        .setLabel('Guild Name')
-        .setPlaceholder('Enter your guild name...')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      const invitedInput = new TextInputBuilder()
-        .setCustomId('invited_by')
-        .setLabel('Who invited you? (Optional)')
-        .setPlaceholder('e.g. from AEO discord link / friend name...')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false);
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(ignInput),
-        new ActionRowBuilder().addComponents(guildInput),
-        new ActionRowBuilder().addComponents(invitedInput)
-      );
-
-      return await interaction.showModal(modal);
-    }
-
-    if (interaction.isButton() && interaction.customId.startsWith('btn_verify_member_')) {
-      if (userRejectionReasons.has(interaction.user.id)) {
-        const reason = userRejectionReasons.get(interaction.user.id);
-        userRejectionReasons.delete(interaction.user.id); 
-        return interaction.reply({ 
-          content: `❌ **Your previous verification was rejected:**\n\n**Reason:** ${reason}\n\nPlease address the reason above and submit your verification form again.`, 
-          ephemeral: true 
-        });
-      }
-
-      const roleId = interaction.customId.replace('btn_verify_member_', '');
-      const modal = new ModalBuilder()
-        .setCustomId(`modal_verify_member_${roleId}`)
-        .setTitle('Verify as Member');
-
-      const ignInput = new TextInputBuilder()
-        .setCustomId('ign')
-        .setLabel('AQW IGN')
-        .setPlaceholder('Enter your exact AQW username...')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      const invitedInput = new TextInputBuilder()
-        .setCustomId('invited_by')
-        .setLabel('Who invited you?')
-        .setPlaceholder('e.g. friend name / link...')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(ignInput),
-        new ActionRowBuilder().addComponents(invitedInput)
-      );
-
-      return await interaction.showModal(modal);
-    }
-
-    if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_verify_guest_')) {
-      await interaction.deferReply({ ephemeral: true });
-
-      const roleId = interaction.customId.replace('modal_verify_guest_', '');
-      const ign = interaction.fields.getTextInputValue('ign').trim();
-      const guildName = interaction.fields.getTextInputValue('guild_name').trim();
-      const invitedBy = interaction.fields.getTextInputValue('invited_by') || 'None provided';
-
-      const charPageUrl = `https://account.aq.com/CharPage?id=${encodeURIComponent(ign)}`;
-      const cfg = guildSettings.get(interaction.guild.id) || {};
-      const logChannelId = cfg.verifyLogChannelId;
-
-      if (!logChannelId) {
-        return await interaction.editReply('❌ Verification Log channel is not configured yet. Please ask an admin to run `/setup-channels verify_log_channel:#channel`.');
-      }
-
-      const logChannel = interaction.guild.channels.cache.get(logChannelId);
-      if (!logChannel) {
-        return await interaction.editReply('❌ Verification log channel not found.');
-      }
-
-      const requestId = `ver_${interaction.user.id}_${Date.now()}`;
-      pendingVerifications.set(requestId, {
-        userId: interaction.user.id,
-        type: 'GUEST',
-        ign,
-        charPageUrl,
-        guildName,
-        invitedBy,
-        roleId,
-        roleName: '@Guest'
-      });
-
-      const userAvatar = interaction.user.displayAvatarURL({ extension: 'png', size: 128 });
-
-      const logContainer = {
-        type: 17,
-        accent_color: 0x3498db,
-        components: [
-          {
-            type: 12,
-            items: [{ media: { url: STANDARD_BANNER_URL } }]
-          },
-          {
-            type: 12,
-            items: [{ media: { url: userAvatar } }]
-          },
-          {
-            type: 10,
-            content: `📋 **New GUEST Verification Request**\n\n` +
-                     `**User** | **AQW Username** | **Verification Type**\n` +
-                     `<@${interaction.user.id}> | [${ign}](${charPageUrl}) | GUEST\n\n` +
-                     `**Guild** | **Role To Give** | **Invited By**\n` +
-                     `${guildName} | <@&${roleId}> | ${invitedBy}`
-          },
-          {
-            type: 1,
-            components: [
-              {
-                type: 2,
-                style: 3,
-                custom_id: `ver_approve_${requestId}`,
-                label: 'Approve',
-                emoji: '✅'
-              },
-              {
-                type: 2,
-                style: 4,
-                custom_id: `ver_reject_${requestId}`,
-                label: 'Reject',
-                emoji: '❌'
-              }
-            ]
-          }
-        ]
-      };
-
-      await logChannel.send({
-        components: [logContainer],
-        flags: MessageFlags.IsComponentsV2
-      });
-
-      return await interaction.editReply('✅ Your guest verification request has been submitted to the staff! Please wait for approval.');
-    }
-
-    if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_verify_member_')) {
-      await interaction.deferReply({ ephemeral: true });
-
-      const roleId = interaction.customId.replace('modal_verify_member_', '');
-      const ign = interaction.fields.getTextInputValue('ign').trim();
-      const invitedBy = interaction.fields.getTextInputValue('invited_by').trim();
-
-      const charPageUrl = `https://account.aq.com/CharPage?id=${encodeURIComponent(ign)}`;
-      const cfg = guildSettings.get(interaction.guild.id) || {};
-      const logChannelId = cfg.verifyLogChannelId;
-
-      if (!logChannelId) {
-        return await interaction.editReply('❌ Verification Log channel is not configured yet. Please ask an admin to run `/setup-channels verify_log_channel:#channel`.');
-      }
-
-      const logChannel = interaction.guild.channels.cache.get(logChannelId);
-      if (!logChannel) {
-        return await interaction.editReply('❌ Verification log channel not found.');
-      }
-
-      const requestId = `ver_${interaction.user.id}_${Date.now()}`;
-      pendingVerifications.set(requestId, {
-        userId: interaction.user.id,
-        type: 'MEMBER',
-        ign,
-        charPageUrl,
-        guildName: 'Main Guild',
-        invitedBy,
-        roleId,
-        roleName: '@Member'
-      });
-
-      const userAvatar = interaction.user.displayAvatarURL({ extension: 'png', size: 128 });
-
-      const logContainer = {
-        type: 17,
-        accent_color: 0x2ecc71,
-        components: [
-          {
-            type: 12,
-            items: [{ media: { url: STANDARD_BANNER_URL } }]
-          },
-          {
-            type: 12,
-            items: [{ media: { url: userAvatar } }]
-          },
-          {
-            type: 10,
-            content: `📋 **New MEMBER Verification Request**\n\n` +
-                     `**User** | **AQW Username** | **Verification Type**\n` +
-                     `<@${interaction.user.id}> | [${ign}](${charPageUrl}) | MEMBER\n\n` +
-                     `**Guild** | **Role To Give** | **Invited By**\n` +
-                     `Main Guild | <@&${roleId}> | ${invitedBy}`
-          },
-          {
-            type: 1,
-            components: [
-              {
-                type: 2,
-                style: 3,
-                custom_id: `ver_approve_${requestId}`,
-                label: 'Approve',
-                emoji: '✅'
-              },
-              {
-                type: 2,
-                style: 4,
-                custom_id: `ver_reject_${requestId}`,
-                label: 'Reject',
-                emoji: '❌'
-              }
-            ]
-          }
-        ]
-      };
-
-      await logChannel.send({
-        components: [logContainer],
-        flags: MessageFlags.IsComponentsV2
-      });
-
-      return await interaction.editReply('✅ Your membership verification request has been submitted to the staff! Please wait for approval.');
-    }
-
-    if (interaction.isButton() && interaction.customId.startsWith('ver_approve_')) {
-      const requestId = interaction.customId.replace('ver_approve_', '');
-      const data = pendingVerifications.get(requestId);
-
-      if (!data) {
-        return interaction.reply({ content: '⚠️ This verification request is already processed or expired.', ephemeral: true });
-      }
-
-      try {
-        const member = await interaction.guild.members.fetch(data.userId).catch(() => null);
-        if (member) {
-          await member.roles.add(data.roleId).catch(() => {});
-          await member.setNickname(data.ign).catch(err => console.log('Failed to set nickname:', err));
-        }
-
-        userRejectionReasons.delete(data.userId);
-
-        const userAvatar = interaction.message.components?.[1]?.items?.[0]?.media?.url || STANDARD_BANNER_URL;
-        const approvedContainer = {
-          type: 17,
-          accent_color: 0x2ecc71,
-          components: [
-            {
-              type: 12,
-              items: [{ media: { url: STANDARD_BANNER_URL } }]
-            },
-            {
-              type: 12,
-              items: [{ media: { url: userAvatar } }]
-            },
-            {
-              type: 10,
-              content: `📋 **Verification Approved**\n\n` +
-                       `**User** | **AQW Username** | **Verification Type**\n` +
-                       `<@${data.userId}> | [${data.ign}](${data.charPageUrl}) | ${data.type}\n\n` +
-                       `Approved by ${interaction.user} • <t:${Math.floor(Date.now() / 1000)}:R>`
-            }
-          ]
-        };
-
-        await interaction.update({ components: [approvedContainer], flags: MessageFlags.IsComponentsV2 });
-
-        if (member) {
-          await member.send(`🎉 Your verification for **${interaction.guild.name}** has been **Approved**! Your nickname has been updated to **${data.ign}** and you have been given the role.`).catch(() => {});
-        }
-
-        pendingVerifications.delete(requestId);
-      } catch (err) {
-        console.error('Approval error:', err);
-        return interaction.reply({ content: `❌ Failed to approve: ${err.message}`, ephemeral: true });
-      }
-    }
-
-    if (interaction.isButton() && interaction.customId.startsWith('ver_reject_')) {
-      const requestId = interaction.customId.replace('ver_reject_', '');
-      
-      const modal = new ModalBuilder()
-        .setCustomId(`modal_reject_reason_${requestId}`)
-        .setTitle('Reason for Rejection');
-
-      const reasonInput = new TextInputBuilder()
-        .setCustomId('reason')
-        .setLabel('Reason / Explanation')
-        .setPlaceholder('Enter why this verification is rejected...')
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(true);
-
-      modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
-      return await interaction.showModal(modal);
-    }
-
-    if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_reject_reason_')) {
-      await interaction.deferUpdate();
-      const requestId = interaction.customId.replace('modal_reject_reason_', '');
-      const reason = interaction.fields.getTextInputValue('reason');
-      const data = pendingVerifications.get(requestId);
-
-      if (!data) {
-        return interaction.followUp({ content: '⚠️ Request data not found.', ephemeral: true });
-      }
-
-      userRejectionReasons.set(data.userId, reason);
-
-      const userAvatar = interaction.message.components?.[1]?.items?.[0]?.media?.url || STANDARD_BANNER_URL;
-      const rejectedContainer = {
-        type: 17,
-        accent_color: 0xe74c3c,
-        components: [
-          {
-            type: 12,
-            items: [{ media: { url: STANDARD_BANNER_URL } }]
-          },
-          {
-            type: 12,
-            items: [{ media: { url: userAvatar } }]
-          },
-          {
-            type: 10,
-            content: `📋 **New ${data.type} Verification Request**\n\n` +
-                     `**User** | **AQW Username** | **Verification Type**\n` +
-                     `<@${data.userId}> | [${data.ign}](${data.charPageUrl}) | ${data.type}\n\n` +
-                     `**Guild** | **Role To Give** | **Invited By**\n` +
-                     `${data.guildName} | <@&${data.roleId}> | ${data.invitedBy}\n\n` +
-                     `**Rejection Reason**\n` +
-                     `${reason}\n\n` +
-                     `Rejected by ${interaction.user} • <t:${Math.floor(Date.now() / 1000)}:R>`
-          }
-        ]
-      };
-
-      await interaction.editReply({ components: [rejectedContainer], flags: MessageFlags.IsComponentsV2 });
-
-      try {
-        const member = await interaction.guild.members.fetch(data.userId).catch(() => null);
-        if (member) {
-          await member.send(`❌ Your verification for **${interaction.guild.name}** was **Rejected**. \n**Reason:** ${reason}\n\nPlease address this reason and attempt to verify again.`).catch(() => {});
-        }
-      } catch {}
-
-      pendingVerifications.delete(requestId);
-    }
-
-    // --- REACTION ROLE TOGGLE HANDLER ---
-    if (interaction.isButton() && interaction.customId.startsWith('rr_')) {
-      const roleId = interaction.customId.split('_')[1];
-      const role = interaction.guild.roles.cache.get(roleId);
-
-      if (!role) {
-        return interaction.reply({ content: '❌ Target role no longer exists.', ephemeral: true });
-      }
-
-      try {
-        if (interaction.member.roles.cache.has(roleId)) {
-          await interaction.member.roles.remove(roleId);
-          return interaction.reply({ content: `Removed role: **${role.name}**`, ephemeral: true });
-        } else {
-          await interaction.member.roles.add(roleId);
-          return interaction.reply({ content: `Added role: **${role.name}**`, ephemeral: true });
-        }
-      } catch (err) {
-        return interaction.reply({ content: '❌ Failed to update role. Check bot hierarchy/permissions.', ephemeral: true });
-      }
-    }
-
-    if (interaction.isButton() && interaction.customId === 'btn_open_ticket_menu') {
-      const selectMenu = new StringSelectMenuBuilder()
-        .setCustomId('select_ticket_cat')
-        .setPlaceholder('Select a ticket type...')
-        .addOptions(
-          Object.entries(TICKET_PRESETS).map(([key, item]) => 
-            new StringSelectMenuOptionBuilder()
-              .setLabel(item.label)
-              .setValue(key)
-          )
-        );
-
-      return await interaction.reply({
-        content: '🎫 **Select the ticket category you need assistance with:**',
-        components: [new ActionRowBuilder().addComponents(selectMenu)],
-        ephemeral: true
-      });
-    }
-
-    if (interaction.isButton() && ['btn_all_helpers', 'btn_helpers_list', 'btn_support_info', 'btn_support_details'].includes(interaction.customId)) {
-      return await interaction.reply({
-        content: '🔒 **Status:** Showing active ticket details.',
-        ephemeral: true
-      });
-    }
-
-    // STEP 1: Category Selected (Dropdown Menu with custom exact sequence)
-    if (interaction.isStringSelectMenu() && interaction.customId === 'select_ticket_cat') {
-      const selectedKey = interaction.values[0];
-      const preset = TICKET_PRESETS[selectedKey] || { label: 'Ticket', max: 6, points: 1, pingRoleIds: [HELPER_ROLE_ID] };
-
-      if (selectedKey === 'ultra_weeklies') {
-        const menu = new StringSelectMenuBuilder()
-          .setCustomId('select_bosses_ultra_weeklies')
-          .setPlaceholder('Select Ultra Weeklies bosses...')
-          .setMinValues(1)
-          .setMaxValues(7)
-          .addOptions(
-            new StringSelectMenuOptionBuilder().setLabel('Champion Drakath').setValue('Champion Drakath').setEmoji({ id: '1534544989009477754', name: 'drakath' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Drago').setValue('Ultra Drago').setEmoji({ id: '1534545063915290694', name: 'drago' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Nulgath').setValue('Ultra Nulgath').setEmoji({ id: '1534545036102995988', name: 'nulgath' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Dage').setValue('Ultra Dage').setEmoji({ id: '1534544956713209877', name: 'dage' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Darkon').setValue('Ultra Darkon').setEmoji({ id: '1534545103350272131', name: 'darkon' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Gramiel').setValue('Ultra Gramiel').setEmoji({ id: '1534545007468613662', name: 'gramiel' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Speaker').setValue('Ultra Speaker').setEmoji({ id: '1534545145016352778', name: 'malgor' })
-          );
-
-        return await interaction.update({
-          content: '⚔️ **Select all Ultra Weeklies bosses you need help with:**',
-          components: [new ActionRowBuilder().addComponents(menu)]
-        });
-      }
-
-      if (selectedKey === 'ultra_dailies') {
-        const menu = new StringSelectMenuBuilder()
-          .setCustomId('select_bosses_ultra_dailies')
-          .setPlaceholder('Select Ultra Dailies bosses...')
-          .setMinValues(1)
-          .setMaxValues(6)
-          .addOptions(
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Ezrajal').setValue('Ultra Ezrajal'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Warden').setValue('Ultra Warden'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Engineer').setValue('Ultra Engineer'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Tyndarius').setValue('Ultra Tyndarius'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Kala').setValue('Ultra Kala'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Iara').setValue('Ultra Iara')
-          );
-
-        return await interaction.update({
-          content: '⚔️ **Select all Ultra Dailies bosses you need help with:**',
-          components: [new ActionRowBuilder().addComponents(menu)]
-        });
-      }
-
-      if (selectedKey === 'seven_man_dailies') {
-        const menu = new StringSelectMenuBuilder()
-          .setCustomId('select_bosses_seven_man_dailies')
-          .setPlaceholder('Select 7-Man Dailies bosses...')
-          .setMinValues(1)
-          .setMaxValues(4)
-          .addOptions(
-            new StringSelectMenuOptionBuilder().setLabel('Kathool Depths').setValue('Kathool Depths'),
-            new StringSelectMenuOptionBuilder().setLabel('Originul').setValue('Originul'),
-            new StringSelectMenuOptionBuilder().setLabel('Astral Shrine').setValue('Astral Shrine'),
-            new StringSelectMenuOptionBuilder().setLabel('Lavarock Shore').setValue('Lavarock Shore')
-          );
-
-        return await interaction.update({
-          content: '⚔️ **Select all 7-Man Dailies bosses you need help with:**',
-          components: [new ActionRowBuilder().addComponents(menu)]
-        });
-      }
-
-      if (selectedKey === 'server_ticket') {
-        tempTicketCache.set(interaction.user.id, { categoryKey: 'server_ticket', server: 'N/A', bosses: '' });
-
-        const modal = new ModalBuilder()
-          .setCustomId('ticket_form_final_2_0_server_ticket')
-          .setTitle('Ticket: Server Ticket / Support');
-
-        const ignInput = new TextInputBuilder()
-          .setCustomId('ign')
-          .setLabel('Username / IGN')
-          .setPlaceholder('Enter your username...')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true);
-
-        const subjectInput = new TextInputBuilder()
-          .setCustomId('subject')
-          .setLabel('Subject / Concern')
-          .setPlaceholder('Report, Question, etc.')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true);
-
-        const descInput = new TextInputBuilder()
-          .setCustomId('description')
-          .setLabel('Details / Report')
-          .setPlaceholder('Describe your concern...')
-          .setStyle(TextInputStyle.Paragraph)
-          .setRequired(true);
-
-        modal.addComponents(
-          new ActionRowBuilder().addComponents(ignInput),
-          new ActionRowBuilder().addComponents(subjectInput),
-          new ActionRowBuilder().addComponents(descInput)
-        );
-
-        return await interaction.showModal(modal);
-      }
-
-      const serverMenu = new StringSelectMenuBuilder()
-        .setCustomId(`select_server_form_${selectedKey}`)
-        .setPlaceholder('Select your AQW server...')
-        .addOptions(
-          AQW_SERVERS.map(srv => 
-            new StringSelectMenuOptionBuilder()
-              .setLabel(srv.label)
-              .setValue(srv.label)
-              .setEmoji(srv.emoji)
-          )
-        );
-
-      return await interaction.update({
-        content: `🌐 **Select your AQW server for ${preset.label}:**`,
-        components: [new ActionRowBuilder().addComponents(serverMenu)]
-      });
-    }
-
-    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_bosses_')) {
-      const categoryKey = interaction.customId.replace('select_bosses_', '');
-      const selectedBosses = interaction.values.join(', ');
-       
-      tempTicketCache.set(interaction.user.id, { categoryKey, bosses: selectedBosses });
-
-      const serverMenu = new StringSelectMenuBuilder()
-        .setCustomId('select_server_form_boss')
-        .setPlaceholder('Select your AQW server...')
-        .addOptions(
-          AQW_SERVERS.map(srv => 
-            new StringSelectMenuOptionBuilder()
-              .setLabel(srv.label)
-              .setValue(srv.label)
-              .setEmoji(srv.emoji)
-          )
-        );
-
-      return await interaction.update({
-        content: '🌐 **Select your AQW server:**',
-        components: [new ActionRowBuilder().addComponents(serverMenu)]
-      });
-    }
-
-    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_server_form_')) {
-      const selectedServer = interaction.values[0];
-      let categoryKey, bossVal = '';
-
-      if (interaction.customId === 'select_server_form_boss') {
-        const cached = tempTicketCache.get(interaction.user.id) || {};
-        categoryKey = cached.categoryKey;
-        bossVal = cached.bosses;
-      } else {
-        categoryKey = interaction.customId.replace('select_server_form_', '');
-      }
-
-      const preset = TICKET_PRESETS[categoryKey] || { max: 6, points: 1, label: 'Ticket' };
-      tempTicketCache.set(interaction.user.id, { categoryKey, server: selectedServer, bosses: bossVal });
-
-      const modal = new ModalBuilder()
-        .setCustomId(`ticket_form_final_${preset.max}_${preset.points}_${categoryKey}`)
-        .setTitle(`Ticket: ${preset.label}`);
-
-      const ignInput = new TextInputBuilder()
-        .setCustomId('ign')
-        .setLabel('Username / IGN')
-        .setPlaceholder('Enter your username...')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      const mapInput = new TextInputBuilder()
-        .setCustomId('map_name')
-        .setLabel('Map Name / Room')
-        .setPlaceholder('ultraezrajal, ultrakala, etc.')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      const detailsInput = new TextInputBuilder()
-        .setCustomId('details')
-        .setLabel('Details')
-        .setPlaceholder('Add extra details (optional)...')
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(false);
-       
-      const modalComps = [
-        new ActionRowBuilder().addComponents(ignInput), 
-        new ActionRowBuilder().addComponents(mapInput),
-        new ActionRowBuilder().addComponents(detailsInput)
-      ];
-       
-      if (!bossVal) {
-        const descInput = new TextInputBuilder()
-          .setCustomId('description')
-          .setLabel('Monsters / Details')
-          .setPlaceholder('List monsters...')
-          .setStyle(TextInputStyle.Paragraph)
-          .setRequired(true);
-        modalComps.push(new ActionRowBuilder().addComponents(descInput));
-      }
-
-      modal.addComponents(modalComps);
-
-      return await interaction.showModal(modal);
-    }
-
-    if (interaction.isButton() && interaction.customId === 'btn_change_server') {
-      const ticketData = activeTickets.get(interaction.channel.id);
-      if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
-      if (interaction.user.id !== ticketData.requesterId && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
-        return interaction.reply({ content: '❌ Only the requester can change the server.', ephemeral: true });
-      }
-
-      const serverDropdown = new StringSelectMenuBuilder()
-        .setCustomId('active_change_server_menu')
-        .setPlaceholder('Select new AQW server...')
-        .addOptions(
-          AQW_SERVERS.map(srv => 
-            new StringSelectMenuOptionBuilder()
-              .setLabel(srv.label)
-              .setValue(srv.label)
-              .setEmoji(srv.emoji)
-          )
-        );
-
-      return await interaction.reply({
-        content: '🌐 **Select a new server from the dropdown below:**',
-        components: [new ActionRowBuilder().addComponents(serverDropdown)],
-        ephemeral: true
-      });
-    }
-
-    if (interaction.isStringSelectMenu() && interaction.customId === 'active_change_server_menu') {
-      await interaction.deferUpdate();
-      const ticketData = activeTickets.get(interaction.channel.id);
-      if (!ticketData) return;
-
-      const newServer = interaction.values[0];
-      ticketData.server = newServer;
-      activeTickets.set(interaction.channel.id, ticketData);
-
-      await interaction.editReply({ content: `✅ Successfully updated server to **${newServer}**!`, components: [] });
-      return updateTicketEmbed(interaction.channel, ticketData);
-    }
-
-    if (interaction.isButton() && interaction.customId === 'btn_change_bosses') {
-      const ticketData = activeTickets.get(interaction.channel.id);
-      if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
-      if (interaction.user.id !== ticketData.requesterId && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
-        return interaction.reply({ content: '❌ Only the requester can change monster details.', ephemeral: true });
-      }
-
-      const tType = ticketData.type;
-      let bossMenu;
-
-      if (tType === 'ultra_weeklies') {
-        bossMenu = new StringSelectMenuBuilder()
-          .setCustomId('active_change_bosses_selected_ultra_weeklies')
-          .setPlaceholder('Select Ultra Weeklies bosses...')
-          .setMinValues(1)
-          .setMaxValues(7)
-          .addOptions(
-            new StringSelectMenuOptionBuilder().setLabel('Champion Drakath').setValue('Champion Drakath').setEmoji({ id: '1534544989009477754', name: 'drakath' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Drago').setValue('Ultra Drago').setEmoji({ id: '1534545063915290694', name: 'drago' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Nulgath').setValue('Ultra Nulgath').setEmoji({ id: '1534545036102995988', name: 'nulgath' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Dage').setValue('Ultra Dage').setEmoji({ id: '1534544956713209877', name: 'dage' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Darkon').setValue('Ultra Darkon').setEmoji({ id: '1534545103350272131', name: 'darkon' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Gramiel').setValue('Ultra Gramiel').setEmoji({ id: '1534545007468613662', name: 'gramiel' }),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Speaker').setValue('Ultra Speaker').setEmoji({ id: '1534545145016352778', name: 'malgor' })
-          );
-      } else if (tType === 'ultra_dailies') {
-        bossMenu = new StringSelectMenuBuilder()
-          .setCustomId('active_change_bosses_selected_ultra_dailies')
-          .setPlaceholder('Select Ultra Dailies bosses...')
-          .setMinValues(1)
-          .setMaxValues(6)
-          .addOptions(
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Ezrajal').setValue('Ultra Ezrajal'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Warden').setValue('Ultra Warden'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Engineer').setValue('Ultra Engineer'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Tyndarius').setValue('Ultra Tyndarius'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Kala').setValue('Ultra Kala'),
-            new StringSelectMenuOptionBuilder().setLabel('Ultra Iara').setValue('Ultra Iara')
-          );
-      } else if (tType === 'seven_man_dailies') {
-        bossMenu = new StringSelectMenuBuilder()
-          .setCustomId('active_change_bosses_selected_seven_man_dailies')
-          .setPlaceholder('Select 7-Man Dailies bosses...')
-          .setMinValues(1)
-          .setMaxValues(4)
-          .addOptions(
-            new StringSelectMenuOptionBuilder().setLabel('Kathool Depths').setValue('Kathool Depths'),
-            new StringSelectMenuOptionBuilder().setLabel('Originul').setValue('Originul'),
-            new StringSelectMenuOptionBuilder().setLabel('Astral Shrine').setValue('Astral Shrine'),
-            new StringSelectMenuOptionBuilder().setLabel('Lavarock Shore').setValue('Lavarock Shore')
-          );
-      } else {
-        const modal = new ModalBuilder()
-          .setCustomId('modal_edit_bosses')
-          .setTitle('Change Monsters / Details')
-          .addComponents(new ActionRowBuilder().addComponents(
-            new TextInputBuilder().setCustomId('new_details').setLabel('New Monsters or Details').setValue(ticketData.description).setStyle(TextInputStyle.Paragraph).setRequired(true)
-          ));
-        return await interaction.showModal(modal);
-      }
-
-      return await interaction.reply({
-        content: `⚔️ **Select monsters/bosses for this ${TICKET_PRESETS[tType]?.label || 'Ticket'}:**`,
-        components: [new ActionRowBuilder().addComponents(bossMenu)],
-        ephemeral: true
-      });
-    }
-
-    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('active_change_bosses_selected_')) {
-      await interaction.deferUpdate();
-      const ticketData = activeTickets.get(interaction.channel.id);
-      if (!ticketData) return;
-
-      const newBosses = interaction.values.join(', ');
-      ticketData.description = newBosses;
-      activeTickets.set(interaction.channel.id, ticketData);
-
-      await interaction.editReply({ content: `✅ Successfully updated monsters to: **${newBosses}**`, components: [] });
-      return updateTicketEmbed(interaction.channel, ticketData);
-    }
-
-    if (interaction.isButton() && interaction.customId === 'btn_kick_helper') {
-      const ticketData = activeTickets.get(interaction.channel.id);
-      if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
-
-      const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels);
-      const isRequester = interaction.user.id === ticketData.requesterId;
-      if (!isAdmin && !isRequester) {
-        return interaction.reply({ content: '❌ Only the requester or staff can kick helpers.', ephemeral: true });
-      }
-
-      if (!ticketData.helpers || ticketData.helpers.length === 0) {
-        return interaction.reply({ content: '⚠️ There are no helpers currently claimed in this ticket.', ephemeral: true });
-      }
-
-      const helperMenu = new StringSelectMenuBuilder()
-        .setCustomId('active_kick_helper_menu')
-        .setPlaceholder('Select helper to remove...')
-        .addOptions(
-          ticketData.helpers.map(h => 
-            new StringSelectMenuOptionBuilder()
-              .setLabel(`Helper ID: ${h.id}`)
-              .setValue(h.id)
-          )
-        );
-
-      return await interaction.reply({
-        content: '🔨 **Select the helper you want to remove from this ticket:**',
-        components: [new ActionRowBuilder().addComponents(helperMenu)],
-        ephemeral: true
-      });
-    }
-
-    if (interaction.isStringSelectMenu() && interaction.customId === 'active_kick_helper_menu') {
-      await interaction.deferUpdate();
-      const ticketData = activeTickets.get(interaction.channel.id);
-      if (!ticketData) return;
-
-      const helperIdToRemove = interaction.values[0];
-      ticketData.helpers = ticketData.helpers.filter(h => h.id !== helperIdToRemove);
-      activeTickets.set(interaction.channel.id, ticketData);
-
-      await interaction.editReply({ content: `✅ Successfully removed <@${helperIdToRemove}> from the ticket!`, components: [] });
-      await interaction.channel.send({ content: `🔴 <@${helperIdToRemove}> has been removed from this ticket by ${interaction.user}.` });
-      return updateTicketEmbed(interaction.channel, ticketData);
-    }
-
-    if (interaction.isModalSubmit() && interaction.customId === 'modal_edit_bosses') {
-      const ticketData = activeTickets.get(interaction.channel.id);
-      if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
-
-      const newDetails = interaction.fields.getTextInputValue('new_details');
-      ticketData.description = newDetails;
-      activeTickets.set(interaction.channel.id, ticketData);
-
-      await interaction.reply({ content: `✅ Updated monster details!`, ephemeral: true });
-      return updateTicketEmbed(interaction.channel, ticketData);
-    }
-
-    if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket_form_final_')) {
-      await interaction.deferReply({ ephemeral: true });
-
-      try {
-        const parts = interaction.customId.replace('ticket_form_final_', '').split('_');
-        const maxHelpers = parseInt(parts[0]) || 3;
-        const customPoints = parseInt(parts[1]) || 0;
-        const ticketType = parts.slice(2).join('_');
-
-        const cached = tempTicketCache.get(interaction.user.id) || {};
-        const serverName = cached.server || 'Artix';
-        let description = cached.bosses || '';
-
-        const preset = TICKET_PRESETS[ticketType] || {};
-        const pingRoleIds = preset.pingRoleIds || [HELPER_ROLE_ID];
-
-        const ign = interaction.fields.getTextInputValue('ign');
-        const ticketDetails = ticketType === 'server_ticket' 
-          ? interaction.fields.getTextInputValue('description') 
-          : (interaction.fields.getTextInputValue('details') || 'None provided');
-
-        if (!description) {
-          try {
-            description = interaction.fields.getTextInputValue('description');
-          } catch {
-            description = 'General Assistance';
-          }
-        }
-
-        let room = 'N/A';
-        let subject = 'N/A';
-
-        if (ticketType === 'server_ticket') {
-          subject = interaction.fields.getTextInputValue('subject');
-        } else {
-          const rawMap = interaction.fields.getTextInputValue('map_name').trim();
-          const cleanMap = rawMap.toLowerCase().replace(/[^a-z0-9]/g, '') || 'room';
-          room = `/join ${cleanMap}`;
-        }
-
-        const cfg = guildSettings.get(interaction.guild.id) || {};
-         
-        ticketCounter += 1;
-        const formattedNum = String(ticketCounter).padStart(4, '0');
-        const chName = `ticket-${formattedNum}`;
-
-        let parentCategoryId = cfg.ticketCategory || null;
-        if (parentCategoryId) {
-          const fetchedCategory = interaction.guild.channels.cache.get(parentCategoryId);
-          if (!fetchedCategory || fetchedCategory.type !== ChannelType.GuildCategory) {
-            parentCategoryId = null;
-          }
-        }
-
-        const isServerTicket = ticketType === 'server_ticket';
-         
-        let permissionOverwrites = [
-          { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageChannels, PermissionsBitField.Flags.ManageMessages] },
-          { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
-        ];
-
-        if (isServerTicket) {
-          permissionOverwrites.push({ id: interaction.guild.roles.everyone, deny: [PermissionsBitField.Flags.ViewChannel] });
-        } else {
-          permissionOverwrites.push({ id: interaction.guild.roles.everyone, allow: [PermissionsBitField.Flags.ViewChannel] });
-        }
-
-        const ticketChannel = await interaction.guild.channels.create({
-          name: chName,
-          type: ChannelType.GuildText,
-          parent: parentCategoryId,
-          permissionOverwrites
-        });
-
-        const newTicketData = {
-          requesterId: interaction.user.id,
-          type: ticketType,
-          ign,
-          server: serverName,
-          room,
-          subject,
-          description,
-          details: ticketDetails,
-          maxHelpers,
-          customPoints,
-          pingRoleIds,
-          helpers: []
-        };
-
-        activeTickets.set(ticketChannel.id, newTicketData);
-        tempTicketCache.delete(interaction.user.id);
-
-        const validRoleIds = pingRoleIds.filter(id => id && /^\d+$/.test(id));
-        const helperRolePings = validRoleIds.length > 0 ? validRoleIds.map(id => `<@&${id}>`).join(' ') : '@Staff';
-         
-        await ticketChannel.send({ 
-          content: `${helperRolePings} assistance requested!`,
-          allowedMentions: validRoleIds.length > 0 ? { roles: validRoleIds } : { parse: ['users', 'roles'] }
-        });
-
-        const payload = isServerTicket 
-          ? buildSupportTicketControlPayload(newTicketData, `${interaction.user}`)
-          : buildTicketControlPayload(newTicketData, `${interaction.user}`);
-
-        const mainMsg = await ticketChannel.send({ components: payload.components, flags: payload.flags });
-
-        await mainMsg.pin().catch(() => {});
-
-        await sendTicketLog(
-          interaction.guild,
-          '📩 Ticket Created',
-          `**Category:** \`${ticketType}\`\n**User:** ${interaction.user} (\`${interaction.user.id}\`)\n**Channel:** ${ticketChannel}`,
-          '#3498db'
-        );
-
-        return await interaction.editReply(`✅ Ticket created: ${ticketChannel}`);
-      } catch (err) {
-        console.error('Failed to create ticket channel:', err);
-        return await interaction.editReply(`❌ Failed to create ticket channel: ${err.message}`);
-      }
-    }
-
-    if (interaction.isButton()) {
-      const ticketData = activeTickets.get(interaction.channel.id);
-      const customId = interaction.customId;
-
-      if (customId === 'btn_location') {
-        if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
-
-        const isRequester = interaction.user.id === ticketData.requesterId;
-        const isHelper = ticketData.helpers.some(h => h.id === interaction.user.id);
-        const isAdmin = interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels);
-
-        if (!isRequester && !isHelper && !isAdmin) {
-          return interaction.reply({ content: '🔒 **Access Denied:** Click **Claim** first to view room details.', ephemeral: true });
-        }
-
-        const categoryPreset = TICKET_PRESETS[ticketData.type] || {};
-        const accentColor = categoryPreset.accentColor || 0x3498db;
-
-        const codesEmbed = new EmbedBuilder()
-          .setTitle('📍 Room Details')
-          .setColor(accentColor)
-          .addFields(
-            { name: '👤 IGN', value: `\`${ticketData.ign}\``, inline: true },
-            { name: '🖥️ Server', value: `\`${ticketData.server}\``, inline: true },
-            { name: '📜 Command', value: `\`${ticketData.room}\``, inline: false },
-            { name: '📝 Details', value: `\`${ticketData.details || 'None provided'}\``, inline: false }
-          )
-          .setFooter({ text: 'AQW Ticket System' })
-          .setTimestamp();
-
-        return await interaction.reply({
-          embeds: [codesEmbed],
-          ephemeral: true
-        });
-      }
-
-      if (customId === 'btn_claim') {
-        if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
-
-        if (interaction.user.id === ticketData.requesterId) {
-          return interaction.reply({ content: '⚠️ You are the requester of this ticket!', ephemeral: true });
-        }
-
-        if (ticketData.helpers.some(h => h.id === interaction.user.id)) {
-          return interaction.reply({ content: '⚠️ You already claimed this ticket!', ephemeral: true });
-        }
-
-        const activeChannelId = isHelperInActiveTicket(interaction.user.id);
-        if (activeChannelId) {
-          return interaction.reply({ content: `⚠️ You are already in an active ticket (<#${activeChannelId}>)!`, ephemeral: true });
-        }
-
-        const maxAllowed = ticketData.maxHelpers || 3;
-        if (ticketData.helpers.length >= maxAllowed) {
-          return interaction.reply({ content: `⚠️ Helper spots are full (${maxAllowed}/${maxAllowed})!`, ephemeral: true });
-        }
-
-        ticketData.helpers.push({ id: interaction.user.id });
-        activeTickets.set(interaction.channel.id, ticketData);
-
-        const claimedCount = ticketData.helpers.length;
-
-        await interaction.channel.send({
-          content: `🟢 ${interaction.user} **claimed ticket (${claimedCount}/${maxAllowed})**`
-        });
-
-        await sendTicketLog(
-          interaction.guild,
-          '🤝 Ticket Claimed',
-          `**Helper:** ${interaction.user} (\`${interaction.user.id}\`)\n**Ticket:** ${interaction.channel}\n**Requester:** <@${ticketData.requesterId}>`,
-          '#3498db'
-        );
-
-        await interaction.reply({
-          content: `✅ **Claimed!** Room Details:\n📍 **Server:** \`${ticketData.server}\`\n📍 **Command:** \`${ticketData.room}\`\n📍 **Details:** \`${ticketData.details || 'None provided'}\``,
-          ephemeral: true
-        });
-
-        return updateTicketEmbed(interaction.channel, ticketData);
-      }
-
-      if (customId === 'btn_leave_ticket') {
-        if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
-
-        const isHelper = ticketData.helpers.some(h => h.id === interaction.user.id);
-        if (!isHelper) {
-          return interaction.reply({ content: '❌ You are not a claimed helper in this ticket.', ephemeral: true });
-        }
-
-        ticketData.helpers = ticketData.helpers.filter(h => h.id !== interaction.user.id);
-        activeTickets.set(interaction.channel.id, ticketData);
-
-        await interaction.reply({ content: '✅ You have successfully stepped down and left this ticket.', ephemeral: true });
-        await interaction.channel.send({ content: `🏃‍♂️ ${interaction.user} has stepped down and left this ticket.` });
-        return updateTicketEmbed(interaction.channel, ticketData);
-      }
-
-      if (customId === 'btn_pinghelpers') {
-        const pingRoleIds = ticketData?.pingRoleIds || [SUPPORT_ROLE_ID];
-        const validRoleIds = pingRoleIds.filter(id => id && /^\d+$/.test(id));
-        const helperRolePings = validRoleIds.length > 0 ? validRoleIds.map(id => `<@&${id}>`).join(' ') : '@Staff';
-        return interaction.reply({ 
-          content: `🔔 ${helperRolePings} assistance requested!`,
-          allowedMentions: validRoleIds.length > 0 ? { roles: validRoleIds } : { parse: ['users', 'roles'] }
-        });
-      }
-
-      if (customId === 'btn_cancel') {
-        if (ticketData && interaction.user.id !== ticketData.requesterId && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
-          return interaction.reply({ content: '❌ Only requester or staff can cancel.', ephemeral: true });
-        }
-
-        await interaction.reply('🎟️ Ticket Canceled. Deleting channel in 3 seconds...');
-
-        await sendTicketLog(
-          interaction.guild,
-          '🚫 Ticket Canceled',
-          `**Canceled By:** ${interaction.user} (\`${interaction.user.id}\`)\n**Channel:** \`#${interaction.channel.name}\``,
-          '#e74c3c'
-        );
-
-        activeTickets.delete(interaction.channel.id);
-        setTimeout(() => interaction.channel.delete().catch(() => {}), 3000);
-        return;
-      }
-
-      if (customId === 'btn_complete') {
-        if (ticketData && interaction.user.id !== ticketData.requesterId && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
-          return interaction.reply({ content: '❌ Only requester or staff can complete.', ephemeral: true });
-        }
-
-        const desc = ticketData ? ticketData.description : '';
-        const items = desc ? desc.split(',').map(x => x.trim()).filter(x => x.length > 0) : [];
-
-        if (items.length > 1) {
-          const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId(`select_complete_bosses_${interaction.channel.id}`)
-            .setPlaceholder('Select successfully completed monsters/bosses...')
-            .setMinValues(1)
-            .setMaxValues(items.length)
-            .addOptions(
-              items.map(item => new StringSelectMenuOptionBuilder().setLabel(item).setValue(item))
-            );
-
-          return await interaction.reply({
-            content: '📋 **Check off the bosses/monsters that were successfully completed:**',
-            components: [new ActionRowBuilder().addComponents(selectMenu)],
-            ephemeral: true
-          });
-        }
-
-        const confirmRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId(`confirm_close_ticket_${interaction.channel.id}_all`).setLabel('Yes, Close Ticket').setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId('cancel_close_ticket').setLabel('Cancel').setStyle(ButtonStyle.Secondary)
-        );
-
-        return await interaction.reply({
-          content: '⚠️ **Are you sure you want to close this ticket?**',
-          components: [confirmRow],
-          ephemeral: true
-        });
-      }
-
-      if (customId.startsWith('confirm_close_ticket_')) {
-        if (ticketData && interaction.user.id !== ticketData.requesterId && !interaction.member.permissions.has(PermissionsBitField.Flags.ManageChannels)) {
-          return interaction.reply({ content: '❌ Only requester or staff can complete.', ephemeral: true });
-        }
-        await interaction.deferUpdate();
-        await executeTicketCompletion(interaction, ticketData, null);
-        return;
-      }
-
-      if (customId === 'cancel_close_ticket') {
-        return interaction.update({ content: '❌ Ticket closure canceled.', components: [], ephemeral: true });
-      }
-    }
-
-    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('select_complete_bosses_')) {
-      const channelId = interaction.customId.replace('select_complete_bosses_', '');
-      const ticketData = activeTickets.get(channelId);
-      if (!ticketData) return interaction.reply({ content: '❌ Ticket not found.', ephemeral: true });
-
-      const completedBosses = interaction.values;
-      tempTicketCache.set(`${interaction.user.id}_completed`, completedBosses);
-
-      const calculatedPts = getPointsForTicket(ticketData, completedBosses);
-
-      const confirmRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`confirm_close_ticket_custom_${channelId}`).setLabel('Yes, Close Ticket').setStyle(ButtonStyle.Success),
-        new ButtonBuilder().setCustomId('cancel_close_ticket').setLabel('Cancel').setStyle(ButtonStyle.Secondary)
-      );
-
-      return await interaction.update({
-        content: `You selected completed: **${completedBosses.join(', ')}**\nAdjusted Points to Award: **${calculatedPts} pts**\n\n⚠️ **Are you sure you want to close this ticket?**`,
-        components: [confirmRow],
-        ephemeral: true
-      });
-    }
-
-    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('confirm_close_ticket_custom_')) {
-      const channelId = interaction.customId.replace('confirm_close_ticket_custom_', '');
-      const ticketData = activeTickets.get(channelId);
-      const completedBosses = tempTicketCache.get(`${interaction.user.id}_completed`) || null;
-
-      await interaction.deferUpdate();
-      await executeTicketCompletion(interaction, ticketData, completedBosses);
-      tempTicketCache.delete(`${interaction.user.id}_completed`);
-      return;
-    }
-
-    if (interaction.isChatInputCommand()) {
-      const { commandName, options } = interaction;
-
-      // --- /VIEWPOINTS COMMAND ---
-      if (commandName === 'viewpoints') {
-        const target = options.getUser('user') || interaction.user;
-        const pts = helperPoints.get(target.id) || 0;
-        return await interaction.reply({ content: `🏅 **${target.tag}** currently has **${pts}** helper points.`, ephemeral: true });
-      }
-
-      // --- MODERATION COMMANDS ---
-      if (commandName === 'kick') {
-        const targetUser = options.getUser('user');
-        const reason = options.getString('reason') || 'No reason provided';
-        const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
-
-        if (!member) return await interaction.reply({ content: '❌ User not found in this server.', ephemeral: true });
-         
-        await member.kick(reason).catch(err => {
-          return interaction.reply({ content: `❌ Failed to kick user: ${err.message}`, ephemeral: true });
-        });
-
-        return await interaction.reply({ content: `✅ Successfully kicked **${targetUser.tag}**. Reason: ${reason}`, ephemeral: true });
-      }
-
-      if (commandName === 'mute') {
-        const targetUser = options.getUser('user');
-        const durationMins = options.getInteger('duration');
-        const reason = options.getString('reason') || 'No reason provided';
-        const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
-
-        if (!member) return await interaction.reply({ content: '❌ User not found in this server.', ephemeral: true });
-
-        await member.timeout(durationMins * 60 * 1000, reason).catch(err => {
-          return interaction.reply({ content: `❌ Failed to mute user: ${err.message}`, ephemeral: true });
-        });
-
-        return await interaction.reply({ content: `✅ Successfully muted **${targetUser.tag}** for **${durationMins} minutes**. Reason: ${reason}`, ephemeral: true });
-      }
-
-      if (commandName === 'snipe') {
-        const sniped = snipeCache.get(interaction.channel.id);
-        if (!sniped) {
-          return await interaction.reply({ content: '❌ There are no deleted messages to snipe in this channel.', ephemeral: true });
-        }
-
-        const snipeEmbed = new EmbedBuilder()
-          .setTitle('🎯 Sniped Message')
-          .setDescription(sniped.content)
-          .setAuthor({ name: sniped.author.tag, iconURL: sniped.author.displayAvatarURL() })
-          .setTimestamp(sniped.createdAt)
-          .setColor('#e74c3c');
-
-        if (sniped.image) snipeEmbed.setImage(sniped.image);
-
-        return await interaction.reply({ embeds: [snipeEmbed] });
-      }
-
-      if (commandName === 'viewprofile') {
-        const targetUser = options.getUser('user') || interaction.user;
-        const member = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
-
-        if (!member) return await interaction.reply({ content: '❌ User not found.', ephemeral: true });
-
-        const roles = member.roles.cache.filter(r => r.id !== interaction.guild.id).map(r => r).join(', ') || 'None';
-        const profileEmbed = new EmbedBuilder()
-          .setTitle(`👤 Profile: ${targetUser.tag}`)
-          .setThumbnail(targetUser.displayAvatarURL({ dynamic: true }))
-          .addFields(
-            { name: '🆔 User ID', value: `\`${targetUser.id}\``, inline: true },
-            { name: '📅 Joined Server', value: `<t:${Math.floor(member.joinedTimestamp / 1000)}:R>`, inline: true },
-            { name: '🎂 Account Created', value: `<t:${Math.floor(targetUser.createdTimestamp / 1000)}:R>`, inline: true },
-            { name: `🛡️ Roles (${member.roles.cache.size - 1})`, value: roles, inline: false }
-          )
-          .setColor('#3498db')
-          .setTimestamp();
-
-        return await interaction.reply({ embeds: [profileEmbed], ephemeral: true });
-      }
-
-      // --- GIVEAWAY COMMAND HANDLER ---
-      if (commandName === 'giveaway') {
-        const sub = options.getSubcommand();
-
-        if (sub === 'start') {
-          await interaction.deferReply({ ephemeral: true });
-          const channel = options.getChannel('channel');
-          const prize = options.getString('prize');
-          const title = options.getString('title');
-          const description = options.getString('description').replace(/\\n/g, '\n');
-          const durationMins = options.getInteger('duration');
-          const winnersCount = options.getInteger('winners');
-          const role1 = options.getRole('role1')?.id || null;
-          const role2 = options.getRole('role2')?.id || null;
-          const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
-
-          const endsAt = Date.now() + durationMins * 60 * 1000;
-          const gwId = `gw_${Date.now()}`;
-
-          let roleReqText = 'None (Everyone can join)';
-          if (role1 && role2) roleReqText = `<@&${role1}> or <@&${role2}>`;
-          else if (role1) roleReqText = `<@&${role1}>`;
-          else if (role2) roleReqText = `<@&${role2}>`;
-
-          const gwContainer = {
-            type: 17,
-            accent_color: 0xf1c40f,
-            components: [
-              {
-                type: 12,
-                items: [{ media: { url: bannerUrl } }]
-              },
-              {
-                type: 9,
-                components: [
-                  {
-                    type: 10,
-                    content: `# ${title}\n\n` +
-                             `🎉 **Prize:** ${prize}\n\n` +
-                             `${description}\n\n` +
-                             `**Winners:** ${winnersCount}\n` +
-                             `Hosted by: ${interaction.user}\n` +
-                             `Required Roles: ${roleReqText}\n` +
-                             `Ends At: <t:${Math.floor(endsAt / 1000)}:R>`
-                  }
-                ],
-                accessory: {
-                  type: 2,
-                  style: 3, // Style 3 = Green Button (Success)
-                  custom_id: `gw_enter_${gwId}`,
-                  label: '🎉 Enter Giveaway'
-                }
-              }
-            ]
-          };
-
-          const gwMsg = await channel.send({
-            components: [gwContainer],
-            flags: MessageFlags.IsComponentsV2
-          });
-
-          activeGiveaways.set(gwId, {
-            messageId: gwMsg.id,
-            channelId: channel.id,
-            prize,
-            winnersCount,
-            role1,
-            role2,
-            hostId: interaction.user.id,
-            entries: new Set(),
-            ended: false,
-            endsAt
-          });
-
-          setTimeout(async () => {
-            await endGiveaway(interaction.guild, gwId);
-          }, durationMins * 60 * 1000);
-
-          return await interaction.editReply(`✅ Giveaway successfully started in ${channel}! (ID: \`${gwId}\`)`);
-        }
-
-        if (sub === 'end') {
-          await interaction.deferReply({ ephemeral: true });
-          const messageId = options.getString('message_id');
-          let foundGwId = null;
-
-          for (const [id, data] of activeGiveaways.entries()) {
-            if (data.messageId === messageId && !data.ended) {
-              foundGwId = id;
-              break;
-            }
-          }
-
-          if (!foundGwId) {
-            return await interaction.editReply('❌ Active giveaway with that Message ID not found.');
-          }
-
-          await endGiveaway(interaction.guild, foundGwId);
-          return await interaction.editReply('✅ Giveaway ended successfully!');
-        }
-
-        if (sub === 'reroll') {
-          await interaction.deferReply({ ephemeral: true });
-          const messageId = options.getString('message_id');
-          let foundGw = null;
-
-          for (const data of activeGiveaways.values()) {
-            if (data.messageId === messageId && data.ended) {
-              foundGw = data;
-              break;
-            }
-          }
-
-          if (!foundGw) {
-            return await interaction.editReply('❌ Ended giveaway with that Message ID not found.');
-          }
-
-          const entriesArr = Array.from(foundGw.entries);
-          if (entriesArr.length === 0) {
-            return await interaction.editReply('❌ No entries found to reroll from.');
-          }
-
-          const winnerId = entriesArr[Math.floor(Math.random() * entriesArr.length)];
-          const channel = interaction.guild.channels.cache.get(foundGw.channelId);
-          if (channel) {
-            await channel.send(`🔄 **Reroll Winner!** Congratulations <@${winnerId}>! You won the **${foundGw.prize}**! 🎉`);
-          }
-
-          return await interaction.editReply(`✅ Successfully rerolled a new winner: <@${winnerId}>`);
-        }
-      }
-
-      // --- /SETUP-BOOST COMMAND ---
-      if (commandName === 'setup-boost') {
-        await interaction.deferReply({ ephemeral: true });
-        const channel = options.getChannel('channel');
-        const title = options.getString('title');
-        const description = options.getString('description').replace(/\\n/g, '\n');
-        const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
-
-        const cfg = guildSettings.get(interaction.guild.id) || {};
-        cfg.boostChannelId = channel.id;
-        cfg.boostData = { title, description, bannerUrl };
-        guildSettings.set(interaction.guild.id, cfg);
-
-        return await interaction.editReply(`✅ Boost announcement channel set to ${channel}!`);
-      }
-
-      // --- /SETUP-WELCOME COMMAND ---
-      if (commandName === 'setup-welcome') {
-        await interaction.deferReply({ ephemeral: true });
-        const channel = options.getChannel('channel');
-        const outerMessage = options.getString('outer_message').replace(/\\n/g, '\n');
-        const title = options.getString('title');
-        const description = options.getString('description').replace(/\\n/g, '\n');
-        const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
-
-        const cfg = guildSettings.get(interaction.guild.id) || {};
-        cfg.welcomeChannelId = channel.id;
-        cfg.welcomeData = { outerMessage, title, description, bannerUrl };
-        guildSettings.set(interaction.guild.id, cfg);
-
-        return await interaction.editReply(`✅ Welcome announcement channel set to ${channel}!`);
-      }
-
-      // --- SETUP VERIFICATION PANEL COMMAND ---
-      if (commandName === 'setup-verification') {
-        await interaction.deferReply({ ephemeral: true });
-
-        const channel = options.getChannel('channel');
-        const guestRole = options.getRole('guest_role');
-        const memberRole = options.getRole('member_role');
-        const panelTitle = options.getString('panel_title');
-        const guestTitle = options.getString('guest_title');
-        const guestDesc = options.getString('guest_desc').replace(/\\n/g, '\n');
-        const memberTitle = options.getString('member_title');
-        const memberDesc = options.getString('member_desc').replace(/\\n/g, '\n');
-
-        const guestBtnName = options.getString('guest_btn_name') || 'Verify as Guest';
-        const memberBtnName = options.getString('member_btn_name') || 'Verify as Member';
-        const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
-        const footerBannerUrl = options.getString('footer_banner_url');
-
-        if (!channel || !channel.isTextBased()) {
-          return await interaction.editReply('❌ Please select a valid text channel.');
-        }
-
-        const verifyComponents = [
-          {
-            type: 12,
-            items: [{ media: { url: bannerUrl } }]
-          },
-          {
-            type: 10,
-            content: `# ${panelTitle}`
-          },
-          {
-            type: 9,
-            components: [
-              {
-                type: 10,
-                content: `**${guestTitle}**\n-# > ${guestDesc}`
-              }
-            ],
-            accessory: {
-              type: 2,
-              style: 2,
-              custom_id: `btn_verify_guest_${guestRole.id}`,
-              label: guestBtnName
-            }
-          },
-          {
-            type: 9,
-            components: [
-              {
-                type: 10,
-                content: `**${memberTitle}**\n-# > ${memberDesc}`
-              }
-            ],
-            accessory: {
-              type: 2,
-              style: 2,
-              custom_id: `btn_verify_member_${memberRole.id}`,
-              label: memberBtnName
-            }
-          }
-        ];
-
-        if (footerBannerUrl) {
-          verifyComponents.push({ type: 14 });
-          verifyComponents.push({
-            type: 12,
-            items: [{ media: { url: footerBannerUrl } }]
-          });
-        }
-
-        const verifyContainer = {
-          type: 17,
-          accent_color: 0x8b0000,
-          components: verifyComponents
-        };
-
-        try {
-          await channel.send({
-            components: [verifyContainer],
-            flags: MessageFlags.IsComponentsV2
-          });
-          return await interaction.editReply(`✅ Verification panel successfully posted to ${channel}!`);
-        } catch (err) {
-          console.error('Error posting verification panel:', err);
-          return await interaction.editReply(`❌ Failed to post panel: ${err.message}`);
-        }
-      }
-
-      if (commandName === 'setup-ticket-hub') {
-        await interaction.deferReply({ ephemeral: true });
-
-        try {
-          const channel = options.getChannel('channel');
-          if (!channel || !channel.isTextBased()) {
-            return await interaction.editReply('❌ Please select a valid text channel to post the panel.');
-          }
-
-          const customBanner = options.getString('banner_url');
-          const guideTitle = options.getString('guide_title') || undefined;
-          const guideDesc = options.getString('guide_desc') || undefined;
-          const guideUrl = options.getString('guide_url') || undefined;
-          const createTitle = options.getString('create_title') || undefined;
-          const createDesc = options.getString('create_desc') || undefined;
-          const category = options.getChannel('category');
-          const logChannel = options.getChannel('log_channel');
-
-          const cfg = guildSettings.get(interaction.guild.id) || {};
-          if (category) cfg.ticketCategory = category.id;
-          if (logChannel) cfg.logChannelId = logChannel.id;
-          guildSettings.set(interaction.guild.id, cfg);
-
-          const payload = buildTicketHubPayload({
-            imageUrl: customBanner || STANDARD_BANNER_URL,
-            guideTitle,
-            guideDesc,
-            guideUrl,
-            createTitle,
-            createDesc
-          });
-
-          await channel.send({
-            components: payload.components,
-            flags: payload.flags
-          });
-
-          return await interaction.editReply(`✅ Ticket Hub Panel successfully posted to ${channel}!`);
-        } catch (err) {
-          console.error('Error posting ticket hub panel:', err);
-          return await interaction.editReply(`❌ Failed to post panel: ${err.message}. Please check bot channel permissions.`);
-        }
-      }
-
-      if (commandName === 'stats') {
-        const customMessage = options.getString('custom_message');
-        const defaultFooterMessage = "The ticket status is updated automatically whenever a ticket is completed.";
-
-        const statsEmbed = new EmbedBuilder()
-          .setTitle(`Ticket stats`)
-          .setDescription(
-            `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed.\n` +
-            `🏅 **\`${globalStats.totalPointsGiven}\`** points given out.\n\n` +
-            (customMessage ? customMessage.replace(/\\n/g, '\n') : defaultFooterMessage)
-          )
-          .setColor('#3498db')
-          .setTimestamp();
-
-        return await interaction.reply({ embeds: [statsEmbed] });
-      }
-
-      if (commandName === 'setup-stats') {
-        await interaction.deferReply({ ephemeral: true });
-        const channel = options.getChannel('channel');
-         
-        const statsEmbed = new EmbedBuilder()
-          .setTitle(`Ticket stats`)
-          .setDescription(
-            `🎫 **\`${globalStats.totalTicketsCompleted}\`** tickets completed.\n` +
-            `🏅 **\`${globalStats.totalPointsGiven}\`** points given out.\n\n` +
-            "The ticket status is updated automatically whenever a ticket is completed."
-          )
-          .setColor('#3498db')
-          .setTimestamp();
-
-        const sentMsg = await channel.send({ embeds: [statsEmbed] });
-
-        const cfg = guildSettings.get(interaction.guild.id) || {};
-        cfg.statsChannelId = channel.id;
-        cfg.statsMessageId = sentMsg.id;
-        guildSettings.set(interaction.guild.id, cfg);
-
-        return await interaction.editReply(`✅ Live tracking stats message successfully set up in ${channel}!`);
-      }
-
-      if (commandName === 'embed') {
-        await interaction.deferReply({ ephemeral: true });
-
-        const channel = options.getChannel('channel');
-        if (!channel || !channel.isTextBased()) {
-          return await interaction.editReply('❌ Please select a valid text channel.');
-        }
-
-        const title = options.getString('title');
-        const description = options.getString('description').replace(/\\n/g, '\n');
-        const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
-        const footerBannerUrl = options.getString('footer_banner_url');
-
-        const containerComponents = [
-          {
-            type: 12,
-            items: [{ media: { url: bannerUrl } }]
-          },
-          {
-            type: 10,
-            content: `**${title}**\n\n${description}`
-          }
-        ];
-
-        if (footerBannerUrl) {
-          containerComponents.push({ type: 14 });
-          containerComponents.push({
-            type: 12,
-            items: [{ media: { url: footerBannerUrl } }]
-          });
-        }
-
-        const containerComponent = {
-          type: 17,
-          accent_color: 0x8b0000,
-          components: containerComponents
-        };
-
-        try {
-          await channel.send({
-            components: [containerComponent],
-            flags: MessageFlags.IsComponentsV2
-          });
-          return await interaction.editReply(`✅ Components V2 panel successfully posted to ${channel}!`);
-        } catch (err) {
-          console.error('Error posting Components V2 embed:', err);
-          return await interaction.editReply(`❌ Failed to post layout message: ${err.message}`);
-        }
-      }
-
-      if (commandName === 'reactionrole') {
-        await interaction.deferReply({ ephemeral: true });
-
-        const channel = options.getChannel('channel');
-        if (!channel || !channel.isTextBased()) {
-          return await interaction.editReply('❌ Please select a valid text channel.');
-        }
-
-        const title = options.getString('title');
-        const description = options.getString('description');
-        const bannerUrl = options.getString('banner_url') || STANDARD_BANNER_URL;
-
-        const sections = [];
-        const usedRoleIds = new Set();
-
-        for (let i = 1; i <= 7; i++) {
-          const role = options.getRole(`role${i}`);
-          const desc = options.getString(`desc${i}`);
-           
-          if (role && desc) {
-            if (usedRoleIds.has(role.id)) continue;
-            usedRoleIds.add(role.id);
-
-            const rawEmoji = options.getString(`emoji${i}`);
-            let emojiObj = undefined;
-            if (rawEmoji) {
-              const customEmojiMatch = rawEmoji.match(/<a?:(.+?):(\d+)>/);
-              if (customEmojiMatch) {
-                emojiObj = { id: customEmojiMatch[2], name: customEmojiMatch[1] };
-              } else {
-                emojiObj = { name: rawEmoji.trim() };
-              }
-            }
-
-            sections.push({
-              type: 9,
-              components: [
-                {
-                  type: 10,
-                  content: `@${role.name}\n-# > ${desc}`
-                }
-              ],
-              accessory: {
-                type: 2,
-                style: 2,
-                custom_id: `rr_${role.id}`,
-                label: role.name,
-                ...(emojiObj && { emoji: emojiObj })
-              }
-            });
-          }
-        }
-
-        if (sections.length === 0) {
-          return await interaction.editReply('❌ You must provide at least one valid role and description.');
-        }
-
-        const containerComponent = {
-          type: 17,
-          accent_color: 0x8b0000,
-          components: [
-            {
-              type: 12,
-              items: [{ media: { url: bannerUrl } }]
-            },
-            {
-              type: 10,
-              content: `**${title}**\n\n${description}`
-            },
-            ...sections
-          ]
-        };
-
-        try {
-          await channel.send({
-            components: [containerComponent],
-            flags: MessageFlags.IsComponentsV2
-          });
-          return await interaction.editReply(`✅ Components V2 reaction role panel successfully posted to ${channel}!`);
-        } catch (err) {
-          console.error('Error posting reaction role panel:', err);
-          return await interaction.editReply(`❌ Failed to post panel: ${err.message}`);
-        }
-      }
-
-      if (commandName === 'setup-channels') {
-        await interaction.deferReply({ ephemeral: true });
-
-        const logChannel = options.getChannel('log_channel');
-        const welcomeChannel = options.getChannel('welcome_channel');
-        const boostChannel = options.getChannel('boost_channel');
-        const verifyLogChannel = options.getChannel('verify_log_channel');
-
-        const cfg = guildSettings.get(interaction.guild.id) || {};
-        if (logChannel) cfg.logChannelId = logChannel.id;
-        if (welcomeChannel) cfg.welcomeChannelId = welcomeChannel.id;
-        if (boostChannel) cfg.boostChannelId = boostChannel.id;
-        if (verifyLogChannel) cfg.verifyLogChannelId = verifyLogChannel.id;
-
-        guildSettings.set(interaction.guild.id, cfg);
-
-        const statusUpdates = [
-          logChannel ? `• **Log Channel:** ${logChannel}` : null,
-          welcomeChannel ? `• **Welcome Channel:** ${welcomeChannel}` : null,
-          boostChannel ? `• **Boost Channel:** ${boostChannel}` : null,
-          verifyLogChannel ? `• **Verify Log Channel:** ${verifyLogChannel}` : null,
-        ].filter(Boolean);
-
-        if (statusUpdates.length === 0) return await interaction.editReply('⚠️ No channels updated.');
-
-        return await interaction.editReply(`✅ **Configured Channels:**\n${statusUpdates.join('\n')}`);
-      }
-
-      if (commandName === 'leaderboard') {
-        const sortedHelpers = [...helperPoints.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20);
-        const sortedRequesters = [...userRequestCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 20);
-
-        const helpersStr = sortedHelpers.length > 0 ? sortedHelpers.map(([id, pts], i) => `**${i + 1}.** <@${id}> — \`${pts} pts\``).join('\n') : 'No helper data yet';
-        const requestersStr = sortedRequesters.length > 0 ? sortedRequesters.map(([id, reqs], i) => `**${i + 1}.** <@${id}> — \`${reqs} tickets\``).join('\n') : 'No request data yet';
-
-        const lbEmbed = new EmbedBuilder().setTitle('📊 Server Activity Leaderboard (Top 20)').addFields({ name: '🏆 Top Helpers', value: helpersStr, inline: true }, { name: '📩 Top Requesters', value: requestersStr, inline: true }).setColor('#3498db').setTimestamp();
-
-        return await interaction.reply({ embeds: [lbEmbed] });
-      }
-
-      if (commandName === 'points') {
-        const sub = options.getSubcommand();
-        const targetUser = options.getUser('user');
-
-        if (sub === 'add') {
-          const amount = options.getInteger('amount');
-          const current = helperPoints.get(targetUser.id) || 0;
-          const updated = current + amount;
-          helperPoints.set(targetUser.id, updated);
-
-          await checkAndAssignHelperRoles(interaction.guild, targetUser.id, updated);
-          return await interaction.reply({ content: `✅ Gave **${amount}** pts to ${targetUser}. Total: **${updated}**`, ephemeral: true });
-        }
-
-        if (sub === 'remove') {
-          const amount = options.getInteger('amount');
-          const current = helperPoints.get(targetUser.id) || 0;
-          const updated = Math.max(0, current - amount);
-          helperPoints.set(targetUser.id, updated);
-          return await interaction.reply({ content: `✅ Removed **${amount}** pts from ${targetUser}. Total: **${updated}**`, ephemeral: true });
-        }
-
-        if (sub === 'reset') {
-          if (targetUser) {
-            helperPoints.delete(targetUser.id);
-            return await interaction.reply({ content: `✅ Reset points for ${targetUser}.`, ephemeral: true });
-          } else {
-            helperPoints.clear();
-            return await interaction.reply({ content: '✅ Reset all helper points!', ephemeral: true });
-          }
-        }
-      }
-
-      if (commandName === 'helper-roles') {
-        const sub = options.getSubcommand();
-
-        if (sub === 'add') {
-          const requiredPts = options.getInteger('points');
-          const role = options.getRole('role');
-
-          roleRewards.set(requiredPts, role.id);
-          return await interaction.reply({ content: `✅ Role ${role} set for **${requiredPts} pts**.`, ephemeral: true });
-        }
-
-        if (sub === 'list') {
-          if (roleRewards.size === 0) return await interaction.reply({ content: '⚙️ No role rewards set.', ephemeral: true });
-
-          const sorted = [...roleRewards.entries()].sort((a, b) => a[0] - b[0]);
-          const rewardList = sorted.map(([pts, roleId]) => `• **${pts} Pts** -> <@&${roleId}>`).join('\n');
-
-          const embed = new EmbedBuilder().setTitle('🏅 Role Rewards').setDescription(rewardList).setColor('#3498db');
-          return await interaction.reply({ embeds: [embed], ephemeral: true });
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Error handling interaction:', error);
-  }
-});
-
-// --- GIVEAWAY END HELPER ---
-async function endGiveaway(guild, gwId) {
-  const giveaway = activeGiveaways.get(gwId);
-  if (!giveaway || giveaway.ended) return;
-
-  giveaway.ended = true;
-  const channel = guild.channels.cache.get(giveaway.channelId);
-  if (!channel) return;
-
-  const msg = await channel.messages.fetch(giveaway.messageId).catch(() => null);
-  const entriesArr = Array.from(giveaway.entries);
-
-  let winnerMentions = [];
-  if (entriesArr.length > 0) {
-    const shuffled = entriesArr.sort(() => 0.5 - Math.random());
-    const selected = shuffled.slice(0, giveaway.winnersCount);
-    winnerMentions = selected.map(id => `<@${id}>`);
-  }
-
-  const resultText = winnerMentions.length > 0 ? winnerMentions.join(', ') : 'No valid entries.';
-
-  const endedContainer = {
-    type: 17,
-    accent_color: 0x7f8c8d,
-    components: [
-      {
-        type: 12,
-        items: [{ media: { url: STANDARD_BANNER_URL } }]
-      },
-      {
-        type: 9,
-        components: [
-          {
-            type: 10,
-            content: `🎉 **GIVEAWAY ENDED** 🎉\n\n` +
-                     `**Prize:** ${giveaway.prize}\n` +
-                     `**Winner(s):** ${resultText}\n` +
-                     `Hosted by: <@${giveaway.hostId}>`
-          }
-        ]
-      }
-    ]
-  };
-
-  if (msg) {
-    await msg.edit({ components: [endedContainer], flags: MessageFlags.IsComponentsV2 }).catch(() => {});
-  }
-
-  if (winnerMentions.length > 0) {
-    await channel.send(`🎊 Congratulations ${resultText}! You won the **${giveaway.prize}**! 🎉`);
-  } else {
-    await channel.send(`❌ Giveaway for **${giveaway.prize}** ended with no participants.`);
-  }
-
-  activeGiveaways.delete(gwId);
-}
-
-// --- HELPER FUNCTION FOR TICKET COMPLETION EXECUTION ---
-async function executeTicketCompletion(interaction, ticketData, completedBosses) {
-  try {
-    await interaction.channel.permissionOverwrites.edit(interaction.guild.roles.everyone, { SendMessages: false }).catch(() => {});
-
-    if (ticketData) {
-      const currentReqs = userRequestCounts.get(ticketData.requesterId) || 0;
-      userRequestCounts.set(ticketData.requesterId, currentReqs + 1);
-    }
-
-    let pointsToAward = 0;
-    if (ticketData && ticketData.helpers.length > 0 && ticketData.type !== 'server_ticket') {
-      const checkedBosses = completedBosses || tempTicketCache.get(`${interaction.user.id}_completed`) || null;
-      pointsToAward = getPointsForTicket(ticketData, checkedBosses);
-
-      for (const hObj of ticketData.helpers) {
-        const current = helperPoints.get(hObj.id) || 0;
-        const updated = current + pointsToAward;
-        helperPoints.set(hObj.id, updated);
-
-        checkAndAssignHelperRoles(interaction.guild, hObj.id, updated).catch(console.error);
-      }
-
-      globalStats.totalTicketsCompleted += 1;
-      globalStats.totalPointsGiven += pointsToAward;
-      globalStats.totalBossesSlain += 1;
-
-      await updateLiveStatsMessage(interaction.guild);
-    }
-
-    const helperMentionsLog = ticketData && ticketData.helpers.length > 0
-      ? ticketData.helpers.map(h => `<@${h.id}>`).join(', ')
-      : 'None';
-
-    sendTicketLog(
-      interaction.guild,
-      '✅ Ticket Completed',
-      `**Requester:** <@${ticketData.requesterId}>\n**Helpers:** ${helperMentionsLog}\n**Points Awarded:** \`${pointsToAward}\`\n**Channel:** \`#${interaction.channel.name}\``,
-      '#2ecc71'
-    ).catch(() => {});
-
-    const categoryPreset = TICKET_PRESETS[ticketData?.type] || {};
-    const accentColor = categoryPreset.accentColor || 0x2ecc71;
-
-    let detailContent = '⚠️ **No helpers joined this ticket.**';
-    if (ticketData && ticketData.type === 'server_ticket') {
-      detailContent = '🛠️ **Support ticket handled and resolved by staff.**';
-    } else if (ticketData && ticketData.helpers.length > 0) {
-      const helperMentions = ticketData.helpers.map(h => `<@${h.id}>`).join(', ');
-      detailContent = `🏆 **+${pointsToAward} pts** awarded to:\n> ${helperMentions}`;
-    }
-
-    const completionEmbed = new EmbedBuilder()
-      .setTitle('🔒 Ticket Completed')
-      .setDescription(`Resolved successfully!\n${detailContent}\n\n*Deleting channel in 5 seconds...*`)
-      .setColor(accentColor)
-      .setTimestamp();
-
-    await interaction.editReply({ embeds: [completionEmbed], components: [] });
-
-    activeTickets.delete(interaction.channel.id);
-    setTimeout(() => {
-      interaction.channel.delete().catch(() => {});
-    }, 5000);
-  } catch (err) {
-    console.error('Error during ticket completion execution:', err);
-    await interaction.editReply({ content: '❌ Failed to complete ticket properly.', components: [] }).catch(() => {});
-  }
-}
 
 // --- LOGIN ---
 client.login(process.env.DISCORD_TOKEN);
