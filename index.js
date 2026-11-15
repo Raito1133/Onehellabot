@@ -2007,7 +2007,18 @@ try {
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
 let hasYtdlp = false;
 try { hasYtdlp = cp.spawnSync(YTDLP, ['--version'], { timeout: 8000 }).status === 0; } catch (e) { hasYtdlp = false; }
-console.log(`[music] voice: ${!!Voice} • play-dl: ${!!playdl} • yt-dlp: ${hasYtdlp}`);
+let hasFfmpeg = false;
+try { require('ffmpeg-static'); hasFfmpeg = true; } catch (e) { try { hasFfmpeg = cp.spawnSync('ffmpeg', ['-version'], { timeout: 8000 }).status === 0; } catch (e2) { hasFfmpeg = false; } }
+let hasOpus = false, hasSodium = false;
+for (const m of ['@discordjs/opus', 'opusscript']) { try { require(m); hasOpus = true; break; } catch (e) { /* next */ } }
+for (const m of ['sodium-native', 'libsodium-wrappers', 'tweetnacl', '@noble/ciphers']) { try { require(m); hasSodium = true; break; } catch (e) { /* next */ } }
+let hasDave = false; try { require('@snazzah/davey'); hasDave = true; } catch (e) { /* missing */ }
+console.log(`[music] voice: ${!!Voice} • play-dl: ${!!playdl} • yt-dlp: ${hasYtdlp} • ffmpeg: ${hasFfmpeg} • opus: ${hasOpus} • encryption: ${hasSodium} • davey(DAVE): ${hasDave}`);
+if (Voice && Voice.generateDependencyReport) console.log(Voice.generateDependencyReport());
+if (Voice && !hasFfmpeg) console.warn('[music] ❌ ffmpeg NOT found -> bot will join but stay silent. Run: npm i ffmpeg-static');
+if (Voice && !hasOpus) console.warn('[music] ❌ no opus encoder -> silent. Run: npm i opusscript');
+if (Voice && !hasSodium) console.warn('[music] ❌ no encryption lib -> cannot send audio. Run: npm i libsodium-wrappers');
+if (Voice && !hasDave) console.warn('[music] ⚠️ @snazzah/davey missing -> Discord may reject audio (DAVE). Run: npm i @snazzah/davey');
 const ytdlpBase = () => ['--no-warnings', '-q', ...(process.env.YTDLP_COOKIES ? ['--cookies', process.env.YTDLP_COOKIES] : [])];
 
 def('play', '🎵 Play a song (name, YouTube/Spotify/SoundCloud link, or direct link)', null, [S('query', 'Song name or link', true)]);
@@ -2112,7 +2123,15 @@ async function musicNext(gid) {
     const res = await trackResource(t, q);
     res.volume?.setVolume(q.volume / 100);
     q.res = res; q.player.play(res);
-    q.text?.send({ embeds: [musicEmbed('🎶 Now playing', t)], allowedMentions: { parse: [] } }).catch(() => {});
+    // only announce once audio REALLY starts (Playing); otherwise tell the user why not
+    Voice.entersState(q.player, Voice.AudioPlayerStatus.Playing, 15000).then(() => {
+      if (musicQ.get(gid) === q && q.current === t) q.text?.send({ embeds: [musicEmbed('🎶 Now playing', t)], allowedMentions: { parse: [] } }).catch(() => {});
+    }).catch(() => {
+      if (musicQ.get(gid) !== q || q.current !== t) return;
+      const vs = q.conn?.state?.status, ps = q.player?.state?.status;
+      console.warn(`[music] audio did not start. voice=${vs} player=${ps}`);
+      q.text?.send(`⚠️ Audio didn't start (voice: \`${vs}\`, player: \`${ps}\`). ${vs !== 'ready' ? 'Voice connection problem — update `@discordjs/voice` and install `@snazzah/davey`.' : 'The stream failed — check the console / install `yt-dlp`.'}`).catch(() => {});
+    });
   } catch (e) {
     noteError(e); q.text?.send(`❌ Couldn't play **${trunc(t.title, 80)}**: ${trunc(e.message, 150)} — skipping.`).catch(() => {});
     q.queue.shift(); return musicNext(gid);
@@ -2141,7 +2160,9 @@ async function musicGet(i) {
     if (cur.loop === 'queue') cur.queue.push(cur.queue.shift()); else if (cur.loop !== 'track') cur.queue.shift();
     musicNext(i.guild.id);
   });
-  player.on('error', e => noteError(e));
+  player.on('error', e => { noteError(e); musicQ.get(i.guild.id)?.text?.send(`❌ Audio error: ${trunc(e.message, 200)}`).catch(() => {}); });
+  player.on('stateChange', (o, n) => console.log(`[music] player ${o.status} -> ${n.status}`));
+  conn.on('stateChange', (o, n) => console.log(`[music] voice ${o.status} -> ${n.status}`));
   conn.on(Voice.VoiceConnectionStatus.Disconnected, async () => {
     try { await Promise.race([Voice.entersState(conn, Voice.VoiceConnectionStatus.Signalling, 5000), Voice.entersState(conn, Voice.VoiceConnectionStatus.Connecting, 5000)]); }
     catch (e) { musicDestroy(i.guild.id); }
@@ -2150,6 +2171,7 @@ async function musicGet(i) {
 }
 H.play = async i => {
   const bad = musicNeeds(i); if (bad) return send(i, bad);
+  if (!hasFfmpeg) return send(i, '❌ ffmpeg is missing, so I can join but not play audio. Owner: run `npm i ffmpeg-static opusscript libsodium-wrappers @snazzah/davey` and restart.');
   await defer(i, false);
   let timer;
   try {
