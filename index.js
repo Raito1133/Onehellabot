@@ -61,8 +61,7 @@ const defaults = () => ({
   apps: { counter: 0, questions: {}, roles: {}, list: {}, reviewChannel: null },
   staff: {}, afk: {}, suggestions: {}, suggestSeq: 0, stickies: {}, backup: null, rules: '', mutedRole: null, activity: {},
   tempVoice: { lobby: null, category: null, channels: {} },
-  prefix: '!',
-  fish: { name: null, rarity: 'Common', level: 1, exp: 0, lastFedTime: Date.now(), feeders: {}, balances: {}, userCooldowns: {} }
+  fish: null, uwu: {}, schedules: [], schedSeq: 0
 });
 const G = id => {
   if (!db.guilds[id]) db.guilds[id] = defaults();
@@ -228,8 +227,6 @@ def('purge', 'Delete multiple messages', P.ManageMessages, [I('amount', 'Number 
 def('nuke', 'Recreate a channel (wipes all messages)', P.Administrator, [B('confirm', 'Confirm you want to nuke the channel', true), CT('channel', 'Channel (default: current)')]);
 def('backup', 'Create a server configuration backup', P.Administrator);
 def('restore', 'Restore a server configuration backup', P.Administrator, [B('confirm', 'Confirm the restore', true), A('file', 'Backup file (default: last stored backup)')]);
-def('prefix', 'View or set the custom server prefix', P.ManageGuild, [S('prefix', 'New custom prefix (leave empty to view)')]);
-def('uwulock', 'Lock the channel with Uwu style', P.ManageChannels, [S('reason', 'Reason for uwu lock')]);
 
 // 2. Moderation
 def('ban', 'Permanently ban a member', P.BanMembers, [U('user', 'User to ban', true), S('reason', 'Reason'), I('delete_days', 'Days of messages to delete (0-7)', false, { min: 0, max: 7 })]);
@@ -406,7 +403,6 @@ def('invite', 'Get the bot invitation link');
 def('support', 'Get support information');
 def('poll', 'Create a poll', null, [S('question', 'Question', true), S('option1', 'Option 1', true), S('option2', 'Option 2', true), S('option3', 'Option 3'), S('option4', 'Option 4'), S('option5', 'Option 5')]);
 def('remind', 'Set a reminder', null, [S('time', 'When e.g. 10m, 2h, 1d', true), S('message', 'Reminder text', true)]);
-def('reminder', 'Set a scheduled reminder with @everyone or role mention', null, [S('when', 'Duration e.g. 2h, 1d, 30m', true), S('message', 'Reminder text', true), B('ping_everyone', 'Mention @everyone'), R('role', 'Role to mention')]);
 def('translate', 'Translate text', null, [S('text', 'Text', true), S('to', 'Target language code e.g. es, fr, ja', true), S('from', 'Source language code (default: auto)')]);
 def('calculate', 'Calculator', null, [S('expression', 'e.g. (5+3)*2', true)]);
 def('afk', 'Set your AFK status', null, [S('reason', 'Reason')]);
@@ -416,14 +412,6 @@ def('suggestions', 'View suggestions (staff can set status)', null, [I('id', 'Su
 def('report', 'Report a member', null, [U('user', 'Member', true), S('reason', 'Reason', true)]);
 def('feedback', 'Submit feedback', null, [S('message', 'Your feedback', true)]);
 def('say', 'Send a message through the bot', P.ManageMessages, [S('message', 'Message (use \\n for new lines)', true), CT('channel', 'Channel (default: current)')]);
-
-// Fish Game
-grp('fish', 'Server Fish Tamagotchi game', null, [
-  ['status', 'Check the status and level of the server fish'],
-  ['feed', 'Feed the server fish (Available every 5 hours)'],
-  ['leaderboard', 'View top fish feeders and coin balances'],
-  ['coins', 'Check your Fish Coins balance']
-]);
 
 // 14. Voice
 grp('vc', 'Voice channel management', null, [
@@ -607,19 +595,6 @@ H.restore = async i => {
   }
   return send(i, `✅ Restore complete: **${r}** roles, **${h}** categories, **${c}** channels recreated.`);
 };
-H.prefix = async i => {
-  const g = G(i.guild.id), p = i.options.getString('prefix');
-  if (!p) return send(i, `Current custom prefix: \`${g.prefix || '!'}\``, false);
-  if (!i.memberPermissions.has(P.ManageGuild)) return send(i, '❌ You need **Manage Server** to change the prefix.');
-  g.prefix = p; save();
-  return send(i, `✅ Custom prefix updated to \`${p}\`.`);
-};
-H.uwulock = async i => {
-  const ch = i.channel;
-  const reason = i.options.getString('reason') || 'UwU security lockdown >_<';
-  await ch.permissionOverwrites.edit(i.guild.roles.everyone, { SendMessages: false }, { reason });
-  return send(i, { embeds: [emb('>w< UwU LOCKDOWN ENGAGED! >_<', `Dis channel haz been locked by ${i.user}!\n**Reason:** ${reason}\n\n*No more chattering until un-uwu'd!* (Use \`/channel unlock\` to restore)`, COLORS.warn)] }, false);
-};
 
 // ---- 2. Moderation ----
 const modAct = (type, past, color, run, guard) => async i => {
@@ -798,7 +773,7 @@ H.inrole = async i => { await i.guild.members.fetch(); const r = i.options.getRo
 H.botinfo = async i => send(i, { embeds: [emb(`🤖 ${client.user.username}`).setThumbnail(client.user.displayAvatarURL()).addFields(
   { name: 'Servers', value: `${client.guilds.cache.size}`, inline: true }, { name: 'Users', value: `${client.guilds.cache.reduce((a, g) => a + g.memberCount, 0)}`, inline: true },
   { name: 'Ping', value: `${client.ws.ping}ms`, inline: true }, { name: 'Uptime', value: fmtDur(Date.now() - START), inline: true },
-  { name: 'Memory', value: `${(process.memoryUsage().heapUsed / 1048576).toFixed(1)} MB`, inline: true }, { name: 'Versions', value: `Node ${process.version} • discord.js ${require('discord.js').version}`, inline: true })] }, false);
+  { name: 'Memory', value: `${(process.memoryUsage().heapUsed / 1048576).toFixed(1)} MB`, inline: true }, { name: 'Versions', value: `Node ${process.version} • discord.js ${require('discord.js').version}`, inline: true }, { name: 'Owner', value: '👑 Owned by Patrick', inline: true }).setFooter({ text: 'Owned by Patrick' })] }, false);
 H.bots = async i => { const ms = await i.guild.members.fetch(); const l = ms.filter(m => m.user.bot).map(m => `${m} (\`${m.user.tag}\`)`); return send(i, { embeds: [emb(`🤖 Bots (${l.length})`, trunc(l.join('\n') || 'None', 3900))] }); };
 
 // ---- 5. Channels ----
@@ -1171,97 +1146,21 @@ H.levelconfig = async i => {
   return send(i, `✅ Leveling: ${l.enabled ? 'on' : 'off'} • multiplier **x${l.multiplier}** • announcements ${l.announce ? 'on' : 'off'}${l.channel ? ` in <#${l.channel}>` : ''}.`);
 };
 
-// ---- Fish Game Handlers ----
-const FISH_TYPES = [
-  { name: 'Common Clownfish', rarity: 'Common' },
-  { name: 'Blue Tang', rarity: 'Common' },
-  { name: 'Striped Pufferfish', rarity: 'Uncommon' },
-  { name: 'Neon Damselfish', rarity: 'Uncommon' },
-  { name: 'Electric Eel', rarity: 'Rare' },
-  { name: 'Giant Pacific Octopus', rarity: 'Rare' },
-  { name: 'Golden Manta Ray', rarity: 'Epic' },
-  { name: 'Abyssal Anglerfish', rarity: 'Epic' },
-  { name: 'Legendary Golden Koi', rarity: 'Legendary' },
-  { name: 'Mythical Leviathan Shark', rarity: 'Mythic' }
-];
-
-H.fish = {
-  status: async i => {
-    const g = G(i.guild.id);
-    let f = g.fish;
-    if (!f.name) {
-      const rand = FISH_TYPES[Math.floor(Math.random() * FISH_TYPES.length)];
-      f.name = rand.name; f.rarity = rand.rarity; f.level = 1; f.exp = 0; f.lastFedTime = Date.now(); f.feeders = {}; f.balances = {}; f.userCooldowns = {};
-      save();
-    }
-    const timeSince = Date.now() - f.lastFedTime;
-    const timeUntilHungry = Math.max(0, 24 * 3600 * 1000 - timeSince);
-    const topFeeder = Object.entries(f.feeders).sort((a,b)=>b[1]-a[1])[0];
-    return send(i, { embeds: [emb(`🐟 Server Fish: ${f.name}`, `**Rarity:** ${f.rarity}\n**Level:** ${f.level} (EXP: ${f.exp}/100)\n**Top Feeder:** ${topFeeder ? `<@${topFeeder[0]}> (${topFeeder[1]} feeds)` : 'None'}\n**Last Fed:** <t:${ts(f.lastFedTime)}:R>\n**Hunger Timer:** Loses 1 level if unfeeded in <t:${ts(Date.now() + timeUntilHungry)}:R>`)] }, false);
-  },
-  feed: async i => {
-    const g = G(i.guild.id);
-    let f = g.fish;
-    if (!f.name) {
-      const rand = FISH_TYPES[Math.floor(Math.random() * FISH_TYPES.length)];
-      f.name = rand.name; f.rarity = rand.rarity; f.level = 1; f.exp = 0; f.feeders = {}; f.balances = {}; f.userCooldowns = {};
-    }
-    const userId = i.user.id;
-    const lastUserFeed = (f.userCooldowns ||= {})[userId] || 0;
-    const cd = 5 * 3600 * 1000; // 5 hours
-    const left = cd - (Date.now() - lastUserFeed);
-    if (left > 0) return send(i, `⏳ You can feed the fish again in **${fmtDur(left)}**! (Cooldown is 5 hours)`);
-
-    f.userCooldowns[userId] = Date.now();
-    f.lastFedTime = Date.now();
-    f.feeders[userId] = (f.feeders[userId] || 0) + 1;
-    f.exp += 25;
-
-    let leveledUp = false;
-    if (f.exp >= 100) {
-      f.level += 1;
-      f.exp -= 100;
-      leveledUp = true;
-      if (f.level % 5 === 0) {
-        const higher = FISH_TYPES.filter(x => x.rarity === 'Epic' || x.rarity === 'Legendary' || x.rarity === 'Mythic');
-        const r = higher[Math.floor(Math.random() * higher.length)];
-        f.name = r.name; f.rarity = r.rarity;
-      }
-    }
-
-    f.balances[userId] = (f.balances[userId] || 0) + 25;
-    save();
-
-    return send(i, `🐟 You fed **${f.name}**! (+25 EXP, +25 Fish Coins)${leveledUp ? `\n🎉 **LEVEL UP!** The fish reached level **${f.level}**!` : ''}`);
-  },
-  leaderboard: async i => {
-    const g = G(i.guild.id);
-    const f = g.fish;
-    if (!f || !f.feeders) return send(i, 'No fish data yet. Use `/fish feed` to start!');
-    const topFeeders = Object.entries(f.feeders).sort((a,b)=>b[1]-a[1]).slice(0, 10);
-    const topCoins = Object.entries(f.balances || {}).sort((a,b)=>b[1]-a[1]).slice(0, 10);
-    return send(i, { embeds: [emb(`🏆 Fish Leaderboard — ${f.name || 'Unnamed Fish'} (Lv. ${f.level || 1})`, `**Top Feeders:**\n${topFeeders.map(([id, count], idx) => `**${idx+1}.** <@${id}> — ${count} feeds`).join('\n') || 'None'}\n\n**Richest Coin Holders:**\n${topCoins.map(([id, coins], idx) => `**${idx+1}.** <@${id}> — 🪙 ${coins} coins`).join('\n') || 'None'}`)] });
-  },
-  coins: async i => {
-    const g = G(i.guild.id);
-    const coins = g.fish?.balances?.[i.user.id] || 0;
-    return send(i, `🪙 You have **${coins} Fish Coins**! Feed the fish using \`/fish feed\` to earn more.`);
-  }
-};
-
 // ---- 13. Utility ----
 H.help = async i => send(i, { embeds: [emb('📖 Bot Commands').addFields(
-  { name: '🏠 Server', value: '`/serverinfo` `/servericon` `/serverbanner` `/servername` `/serverrules` `/serverstats` `/serverlock` `/serverunlock` `/slowmode` `/announce` `/embed` `/purge` `/nuke` `/backup` `/restore` `/prefix` `/uwulock`' },
+  { name: '🏠 Server', value: '`/serverinfo` `/servericon` `/serverbanner` `/servername` `/serverrules` `/serverstats` `/serverlock` `/serverunlock` `/slowmode` `/announce` `/embed` `/purge` `/nuke` `/backup` `/restore`' },
   { name: '🔨 Moderation', value: '`/ban` `/unban` `/tempban` `/kick` `/timeout` `/untimeout` `/mute` `/unmute` `/warn` `/warnings` `/clearwarnings` `/softban` `/massban` `/deafen` `/undeafen` `/disconnect` `/move` `/modlogs` `/case` `/clear`' },
   { name: '🎭 Roles & Members', value: '`/role` `/userinfo` `/avatar` `/banner` `/membercount` `/joinedat` `/accountage` `/nickname` `/massnick` `/profile` `/inrole` `/botinfo` `/bots`' },
   { name: '📺 Channels', value: '`/channel` `/category` `/vc`' },
   { name: '🛡️ Protection', value: '`/security` `/automod` `/logs`' },
   { name: '👋 Community', value: '`/welcome` `/goodbye` `/ticket` `/reactionrole` `/selfrole` `/giveaway` `/application` `/suggest` `/suggestions` `/report` `/feedback`' },
-  { name: '🐟 Fish Game', value: '`/fish status` `/fish feed` `/fish leaderboard` `/fish coins`' },
   { name: '📈 Leveling', value: '`/rank` `/level` `/leaderboard` `/setxp` `/resetxp` `/levelrole` `/levelconfig`' },
-  { name: '🧰 Utility', value: '`/ping` `/uptime` `/invite` `/support` `/poll` `/remind` `/reminder` `/translate` `/calculate` `/afk` `/whois` `/say`' },
+  { name: '🧰 Utility', value: '`/ping` `/uptime` `/invite` `/support` `/poll` `/remind` `/translate` `/calculate` `/afk` `/whois` `/say`' },
   { name: '👔 Staff & Config', value: '`/staff` `/config`' },
-  { name: '📌 Prefix', value: '`!stick <text>` — sticky message (or reply to a message with `!stick`)\n`!unstick` — remove the sticky' })] }, false);
+  { name: '📌 Prefix', value: '`!stick <text>` — sticky message (or reply to a message with `!stick`)\n`!unstick` — remove the sticky\nUse `/prefix set` to change `!` to your own prefix.' },
+  { name: '🐟 Fish Game', value: '`/fish feed` `/fish status` `/fish leaderboard` `/fish collection` `/fish profile` (prefix: `feed`, `fish`)' },
+  { name: '✨ Extras', value: '`/prefix` `/uwulock` `/reminder`' },
+  { name: '🎵 Music', value: '`/play` `/pause` `/resume` `/skip` `/stop` `/queue` `/nowplaying` `/volume` `/loop`' })] }, false);
 H.ping = async i => { const s = Date.now(); await send(i, '🏓 Pinging...', false); return i.editReply(`🏓 Pong! Roundtrip: **${Date.now() - s}ms** • WebSocket: **${client.ws.ping}ms**`); };
 H.uptime = async i => send(i, `⏱️ Uptime: **${fmtDur(Date.now() - START)}**`, false);
 H.invite = async i => send(i, `🔗 [Invite me](${client.generateInvite({ scopes: ['bot', 'applications.commands'], permissions: [P.Administrator] })})`);
@@ -1275,23 +1174,6 @@ H.remind = async i => {
   const d = parseDuration(i.options.getString('time')); if (!d || d < 5000) return send(i, '❌ Invalid time. Use e.g. 10m, 2h, 1d.');
   db.global.reminders.push({ user: i.user.id, channel: i.channel.id, at: Date.now() + d, text: i.options.getString('message') }); save();
   return send(i, `⏰ I'll remind you <t:${ts(Date.now() + d)}:R>.`);
-};
-H.reminder = async i => {
-  const d = parseDuration(i.options.getString('when')); if (!d || d < 5000) return send(i, '❌ Invalid time/duration. Use e.g. 10m, 2h, 1d.');
-  const text = i.options.getString('message');
-  const pingEveryone = i.options.getBoolean('ping_everyone');
-  const role = i.options.getRole('role');
-  db.global.reminders.push({
-    user: i.user.id,
-    guild: i.guild.id,
-    channel: i.channel.id,
-    at: Date.now() + d,
-    text,
-    pingEveryone,
-    roleId: role ? role.id : null
-  });
-  save();
-  return send(i, `⏰ Reminder set for <t:${ts(Date.now() + d)}:R>!`);
 };
 H.translate = async i => {
   await defer(i);
@@ -1508,7 +1390,7 @@ H.bot = {
 // =====================================================================
 //  INTERACTION ROUTER
 // =====================================================================
-const ADMIN_LOGGED = new Set(['config', 'servername', 'serverlock', 'serverunlock', 'nuke', 'backup', 'restore', 'role', 'channel', 'category', 'security', 'automod', 'staff', 'purge', 'clear', 'announce', 'massnick', 'setxp', 'resetxp', 'bot', 'prefix', 'uwulock']);
+const ADMIN_LOGGED = new Set(['config', 'servername', 'serverlock', 'serverunlock', 'nuke', 'backup', 'restore', 'role', 'channel', 'category', 'security', 'automod', 'staff', 'purge', 'clear', 'announce', 'massnick', 'setxp', 'resetxp', 'bot']);
 async function runCommand(i) {
   const name = i.commandName, g = G(i.guild.id);
   if (db.global.maintenance && !isOwner(i.user.id)) return send(i, '🛠️ The bot is currently in maintenance mode.');
@@ -1641,9 +1523,9 @@ function scheduleSticky(channel) {
 }
 const tempReply = async (message, text) => { const m = await message.channel.send(text).catch(() => null); setTimeout(() => m?.delete().catch(() => {}), 6000); };
 async function handlePrefix(message) {
-  const pfx = G(message.guild.id).prefix || '!';
-  if (!message.content.startsWith(pfx)) return false;
-  const cmd = (message.content.slice(pfx.length).trim().split(/\s+/)[0] || '').toLowerCase();
+  const PREFIX = getPrefix(message.guild); // per-server custom prefix
+  const cmd = (message.content.slice(PREFIX.length).trim().split(/\s+/)[0] || '').toLowerCase();
+  if (cmd === 'feed' || cmd === 'fish') return await prefixFish(message, cmd);
   if (cmd !== 'stick' && cmd !== 'unstick') return false;
   const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
   if (!member || !(member.permissions.has(P.ManageMessages) || isStaff(member))) { await tempReply(message, '❌ You need **Manage Messages** to use this command.'); return true; }
@@ -1654,9 +1536,9 @@ async function handlePrefix(message) {
     else { if (s.messageId) await ch.messages.delete(s.messageId).catch(() => {}); delete g.stickies[ch.id]; save(); await tempReply(message, '✅ Sticky message removed.'); }
     message.delete().catch(() => {}); return true;
   }
-  let text = message.content.slice(pfx.length + 'stick'.length).trim();
+  let text = message.content.slice(PREFIX.length + 'stick'.length).trim();
   if (!text && message.reference?.messageId) { const ref = await ch.messages.fetch(message.reference.messageId).catch(() => null); text = ref?.content || ''; }
-  if (!text) { await tempReply(message, `ℹ️ Usage: \`${pfx}stick <message>\` (or reply to a message with \`${pfx}stick\`). Remove it with \`${pfx}unstick\`.`); return true; }
+  if (!text) { await tempReply(message, `ℹ️ Usage: \`${PREFIX}stick <message>\` (or reply to a message with \`${PREFIX}stick\`). Remove it with \`${PREFIX}unstick\`.`); return true; }
   if (g.stickies[ch.id]?.messageId) await ch.messages.delete(g.stickies[ch.id].messageId).catch(() => {});
   g.stickies[ch.id] = { content: text, messageId: null, by: message.author.id }; save();
   await repostSticky(ch); message.delete().catch(() => {}); return true;
@@ -1672,9 +1554,10 @@ client.on(Events.MessageCreate, async message => {
     if (message.author.id !== client.user.id) scheduleSticky(message.channel);
     if (message.author.bot || db.global.blacklist.users.includes(message.author.id)) return;
     if (!message.member) await message.guild.members.fetch(message.author.id).catch(() => {});
-    const pfx = G(message.guild.id).prefix || '!';
-    if (message.content.startsWith(pfx) && await handlePrefix(message)) return;
+    if (message.content.trim() === `<@${client.user.id}>` || message.content.trim() === `<@!${client.user.id}>`) { message.reply({ content: `👋 My prefix here is \`${getPrefix(message.guild)}\` — or use slash commands.`, allowedMentions: { repliedUser: false } }).catch(() => {}); return; }
+    if (message.content.startsWith(getPrefix(message.guild)) && await handlePrefix(message)) return;
     if (await runAutomod(message)) return;
+    if (await uwuLockHandle(message)) return; // uwulock
     const g = G(message.guild.id);
     // daily activity
     const day = new Date().toISOString().slice(0, 10); g.activity[day] = (g.activity[day] || 0) + 1;
@@ -1809,6 +1692,458 @@ client.on(Events.GuildCreate, guild => { if (db.global.blacklist.guilds.includes
 process.on('unhandledRejection', e => noteError(e));
 
 // =====================================================================
+//  ✨ NEW FEATURES  (custom prefix • fish game • uwulock • reminder • music)
+//  Added without changing the existing code. Everything below is self-contained.
+// =====================================================================
+
+// ---------------------------------------------------------------------
+//  1. CUSTOM PREFIX   /prefix set | reset | show
+// ---------------------------------------------------------------------
+const getPrefix = guild => (guild && G(guild.id).settings.prefix) || PREFIX;
+grp('prefix', 'Set a custom prefix for this server', null, [
+  ['set', 'Set a custom prefix (staff)', [S('prefix', 'New prefix e.g. ? . $ ! >> (max 5 chars, no spaces)', true)]],
+  ['reset', 'Reset the prefix back to the default (staff)'],
+  ['show', 'Show the current prefix']
+]);
+H.prefix = {
+  set: async i => {
+    if (!isStaff(i.member)) return send(i, '❌ Staff only.');
+    const p = i.options.getString('prefix').trim();
+    if (!p || p.length > 5 || /\s/.test(p) || p.startsWith('/')) return send(i, '❌ Prefix must be 1-5 characters, no spaces, and cannot start with `/`.');
+    G(i.guild.id).settings.prefix = p; save();
+    return send(i, `✅ Prefix changed to \`${p}\`. Try \`${p}feed\` or \`${p}stick <text>\`.`, false);
+  },
+  reset: async i => {
+    if (!isStaff(i.member)) return send(i, '❌ Staff only.');
+    delete G(i.guild.id).settings.prefix; save();
+    return send(i, `✅ Prefix reset to \`${PREFIX}\`.`, false);
+  },
+  show: async i => send(i, `ℹ️ My prefix here is \`${getPrefix(i.guild)}\` (slash commands always work too).`)
+};
+
+// ---------------------------------------------------------------------
+//  2. FISH GAME  🐟   /fish feed | status | leaderboard | collection | profile
+//     • Everyone feeds the SAME server fish. Each person can feed every 5 hours.
+//     • Feeding = coins + personal XP; the fish levels up from everyone's feeds.
+//     • Level 10 = the fish is released into the collection and a new random one hatches.
+//     • If NOBODY feeds for 1 day, the fish AND every player lose 1 level.
+// ---------------------------------------------------------------------
+const FISH_CD = 5 * 36e5, FISH_DECAY = 24 * 36e5, FISH_MAX = 10;
+const twemoji = cp => `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/${cp}.png`;
+const RARITY = {
+  Common: { w: 50, mult: 1, color: 0x95a5a6, icon: '⚪' },
+  Uncommon: { w: 28, mult: 1.5, color: 0x2ecc71, icon: '🟢' },
+  Rare: { w: 14, mult: 2, color: 0x3498db, icon: '🔵' },
+  Epic: { w: 6, mult: 3, color: 0x9b59b6, icon: '🟣' },
+  Legendary: { w: 2, mult: 5, color: 0xf1c40f, icon: '🟡' }
+};
+// [name, emoji, twemoji codepoint]
+const SPECIES = {
+  Common: [['Sardine', '🐟', '1f41f'], ['Tilapia', '🐟', '1f41f'], ['Bangus (Milkfish)', '🐟', '1f41f'], ['Goldfish', '🐠', '1f420'], ['Clownfish', '🐠', '1f420'], ['Hermit Crab', '🦀', '1f980'], ['Tiny Shrimp', '🦐', '1f990'], ['Sea Snail', '🐚', '1f41a']],
+  Uncommon: [['Pufferfish', '🐡', '1f421'], ['Blue Tang', '🐠', '1f420'], ['Angelfish', '🐠', '1f420'], ['Spiny Lobster', '🦞', '1f99e'], ['Sea Turtle', '🐢', '1f422'], ['Mud Crab', '🦀', '1f980']],
+  Rare: [['Octopus', '🐙', '1f419'], ['Dolphin', '🐬', '1f42c'], ['Giant Squid', '🦑', '1f991'], ['Lionfish', '🐠', '1f420'], ['Manta Ray', '🐟', '1f41f']],
+  Epic: [['Great White Shark', '🦈', '1f988'], ['Orca', '🐋', '1f40b'], ['Humpback Whale', '🐳', '1f433'], ['Hammerhead Shark', '🦈', '1f988']],
+  Legendary: [['Megalodon', '🦈', '1f988'], ['Kraken', '🐙', '1f419'], ['Leviathan', '🐋', '1f40b'], ['Golden Dragon Koi', '🐟', '1f41f'], ['Abyssal Whale', '🐳', '1f433']]
+};
+const fishNeed = l => 3 + l * 2;          // feeds needed for the fish to go level l -> l+1
+const userNeed = l => 5 + l * 3;          // feeds needed for a player to go level l -> l+1
+const fbar = (v, max, n = 10) => { const f = Math.max(0, Math.min(n, Math.round(v / max * n))); return '▰'.repeat(f) + '▱'.repeat(n - f); };
+const rand = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const rpick = a => a[Math.floor(Math.random() * a.length)];
+
+function hatchFish() {
+  let roll = Math.random() * Object.values(RARITY).reduce((a, r) => a + r.w, 0), rarity = 'Common';
+  for (const [k, r] of Object.entries(RARITY)) { if ((roll -= r.w) < 0) { rarity = k; break; } }
+  const [name, emoji, cp] = rpick(SPECIES[rarity]);
+  return { name, emoji, img: twemoji(cp), rarity, level: 1, progress: 0, feeders: {}, born: Date.now() };
+}
+function getFish(g) {
+  if (!g.fish) g.fish = { current: hatchFish(), lastFed: Date.now(), lastDecay: 0, channel: null, users: {}, collection: {}, released: 0 };
+  return g.fish;
+}
+const fishUser = (f, id) => (f.users[id] ||= { feeds: 0, coins: 0, level: 1, progress: 0, lastFeed: 0 });
+
+function fishEmbed(f, title) {
+  const c = f.current, r = RARITY[c.rarity];
+  const top = Object.entries(c.feeders).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([id, n], k) => `**${k + 1}.** <@${id}> — ${n} feed${n > 1 ? 's' : ''}`).join('\n') || '_Nobody yet — be the first!_';
+  const base = Math.max(f.lastFed || c.born, f.lastDecay || 0), hungry = Date.now() - (f.lastFed || c.born) > FISH_DECAY / 2;
+  return new EmbedBuilder().setColor(r.color).setTimestamp().setTitle(title || `${c.emoji} ${c.name}`).setThumbnail(c.img)
+    .setDescription(`${r.icon} **${c.rarity}** • Level **${c.level}/${FISH_MAX}**\n${fbar(c.progress, fishNeed(c.level))} ${c.progress}/${fishNeed(c.level)} feeds to next level`)
+    .addFields(
+      { name: 'Mood', value: hungry ? '😟 Hungry!' : '😄 Happy', inline: true },
+      { name: 'Last fed', value: f.lastFed ? `<t:${ts(f.lastFed)}:R>` : 'never', inline: true },
+      { name: '⚠️ Loses a level', value: `<t:${ts(base + FISH_DECAY)}:R>`, inline: true },
+      { name: '🍤 Top feeders (this fish)', value: top });
+}
+
+// core feed logic (shared by /fish feed and the prefix "feed" command)
+function doFeed(guild, user, channelId) {
+  const g = G(guild.id), f = getFish(g), c = f.current, u = fishUser(f, user.id), now = Date.now();
+  if (now - u.lastFeed < FISH_CD) return { text: `⏳ You already fed the fish. You can feed again <t:${ts(u.lastFeed + FISH_CD)}:R>.` };
+  const r = RARITY[c.rarity], coins = Math.round(rand(10, 25) * r.mult), lines = [];
+  u.lastFeed = now; u.feeds++; u.coins += coins; u.progress++;
+  f.lastFed = now; f.channel = channelId || f.channel; c.feeders[user.id] = (c.feeders[user.id] || 0) + 1; c.progress++;
+  if (u.progress >= userNeed(u.level)) { u.progress = 0; u.level++; const b = 25 * u.level; u.coins += b; lines.push(`🆙 You reached **Level ${u.level}**! (+${b} coins)`); }
+  if (c.progress >= fishNeed(c.level)) {
+    c.progress = 0; c.level++;
+    lines.push(`🎉 **${c.name}** grew to **Level ${c.level}**!`);
+    if (c.level >= FISH_MAX) {
+      const col = (f.collection[c.name] ||= { rarity: c.rarity, emoji: c.emoji, count: 0, first: now }); col.count++; f.released++;
+      for (const [id, n] of Object.entries(c.feeders)) fishUser(f, id).coins += Math.round(50 * r.mult + n * 5);
+      lines.push(`🌊 **${c.name}** is fully grown and was released into the ocean! Everyone who fed it earned a bonus. A new fish hatched!`);
+      f.current = hatchFish(); f.lastFed = now; f.lastDecay = 0;
+      lines.push(`🥚 New fish: ${f.current.emoji} **${f.current.name}** (${RARITY[f.current.rarity].icon} ${f.current.rarity})`);
+    }
+  }
+  save();
+  const e = fishEmbed(f, `🍤 ${user.username} fed ${c.name}!`).addFields({ name: 'Reward', value: `+**${coins}** 🪙 coins • Total: **${u.coins}** 🪙\nYour level: **${u.level}** (${u.progress}/${userNeed(u.level)})\nNext feed: <t:${ts(now + FISH_CD)}:R>` });
+  if (lines.length) e.addFields({ name: '✨ Events', value: lines.join('\n') });
+  return { embed: e };
+}
+
+grp('fish', '🐟 Feed the server fish and level up!', null, [
+  ['feed', 'Feed the fish (once every 5 hours)'],
+  ['status', 'See the current fish'],
+  ['leaderboard', 'Top feeders', [S('type', 'Rank by', false, { choices: ['feeds', 'coins', 'level'] })]],
+  ['collection', 'All fish species & which ones your server has released'],
+  ['profile', 'Your fish stats', [U('user', 'Member')]]
+]);
+H.fish = {
+  feed: async i => { const r = doFeed(i.guild, i.user, i.channel.id); return send(i, r.embed ? { embeds: [r.embed] } : r.text, !r.embed); },
+  status: async i => send(i, { embeds: [fishEmbed(getFish(G(i.guild.id)))] }, false),
+  leaderboard: async i => {
+    const f = getFish(G(i.guild.id)), t = i.options.getString('type') || 'feeds';
+    const key = u => t === 'coins' ? u.coins : t === 'level' ? u.level * 1000 + u.progress : u.feeds;
+    const rows = Object.entries(f.users).sort((a, b) => key(b[1]) - key(a[1])).slice(0, 10);
+    const medal = ['🥇', '🥈', '🥉'];
+    const txt = rows.map(([id, u], n) => `${medal[n] || `**${n + 1}.**`} <@${id}> — ${t === 'coins' ? `${u.coins} 🪙` : t === 'level' ? `Level ${u.level}` : `${u.feeds} feeds`}  _(Lv ${u.level} • ${u.coins} 🪙)_`).join('\n');
+    return send(i, { embeds: [emb(`🏆 Fish Leaderboard — ${t}`, txt || 'Nobody has fed the fish yet. Use `/fish feed`!', COLORS.warn)] }, false);
+  },
+  collection: async i => {
+    const f = getFish(G(i.guild.id));
+    const parts = Object.entries(SPECIES).reverse().map(([rar, list]) => `${RARITY[rar].icon} **${rar}** (x${RARITY[rar].mult} coins)\n` + list.map(([n, e]) => { const c = f.collection[n]; return c ? `${e} ${n} ✅ x${c.count}` : `${e} ~~${n}~~ ❔`; }).join(' • '));
+    return send(i, { embeds: [emb('📖 Fish Collection', `Fish released in this server: **${f.released}**\n\n${parts.join('\n\n')}`, COLORS.main).setThumbnail(f.current.img)] }, false);
+  },
+  profile: async i => {
+    const f = getFish(G(i.guild.id)), t = i.options.getUser('user') || i.user, u = f.users[t.id];
+    if (!u) return send(i, `🐟 **${t.username}** hasn't fed the fish yet.`);
+    const rank = Object.entries(f.users).sort((a, b) => b[1].feeds - a[1].feeds).findIndex(([id]) => id === t.id) + 1;
+    return send(i, { embeds: [emb(`🎣 ${t.username}'s Fish Profile`, `**Level:** ${u.level} ${fbar(u.progress, userNeed(u.level))} ${u.progress}/${userNeed(u.level)}\n**Feeds:** ${u.feeds} • **Rank:** #${rank}\n**Coins:** ${u.coins} 🪙\n**Next feed:** ${Date.now() - u.lastFeed >= FISH_CD ? '✅ ready now!' : `<t:${ts(u.lastFeed + FISH_CD)}:R>`}`, COLORS.ok).setThumbnail(t.displayAvatarURL())] }, false);
+  }
+};
+async function prefixFish(message, cmd) {
+  if (cmd === 'feed') { const r = doFeed(message.guild, message.author, message.channel.id); await message.reply(r.embed ? { embeds: [r.embed], allowedMentions: { repliedUser: false } } : { content: r.text, allowedMentions: { repliedUser: false } }).catch(() => {}); }
+  else await message.reply({ embeds: [fishEmbed(getFish(G(message.guild.id)))], allowedMentions: { repliedUser: false } }).catch(() => {});
+  return true;
+}
+async function fishTick() {
+  const now = Date.now();
+  for (const guild of client.guilds.cache.values()) {
+    const g = db.guilds[guild.id]; if (!g?.fish) continue;
+    const f = g.fish, c = f.current, base = Math.max(f.lastFed || c.born, f.lastDecay || 0);
+    const steps = Math.floor((now - base) / FISH_DECAY); if (steps < 1) continue;
+    const n = Math.min(steps, FISH_MAX);
+    c.level = Math.max(1, c.level - n); c.progress = 0;
+    let hit = 0; for (const u of Object.values(f.users)) if (u.level > 1) { u.level = Math.max(1, u.level - n); u.progress = 0; hit++; }
+    f.lastDecay = base + steps * FISH_DECAY; save();
+    const ch = f.channel && guild.channels.cache.get(f.channel);
+    if (ch?.isTextBased()) ch.send({ embeds: [emb('📉 Nobody fed the fish!', `${c.emoji} **${c.name}** went hungry for ${n} day${n > 1 ? 's' : ''}.\nThe fish is now **Level ${c.level}** and **${hit}** player${hit === 1 ? '' : 's'} lost ${n} level${n > 1 ? 's' : ''}.\nUse \`/fish feed\` to cheer it up!`, COLORS.err).setThumbnail(c.img)] }).catch(() => {});
+  }
+}
+
+// ---------------------------------------------------------------------
+//  3. UWULOCK   /uwulock add | remove | list
+//     Locked members' messages are deleted and re-sent in uwu-speak via webhook.
+// ---------------------------------------------------------------------
+grp('uwulock', 'UwU-lock a member (their messages get uwu-ified)', P.ModerateMembers, [
+  ['add', 'UwU-lock a member', [U('user', 'Member to uwulock', true)]],
+  ['remove', 'Remove the uwulock', [U('user', 'Member', true)]],
+  ['list', 'List uwulocked members']
+]);
+H.uwulock = {
+  add: async i => {
+    if (!isStaff(i.member)) return send(i, '❌ Staff only.');
+    const m = i.options.getMember('user'); if (!m) return send(i, '❌ Member not found.');
+    if (m.user.bot) return send(i, '❌ You can\'t uwulock a bot.');
+    const why = canAct(i, m); if (why) return send(i, `❌ ${why}`);
+    G(i.guild.id).uwu[m.id] = { by: i.user.id, at: Date.now() }; save();
+    return send(i, `😺 ${m} is now **uwulocked**! ${rpick(UWU_FACES)}`, false);
+  },
+  remove: async i => {
+    if (!isStaff(i.member)) return send(i, '❌ Staff only.');
+    const u = i.options.getUser('user'), g = G(i.guild.id);
+    if (!g.uwu[u.id]) return send(i, '⚠️ That member is not uwulocked.');
+    delete g.uwu[u.id]; save(); return send(i, `✅ ${u} is free from the uwulock.`, false);
+  },
+  list: async i => { const ids = Object.keys(G(i.guild.id).uwu); return send(i, { embeds: [emb('😺 UwU-locked members', ids.map(id => `<@${id}>`).join('\n') || 'Nobody is uwulocked.')] }); }
+};
+const UWU_FACES = ['uwu', 'owo', '>w<', '^w^', '(´・ω・`)', 'nyaa~', '(◕ᴗ◕✿)', 'rawr x3', ':3'];
+function uwuify(text) {
+  return text.split(/(```[\s\S]*?```|<[^>]*>|https?:\/\/\S+|:\w+:)/).map((p, k) => k % 2 ? p
+    : p.replace(/[rl]/g, 'w').replace(/[RL]/g, 'W').replace(/([nN])([aeiouAEIOU])/g, (m, n, v) => `${n}${n === 'N' ? 'Y' : 'y'}${v}`).replace(/!+/g, m => ` ${rpick(UWU_FACES)}${m}`)
+  ).join('') + (Math.random() < 0.35 ? ` ${rpick(UWU_FACES)}` : '');
+}
+const uwuHooks = new Map();
+async function uwuHook(channel) {
+  const base = channel.isThread() ? channel.parent : channel; if (!base?.fetchWebhooks) return null;
+  if (uwuHooks.has(base.id)) return uwuHooks.get(base.id);
+  const hooks = await base.fetchWebhooks();
+  const h = hooks.find(w => w.owner?.id === client.user.id && w.name === 'UwuLock') || await base.createWebhook({ name: 'UwuLock', reason: 'UwU lock' });
+  uwuHooks.set(base.id, h); return h;
+}
+async function uwuLockHandle(message) {
+  const g = G(message.guild.id); if (!g.uwu[message.author.id]) return false;
+  if (message.system || !message.content || message.attachments.size || message.stickers?.size) return false;
+  try {
+    const hook = await uwuHook(message.channel); if (!hook) return false;
+    const text = uwuify(message.content).slice(0, 2000), who = message.member || message.author;
+    await hook.send({ content: text, username: (message.member?.displayName || message.author.username).slice(0, 80), avatarURL: who.displayAvatarURL(), threadId: message.channel.isThread() ? message.channel.id : undefined, allowedMentions: { parse: [] } });
+    await message.delete().catch(() => {}); return true;
+  } catch (e) { uwuHooks.delete(message.channel.id); return false; }
+}
+
+// ---------------------------------------------------------------------
+//  4. SCHEDULE REMINDER   /reminder add | list | remove | timezone
+//     Mentions @everyone / @here / a role when the time comes. Default timezone: UTC+8 (Philippines)
+// ---------------------------------------------------------------------
+grp('reminder', '📅 Scheduled reminders that can ping everyone', null, [
+  ['add', 'Schedule an announcement/reminder (staff)', [
+    S('title', 'Title e.g. Movie Night', true), S('date', 'Date: YYYY-MM-DD, MM/DD, today, tomorrow', true), S('time', 'Time: 14:30 or 2:30pm', true),
+    S('message', 'Extra details (use \\n for new lines)'), CT('channel', 'Channel to announce in (default: here)'),
+    S('ping', 'Who to ping (default: everyone)', false, { choices: ['everyone', 'here', 'none'] }), R('role', 'Also ping this role'), S('before', 'Also warn beforehand e.g. 30m, 1h, 1d')]],
+  ['list', 'Show the upcoming schedule'],
+  ['remove', 'Remove a scheduled reminder (staff)', [I('id', 'Reminder ID (see /reminder list)', true)]],
+  ['timezone', 'Set the server timezone offset (staff)', [N('utc_offset', 'Hours from UTC e.g. 8 for Philippines', true, { min: -12, max: 14 })]]
+]);
+const tzOf = g => (g.settings.tzOffset ?? 8);
+function parseWhen(dateStr, timeStr, off) {
+  const tm = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i.exec((timeStr || '').trim()); if (!tm) return { err: 'Invalid time. Use `14:30` or `2:30pm`.' };
+  let h = +tm[1], min = +(tm[2] || 0); const ap = (tm[3] || '').toLowerCase();
+  if (ap) { if (h < 1 || h > 12) return { err: 'Invalid time.' }; if (ap === 'pm' && h < 12) h += 12; if (ap === 'am' && h === 12) h = 0; }
+  if (h > 23 || min > 59) return { err: 'Invalid time.' };
+  const local = new Date(Date.now() + off * 36e5); let y = local.getUTCFullYear(), mo = local.getUTCMonth() + 1, d = local.getUTCDate();
+  const ds = (dateStr || '').trim().toLowerCase();
+  if (ds === 'today') { /* keep */ } else if (ds === 'tomorrow') { const t = new Date(Date.UTC(y, mo - 1, d + 1)); y = t.getUTCFullYear(); mo = t.getUTCMonth() + 1; d = t.getUTCDate(); }
+  else {
+    let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(ds);
+    if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+    else if ((m = /^(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?$/.exec(ds))) { mo = +m[1]; d = +m[2]; if (m[3]) y = +m[3] < 100 ? 2000 + +m[3] : +m[3]; }
+    else return { err: 'Invalid date. Use `2026-12-25`, `12/25`, `today` or `tomorrow`.' };
+  }
+  const chk = new Date(Date.UTC(y, mo - 1, d, h, min));
+  if (chk.getUTCMonth() !== mo - 1 || chk.getUTCDate() !== d) return { err: 'That date does not exist.' };
+  return { at: chk.getTime() - off * 36e5 };
+}
+H.reminder = {
+  add: async i => {
+    if (!isStaff(i.member)) return send(i, '❌ Only staff can schedule reminders that ping everyone.');
+    const g = G(i.guild.id), w = parseWhen(i.options.getString('date'), i.options.getString('time'), tzOf(g));
+    if (w.err) return send(i, `❌ ${w.err}`);
+    if (w.at < Date.now() + 10000) return send(i, '❌ That time is already in the past.');
+    const beforeStr = i.options.getString('before'), before = beforeStr ? parseDuration(beforeStr) : 0;
+    if (beforeStr && !before) return send(i, '❌ Invalid `before` value. Use e.g. 30m, 1h, 1d.');
+    const ch = i.options.getChannel('channel') || i.channel;
+    const r = { id: ++g.schedSeq, title: i.options.getString('title'), text: nl(i.options.getString('message')), at: w.at, channel: ch.id, ping: i.options.getString('ping') || 'everyone', role: i.options.getRole('role')?.id || null, before: before || 0, preSent: false, by: i.user.id };
+    g.schedules.push(r); save();
+    return send(i, { embeds: [emb('✅ Reminder scheduled', `**#${r.id} — ${r.title}**\n🗓️ <t:${ts(r.at)}:F> (<t:${ts(r.at)}:R>)\n📢 ${ch} • ping: **${r.ping}**${r.role ? ` + <@&${r.role}>` : ''}${r.before ? `\n⏳ Early warning ${fmtDur(r.before)} before` : ''}\n🌏 Timezone: UTC${tzOf(g) >= 0 ? '+' : ''}${tzOf(g)}`, COLORS.ok)] }, false);
+  },
+  list: async i => {
+    const g = G(i.guild.id), l = g.schedules.slice().sort((a, b) => a.at - b.at);
+    return send(i, { embeds: [emb('📅 Upcoming Schedule', trunc(l.map(r => `**#${r.id}** — **${r.title}**\n<t:${ts(r.at)}:F> (<t:${ts(r.at)}:R>) • <#${r.channel}> • ${r.ping}`).join('\n\n') || 'Nothing scheduled. Staff can add one with `/reminder add`.', 3900), COLORS.warn)] }, false);
+  },
+  remove: async i => {
+    if (!isStaff(i.member)) return send(i, '❌ Staff only.');
+    const g = G(i.guild.id), id = i.options.getInteger('id'), n = g.schedules.length;
+    g.schedules = g.schedules.filter(r => r.id !== id); save();
+    return send(i, g.schedules.length < n ? `✅ Removed reminder #${id}.` : '❌ No reminder with that ID.');
+  },
+  timezone: async i => {
+    if (!isStaff(i.member)) return send(i, '❌ Staff only.');
+    const g = G(i.guild.id); g.settings.tzOffset = i.options.getNumber('utc_offset'); save();
+    return send(i, `✅ Timezone set to **UTC${g.settings.tzOffset >= 0 ? '+' : ''}${g.settings.tzOffset}**. New reminders use this time.`);
+  }
+};
+async function scheduleTick() {
+  const now = Date.now();
+  for (const guild of client.guilds.cache.values()) {
+    const g = db.guilds[guild.id]; if (!g?.schedules?.length) continue;
+    for (const r of g.schedules.slice()) {
+      const ch = guild.channels.cache.get(r.channel);
+      const pings = [r.ping === 'everyone' ? '@everyone' : r.ping === 'here' ? '@here' : '', r.role ? `<@&${r.role}>` : ''].filter(Boolean).join(' ');
+      const allowed = { parse: r.ping === 'none' ? [] : ['everyone'], roles: r.role ? [r.role] : [] };
+      if (!ch?.isTextBased()) { if (r.at <= now) { g.schedules = g.schedules.filter(x => x !== r); save(); } continue; }
+      if (r.before && !r.preSent && now >= r.at - r.before && now < r.at) {
+        r.preSent = true; save();
+        await ch.send({ content: pings || undefined, embeds: [emb(`⏳ Starting soon: ${r.title}`, `${r.text ? r.text + '\n\n' : ''}Starts <t:${ts(r.at)}:R> (<t:${ts(r.at)}:F>)`, COLORS.warn)], allowedMentions: allowed }).catch(() => {});
+      }
+      if (r.at <= now) {
+        g.schedules = g.schedules.filter(x => x !== r); save();
+        await ch.send({ content: pings || undefined, embeds: [emb(`📢 ${r.title}`, `${r.text ? r.text + '\n\n' : ''}🗓️ It's time! <t:${ts(r.at)}:F>`, COLORS.ok).setFooter({ text: 'Scheduled reminder' })], allowedMentions: allowed }).catch(noteError);
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------
+//  5. MUSIC   /play /pause /resume /skip /stop /queue /nowplaying /volume /loop
+//     Needs:  npm i @discordjs/voice @snazzah/davey play-dl ffmpeg-static opusscript libsodium-wrappers
+//     Works with: YouTube links/playlists, YouTube search (song name), SoundCloud links,
+//                 Spotify track links (matched on YouTube), direct .mp3/.ogg/.wav links.
+//     Optional env: SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_REFRESH_TOKEN (Spotify albums/playlists)
+//                   YT_COOKIE (helps when YouTube blocks the server)
+// ---------------------------------------------------------------------
+let Voice = null, playdl = null;
+try { Voice = require('@discordjs/voice'); } catch (e) { console.warn('[music] @discordjs/voice not installed — music disabled.'); }
+try {
+  playdl = require('play-dl');
+  const tok = {};
+  if (process.env.YT_COOKIE) tok.youtube = { cookie: process.env.YT_COOKIE };
+  if (process.env.SPOTIFY_CLIENT_ID) tok.spotify = { client_id: process.env.SPOTIFY_CLIENT_ID, client_secret: process.env.SPOTIFY_CLIENT_SECRET, refresh_token: process.env.SPOTIFY_REFRESH_TOKEN, market: 'PH' };
+  if (Object.keys(tok).length) playdl.setToken(tok).catch?.(() => {});
+} catch (e) { console.warn('[music] play-dl not installed — music disabled.'); }
+
+def('play', '🎵 Play a song (name, YouTube/Spotify/SoundCloud link, or direct link)', null, [S('query', 'Song name or link', true)]);
+def('pause', '⏸️ Pause the music');
+def('resume', '▶️ Resume the music');
+def('skip', '⏭️ Skip the current song');
+def('stop', '⏹️ Stop the music, clear the queue and leave');
+def('queue', '📜 Show the music queue');
+def('nowplaying', '🎶 Show the current song');
+def('volume', '🔊 Set the volume', null, [I('level', 'Volume 1-100', true, { min: 1, max: 100 })]);
+def('loop', '🔁 Set loop mode', null, [S('mode', 'Loop mode', true, { choices: ['off', 'track', 'queue'] })]);
+
+const musicQ = new Map();
+const clock = s => { s = Math.max(0, Math.floor(s || 0)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? `${h}:${String(m).padStart(2, '0')}` : `${m}`) + `:${String(x).padStart(2, '0')}`; };
+const unHtml = s => (s || '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;|&#39;/g, '\'').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+const ytTrack = (v, by) => ({ title: v.title || 'Unknown', url: v.url, duration: v.durationInSec || 0, thumb: v.thumbnails?.[v.thumbnails.length - 1]?.url || v.thumbnails?.[0]?.url, by });
+
+async function spotifyQueries(url) {
+  try {
+    const sp = await playdl.spotify(url);
+    const name = t => `${t.name} ${(t.artists || []).map(a => a.name).join(' ')}`;
+    if (sp.type === 'track') return [name(sp)];
+    const all = await sp.all_tracks(); return all.slice(0, 100).map(name);
+  } catch (e) { /* no credentials -> fall back below */ }
+  if (/\/track\//.test(url)) {
+    const html = await (await fetch(url)).text();
+    const t = /<meta property="og:title" content="([^"]+)"/.exec(html)?.[1], d = /<meta property="og:description" content="([^"]+)"/.exec(html)?.[1];
+    if (t) return [`${unHtml(t)} ${unHtml((d || '').split('·')[0])}`.trim()];
+  }
+  throw new Error('Spotify albums/playlists need SPOTIFY_CLIENT_ID / SECRET / REFRESH_TOKEN set. Single track links work without them.');
+}
+async function musicResolve(query, by) {
+  if (!/^https?:\/\//i.test(query)) {
+    const r = await playdl.search(query, { limit: 1, source: { youtube: 'video' } });
+    if (!r[0]) throw new Error('No results found.');
+    return [ytTrack(r[0], by)];
+  }
+  const kind = await playdl.validate(query).catch(() => false);
+  if (kind === 'yt_video') return [ytTrack((await playdl.video_basic_info(query)).video_details, by)];
+  if (kind === 'yt_playlist') { const pl = await playdl.playlist_info(query, { incomplete: true }); return (await pl.all_videos()).slice(0, 100).map(v => ytTrack(v, by)); }
+  if (kind === 'so_track') { const s = await playdl.soundcloud(query); return [{ title: s.name, url: s.url, duration: s.durationInSec, thumb: s.thumbnail, by }]; }
+  if (typeof kind === 'string' && kind.startsWith('sp_')) return (await spotifyQueries(query)).map(q => ({ title: q, query: q, duration: 0, by }));
+  return [{ title: decodeURIComponent(query.split('?')[0].split('/').pop() || query), url: query, direct: true, duration: 0, by }];
+}
+async function trackResource(t) {
+  if (t.direct) return Voice.createAudioResource(t.url, { inlineVolume: true });
+  if (!t.url) {
+    const r = await playdl.search(t.query, { limit: 1, source: { youtube: 'video' } });
+    if (!r[0]) throw new Error(`No YouTube match for "${t.query}"`);
+    Object.assign(t, ytTrack(r[0], t.by));
+  }
+  const s = await playdl.stream(t.url, { quality: 2 });
+  return Voice.createAudioResource(s.stream, { inputType: s.type, inlineVolume: true });
+}
+function musicDestroy(gid) {
+  const q = musicQ.get(gid); if (!q) return;
+  clearTimeout(q.idle); musicQ.delete(gid);
+  try { q.player.stop(true); } catch (e) { /* ignore */ }
+  try { q.conn.destroy(); } catch (e) { /* ignore */ }
+}
+async function musicNext(gid) {
+  const q = musicQ.get(gid); if (!q) return;
+  clearTimeout(q.idle);
+  const t = q.queue[0];
+  if (!t) { q.current = null; q.idle = setTimeout(() => musicDestroy(gid), 120000); return; }
+  try {
+    const res = await trackResource(t);
+    res.volume?.setVolume(q.volume / 100);
+    q.res = res; q.current = t; q.player.play(res);
+    q.text?.send({ embeds: [musicEmbed('🎶 Now playing', t)], allowedMentions: { parse: [] } }).catch(() => {});
+  } catch (e) {
+    noteError(e); q.text?.send(`❌ Couldn't play **${trunc(t.title, 80)}**: ${trunc(e.message, 150)} — skipping.`).catch(() => {});
+    q.queue.shift(); return musicNext(gid);
+  }
+}
+const musicEmbed = (title, t) => { const e = emb(title, `**[${trunc(t.title, 200)}](${t.url || 'https://discord.com'})**\n${t.duration ? `⏱️ ${clock(t.duration)} • ` : ''}Requested by <@${t.by}>`, COLORS.main); if (t.thumb) e.setThumbnail(t.thumb); return e; };
+function musicNeeds(i) {
+  if (!Voice || !playdl) return '❌ Music isn\'t set up on this bot yet. The owner must run: `npm i @discordjs/voice @snazzah/davey play-dl ffmpeg-static opusscript libsodium-wrappers` and restart.';
+  if (!i.member.voice?.channel) return '❌ Join a voice channel first.';
+  const q = musicQ.get(i.guild.id); if (q && q.channelId !== i.member.voice.channelId) return `❌ I'm already playing in <#${q.channelId}>.`;
+  return null;
+}
+async function musicGet(i) {
+  let q = musicQ.get(i.guild.id); if (q) { q.text = i.channel; return q; }
+  const vc = i.member.voice.channel;
+  if (!vc.joinable || !vc.speakable) throw new Error('I need **Connect** and **Speak** permission in that voice channel.');
+  const conn = Voice.joinVoiceChannel({ channelId: vc.id, guildId: i.guild.id, adapterCreator: i.guild.voiceAdapterCreator, selfDeaf: true });
+  await Voice.entersState(conn, Voice.VoiceConnectionStatus.Ready, 20000).catch(e => { conn.destroy(); throw new Error('Could not connect to the voice channel.'); });
+  const player = Voice.createAudioPlayer({ behaviors: { noSubscriber: Voice.NoSubscriberBehavior.Play } });
+  conn.subscribe(player);
+  q = { conn, player, queue: [], current: null, res: null, loop: 'off', volume: 60, text: i.channel, channelId: vc.id, idle: null };
+  musicQ.set(i.guild.id, q);
+  player.on(Voice.AudioPlayerStatus.Idle, () => {
+    const cur = musicQ.get(i.guild.id); if (!cur) return;
+    if (cur.loop === 'queue') cur.queue.push(cur.queue.shift()); else if (cur.loop !== 'track') cur.queue.shift();
+    musicNext(i.guild.id);
+  });
+  player.on('error', e => { noteError(e); });
+  conn.on(Voice.VoiceConnectionStatus.Disconnected, async () => {
+    try { await Promise.race([Voice.entersState(conn, Voice.VoiceConnectionStatus.Signalling, 5000), Voice.entersState(conn, Voice.VoiceConnectionStatus.Connecting, 5000)]); }
+    catch (e) { musicDestroy(i.guild.id); }
+  });
+  return q;
+}
+H.play = async i => {
+  const bad = musicNeeds(i); if (bad) return send(i, bad);
+  await defer(i, false);
+  try {
+    const tracks = await musicResolve(i.options.getString('query').trim(), i.user.id);
+    if (!tracks.length) return send(i, '❌ Nothing found.');
+    const q = await musicGet(i), wasEmpty = q.queue.length === 0;
+    q.queue.push(...tracks);
+    if (wasEmpty) musicNext(i.guild.id);
+    return send(i, { embeds: [tracks.length > 1 ? emb('➕ Added to queue', `Added **${tracks.length}** tracks.`, COLORS.ok) : musicEmbed(wasEmpty ? '▶️ Starting' : `➕ Added to queue (#${q.queue.length})`, tracks[0])] });
+  } catch (e) { noteError(e); return send(i, `❌ ${trunc(e.message, 300)}`); }
+};
+const withQ = fn => async i => {
+  const bad = musicNeeds(i); if (bad) return send(i, bad);
+  const q = musicQ.get(i.guild.id); if (!q) return send(i, '❌ Nothing is playing.');
+  return fn(i, q);
+};
+H.pause = withQ((i, q) => { q.player.pause(); return send(i, '⏸️ Paused.', false); });
+H.resume = withQ((i, q) => { q.player.unpause(); return send(i, '▶️ Resumed.', false); });
+H.skip = withQ((i, q) => { if (!q.current) return send(i, '❌ Nothing to skip.'); const t = q.current; if (q.loop === 'track') q.loop = 'off'; q.player.stop(true); return send(i, `⏭️ Skipped **${trunc(t.title, 80)}**.`, false); });
+H.stop = withQ((i, q) => { musicDestroy(i.guild.id); return send(i, '⏹️ Stopped and left the voice channel.', false); });
+H.volume = withQ((i, q) => { q.volume = i.options.getInteger('level'); q.res?.volume?.setVolume(q.volume / 100); return send(i, `🔊 Volume set to **${q.volume}%**.`, false); });
+H.loop = withQ((i, q) => { q.loop = i.options.getString('mode'); return send(i, `🔁 Loop mode: **${q.loop}**.`, false); });
+H.queue = async i => {
+  const q = musicQ.get(i.guild.id); if (!q || !q.queue.length) return send(i, '📭 The queue is empty.');
+  const lines = q.queue.slice(0, 15).map((t, n) => `${n === 0 ? '▶️' : `**${n}.**`} ${trunc(t.title, 70)}${t.duration ? ` \`${clock(t.duration)}\`` : ''}`).join('\n');
+  return send(i, { embeds: [emb('📜 Queue', `${lines}${q.queue.length > 15 ? `\n…and ${q.queue.length - 15} more` : ''}`).setFooter({ text: `Loop: ${q.loop} • Volume: ${q.volume}%` })] }, false);
+};
+H.nowplaying = async i => { const q = musicQ.get(i.guild.id); if (!q?.current) return send(i, '❌ Nothing is playing.'); return send(i, { embeds: [musicEmbed('🎶 Now playing', q.current)] }, false); };
+
+// ---------------------------------------------------------------------
+//  Background loops for the new features
+// ---------------------------------------------------------------------
+client.once(Events.ClientReady, () => {
+  setInterval(() => fishTick().catch(noteError), 60000);
+  setInterval(() => scheduleTick().catch(noteError), 15000);
+});
+
+
+// =====================================================================
 //  BOT INITIALIZATION
 // =====================================================================
 client.once(Events.ClientReady, async () => {
@@ -1824,7 +2159,7 @@ client.once(Events.ClientReady, async () => {
 
   await registerCommands();
 
-  // Background jobs: giveaways, temp bans, reminders, voice XP, fish hunger
+  // Background jobs: giveaways, temp bans, reminders, voice XP
   setInterval(async () => {
     const now = Date.now();
     for (const guild of client.guilds.cache.values()) {
@@ -1832,32 +2167,14 @@ client.once(Events.ClientReady, async () => {
       for (const [id, gw] of Object.entries(g.giveaways || {})) if (gw.endsAt <= now) await endGiveaway(guild, id).catch(noteError);
       const due = (g.tempbans || []).filter(t => t.until <= now);
       if (due.length) { g.tempbans = g.tempbans.filter(t => t.until > now); save(); for (const t of due) { await guild.members.unban(t.id, 'Temp ban expired').catch(() => {}); addCase(guild, 'UNBAN', t.id, client.user.id, 'Temp ban expired'); } }
-      
-      // Fish 1-day inactivity check
-      if (g.fish && g.fish.name && g.fish.level > 1 && (now - g.fish.lastFedTime > 24 * 3600 * 1000)) {
-        g.fish.level -= 1;
-        g.fish.lastFedTime = now;
-        save();
-        const logCh = guild.channels.cache.get(g.settings.logChannel || g.settings.welcomeChannel);
-        if (logCh) logCh.send({ embeds: [emb('⚠️ Fish Starving!', `Nobody fed **${g.fish.name}** for 24 hours! The fish lost 1 level and is now level **${g.fish.level}**!`, COLORS.err)] }).catch(()=>{});
-      }
     }
     const rem = db.global.reminders.filter(r => r.at <= now);
     if (rem.length) {
       db.global.reminders = db.global.reminders.filter(r => r.at > now); save();
       for (const r of rem) {
-        const pingStr = [r.pingEveryone ? '@everyone' : '', r.roleId ? `<@&${r.roleId}>` : '', `<@${r.user}>`].filter(Boolean).join(' ');
-        const content = `⏰ **Reminder:** ${r.text}\n(Set by <@${r.user}>)`;
-        const ch = r.channel && await client.channels.fetch(r.channel).catch(() => null);
-        if (ch?.isTextBased()) {
-          await ch.send({
-            content: pingStr,
-            embeds: [emb('⏰ Reminder Alert', r.text)],
-            allowedMentions: { parse: r.pingEveryone ? ['everyone'] : [], roles: r.roleId ? [r.roleId] : [], users: [r.user] }
-          }).catch(async () => (await client.users.fetch(r.user).catch(() => null))?.send(content).catch(() => {}));
-        } else {
-          (await client.users.fetch(r.user).catch(() => null))?.send(content).catch(() => {});
-        }
+        const content = `⏰ <@${r.user}> Reminder: ${r.text}`, ch = r.channel && await client.channels.fetch(r.channel).catch(() => null);
+        if (ch?.isTextBased()) await ch.send({ content, allowedMentions: { users: [r.user] } }).catch(async () => (await client.users.fetch(r.user).catch(() => null))?.send(content).catch(() => {}));
+        else (await client.users.fetch(r.user).catch(() => null))?.send(content).catch(() => {});
       }
     }
   }, 15000);
