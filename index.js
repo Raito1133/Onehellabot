@@ -30,7 +30,7 @@ const COLORS = { main: 0x5865F2, ok: 0x2ecc71, err: 0xe74c3c, warn: 0xf1c40f };
 const TEXTISH = [ChannelType.GuildText, ChannelType.GuildAnnouncement];
 const VOICEISH = [ChannelType.GuildVoice, ChannelType.GuildStageVoice];
 const LOG_CATS = ['member', 'message', 'channel', 'role', 'voice', 'moderation', 'server', 'bot', 'webhook', 'security'];
-const DEFAULT_PRESENCE = { status: 'idle', activities: [{ name: 'Sindria On Top', type: 5 }] }; // status retained
+const DEFAULT_PRESENCE = { status: 'dnd', activities: [{ name: 'Daghanag activities', type: 5 }] }; // status retained
 
 const client = new Client({
   intents: [
