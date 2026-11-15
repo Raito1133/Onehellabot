@@ -2004,9 +2004,28 @@ try {
   if (process.env.SPOTIFY_CLIENT_ID) tok.spotify = { client_id: process.env.SPOTIFY_CLIENT_ID, client_secret: process.env.SPOTIFY_CLIENT_SECRET, refresh_token: process.env.SPOTIFY_REFRESH_TOKEN, market: 'PH' };
   if (Object.keys(tok).length) Promise.resolve(playdl.setToken(tok)).catch(() => {});
 } catch (e) { console.warn('[music] play-dl not installed — falling back to yt-dlp only if available.'); }
-const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
+let YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
 let hasYtdlp = false;
-try { hasYtdlp = cp.spawnSync(YTDLP, ['--version'], { timeout: 8000 }).status === 0; } catch (e) { hasYtdlp = false; }
+const checkYtdlp = p => { try { return cp.spawnSync(p, ['--version'], { timeout: 15000 }).status === 0; } catch (e) { return false; } };
+hasYtdlp = checkYtdlp(YTDLP);
+// no yt-dlp installed? download the standalone build next to the bot (no Python / no terminal needed)
+async function ensureYtdlp() {
+  if (hasYtdlp || process.env.YTDLP_NO_AUTODOWNLOAD) return;
+  const path = require('path'), win = process.platform === 'win32';
+  const file = win ? 'yt-dlp.exe' : process.platform === 'darwin' ? 'yt-dlp_macos' : (process.arch === 'arm64' ? 'yt-dlp_linux_aarch64' : 'yt-dlp_linux');
+  const dest = path.join(process.cwd(), win ? 'yt-dlp.exe' : 'yt-dlp');
+  try {
+    if (!fs.existsSync(dest)) {
+      console.log(`[music] yt-dlp not found — downloading ${file} ...`);
+      const r = await fetch(`https://github.com/yt-dlp/yt-dlp/releases/latest/download/${file}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      fs.writeFileSync(dest, Buffer.from(await r.arrayBuffer()));
+      if (!win) fs.chmodSync(dest, 0o755);
+    }
+    if (checkYtdlp(dest)) { YTDLP = dest; hasYtdlp = true; console.log('[music] ✅ yt-dlp ready:', dest); cp.execFile(dest, ['-U'], { timeout: 60000 }, () => {}); }
+    else console.warn('[music] downloaded yt-dlp but it cannot run on this host (try installing python3 + `pip install yt-dlp`).');
+  } catch (e) { console.warn('[music] yt-dlp auto-download failed:', e.message); }
+}
 let hasFfmpeg = false;
 try { require('ffmpeg-static'); hasFfmpeg = true; } catch (e) { try { hasFfmpeg = cp.spawnSync('ffmpeg', ['-version'], { timeout: 8000 }).status === 0; } catch (e2) { hasFfmpeg = false; } }
 let hasOpus = false, hasSodium = false;
@@ -2019,7 +2038,7 @@ if (Voice && !hasFfmpeg) console.warn('[music] ❌ ffmpeg NOT found -> bot will 
 if (Voice && !hasOpus) console.warn('[music] ❌ no opus encoder -> silent. Run: npm i opusscript');
 if (Voice && !hasSodium) console.warn('[music] ❌ no encryption lib -> cannot send audio. Run: npm i libsodium-wrappers');
 if (Voice && !hasDave) console.warn('[music] ⚠️ @snazzah/davey missing -> Discord may reject audio (DAVE). Run: npm i @snazzah/davey');
-const ytdlpBase = () => ['--no-warnings', '-q', ...(process.env.YTDLP_COOKIES ? ['--cookies', process.env.YTDLP_COOKIES] : [])];
+const ytdlpBase = () => ['--no-warnings', '-q', ...(process.env.YTDLP_COOKIES ? ['--cookies', process.env.YTDLP_COOKIES] : []), ...(process.env.YTDLP_ARGS ? process.env.YTDLP_ARGS.split(' ').filter(Boolean) : [])];
 
 def('play', '🎵 Play a song (name, YouTube/Spotify/SoundCloud link, or direct link)', null, [S('query', 'Song name or link', true)]);
 def('pause', '⏸️ Pause the music');
@@ -2073,7 +2092,7 @@ async function musicResolve(query, by) {
   const isUrl = /^https?:\/\//i.test(query);
   if (isUrl && /open\.spotify\.com|spotify\.link/i.test(query)) return (await spotifyQueries(query)).map(q => ({ title: q, query: q, duration: 0, by }));
   if (isUrl && AUDIO_FILE_RE.test(query)) return [{ title: decodeURIComponent(query.split('?')[0].split('/').pop() || query), url: query, direct: true, duration: 0, by }];
-  if (hasYtdlp) return ytdlpResolve(query, by);
+  if (hasYtdlp) { try { return await ytdlpResolve(query, by); } catch (e) { console.warn('[music] yt-dlp resolve failed:', e.message); if (!playdl) throw e; } }
   if (!playdl) throw new Error('No music engine available (install play-dl or yt-dlp).');
   if (!isUrl) {
     const r = await playdl.search(query, { limit: 1, source: { youtube: 'video' } });
@@ -2124,12 +2143,14 @@ async function musicNext(gid) {
     res.volume?.setVolume(q.volume / 100);
     q.res = res; q.player.play(res);
     // only announce once audio REALLY starts (Playing); otherwise tell the user why not
-    Voice.entersState(q.player, Voice.AudioPlayerStatus.Playing, 15000).then(() => {
+    Voice.entersState(q.player, Voice.AudioPlayerStatus.Playing, 20000).then(() => {
       if (musicQ.get(gid) === q && q.current === t) q.text?.send({ embeds: [musicEmbed('🎶 Now playing', t)], allowedMentions: { parse: [] } }).catch(() => {});
     }).catch(() => {
       if (musicQ.get(gid) !== q || q.current !== t) return;
       const vs = q.conn?.state?.status, ps = q.player?.state?.status;
       console.warn(`[music] audio did not start. voice=${vs} player=${ps}`);
+      try { q.res?.proc?.kill(); } catch (e) { /* ignore */ }
+      q.queue.shift(); musicNext(gid);
       q.text?.send(`⚠️ Audio didn't start (voice: \`${vs}\`, player: \`${ps}\`). ${vs !== 'ready' ? 'Voice connection problem — update `@discordjs/voice` and install `@snazzah/davey`.' : 'The stream failed — check the console / install `yt-dlp`.'}`).catch(() => {});
     });
   } catch (e) {
@@ -2150,7 +2171,7 @@ async function musicGet(i) {
   const vc = i.member.voice.channel;
   if (!vc.joinable || !vc.speakable) throw new Error('I need **Connect** and **Speak** permission in that voice channel.');
   const conn = Voice.joinVoiceChannel({ channelId: vc.id, guildId: i.guild.id, adapterCreator: i.guild.voiceAdapterCreator, selfDeaf: true });
-  await Voice.entersState(conn, Voice.VoiceConnectionStatus.Ready, 20000).catch(e => { conn.destroy(); throw new Error('Could not connect to the voice channel (update @discordjs/voice and install @snazzah/davey).'); });
+  await Voice.entersState(conn, Voice.VoiceConnectionStatus.Ready, 15000).catch(e => { conn.destroy(); throw new Error('Could not connect to the voice channel (15s). Check Connect/Speak permission, and that @discordjs/voice + @snazzah/davey are installed.'); });
   const player = Voice.createAudioPlayer({ behaviors: { noSubscriber: Voice.NoSubscriberBehavior.Play } });
   conn.subscribe(player);
   q = { conn, player, queue: [], current: null, res: null, loop: 'off', volume: 60, text: i.channel, channelId: vc.id, idle: null };
@@ -2176,12 +2197,17 @@ H.play = async i => {
   let timer;
   try {
     const query = i.options.getString('query').trim();
+    console.log(`[music] /play "${query}" (yt-dlp: ${hasYtdlp})`);
+    await send(i, '🔎 Searching...');
     const tracks = await Promise.race([
       musicResolve(query, i.user.id),
-      new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('Search timed out — YouTube may be rate-limiting the bot. Try again in a bit (or install yt-dlp).')), 30000); })
+      new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('Search timed out (20s) — YouTube is probably blocking the bot. Install yt-dlp or set YT_COOKIE.')), 20000); })
     ]);
     if (!tracks.length) return send(i, '❌ Nothing found.');
+    console.log(`[music] found ${tracks.length} track(s): ${tracks[0].title}`);
+    if (!musicQ.get(i.guild.id)) await send(i, '🔊 Joining voice channel...');
     const q = await musicGet(i), wasEmpty = q.queue.length === 0;
+    console.log('[music] joined voice, starting playback');
     q.queue.push(...tracks);
     if (wasEmpty) musicNext(i.guild.id).catch(noteError);
     return send(i, { embeds: [tracks.length > 1 ? emb('➕ Added to queue', `Added **${tracks.length}** tracks.`, COLORS.ok) : musicEmbed(wasEmpty ? '▶️ Starting' : `➕ Added to queue (#${q.queue.length})`, tracks[0])] });
@@ -2210,6 +2236,7 @@ H.nowplaying = async i => { const q = musicQ.get(i.guild.id); if (!q?.current) r
 //  Background loops for the new features
 // ---------------------------------------------------------------------
 client.once(Events.ClientReady, () => {
+  ensureYtdlp().catch(noteError);
   setInterval(() => fishTick().catch(noteError), 60000);
   setInterval(() => scheduleTick().catch(noteError), 15000);
 });
